@@ -234,10 +234,20 @@ export default function PlaylistPage(): React.JSX.Element {
                       <CheckCircle2 className="h-3 w-3" />
                       {downloadStats.downloaded} Downloaded
                     </Badge>
-                    <Badge variant="outline" className="flex items-center gap-1">
-                      <Download className="h-3 w-3" />
-                      {downloadStats.notDownloaded} Not Downloaded
-                    </Badge>
+                    {downloadStats.notDownloaded > 0 ? (
+                      <Badge variant="outline" className="flex items-center gap-1">
+                        <Download className="h-3 w-3" />
+                        {downloadStats.notDownloaded} To Download
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="secondary"
+                        className="flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
+                      >
+                        <CheckCircle2 className="h-3 w-3" />
+                        All Downloaded
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2 pt-2">
                     <Button size="sm" onClick={handlePlayAll} className="flex items-center gap-2">
