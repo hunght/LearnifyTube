@@ -170,13 +170,29 @@ export default function PlayerPage(): React.JSX.Element {
   const storedPlaybackData = useAtomValue(playbackDataAtom);
   const storedCurrentTime = useAtomValue(currentTimeAtom);
 
+  // Clear atom state when videoId changes to prevent using previous video's state
+  useEffect(() => {
+    if (storedPlaybackData?.videoId && storedPlaybackData.videoId !== videoId) {
+      logger.info("[PlayerPage] Clearing atom state for new video", {
+        previousVideoId: storedPlaybackData.videoId,
+        newVideoId: videoId,
+      });
+      setCurrentTimeAtom(0);
+      setPlaybackDataAtom(null);
+    }
+  }, [videoId, storedPlaybackData?.videoId, setCurrentTimeAtom, setPlaybackDataAtom]);
+
   const initialStartTime = React.useMemo(() => {
-    // If we have a stored time for THIS video, use it (client-side state is fresher than server)
     // If we have a stored time for THIS video, use it (client-side state is fresher than server)
     if (storedPlaybackData?.videoId === videoId && storedCurrentTime > 0) {
       logger.info("[PlayerPage] Using stored atom time", { videoId, storedCurrentTime });
       return storedCurrentTime;
     }
+    // Otherwise, use the server's last position from the database
+    logger.info("[PlayerPage] Using server lastPositionSeconds", {
+      videoId,
+      lastPositionSeconds: playback?.lastPositionSeconds,
+    });
     return playback?.lastPositionSeconds;
   }, [videoId, storedPlaybackData, storedCurrentTime, playback]);
 
