@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom } from "jotai";
 import { z } from "zod";
 import {
   showInlineTranslationsAtom,
@@ -12,12 +12,7 @@ import {
   transcriptCollapsedAtom,
 } from "@/context/transcriptSettings";
 import { openAnnotationFormAtom } from "@/context/annotations";
-import {
-  videoRefAtom,
-  currentTimeAtom,
-  playbackDataAtom,
-  seekIndicatorAtom,
-} from "@/context/player";
+import { PlaybackData } from "@/context/playerStore";
 import { toast } from "sonner";
 import { TranscriptContent } from "./TranscriptContent";
 import { TranslationTooltip } from "./TranslationTooltip";
@@ -53,15 +48,19 @@ type AvailableLanguage = z.infer<typeof availableLanguageSchema>;
 
 interface TranscriptPanelProps {
   videoId: string;
+  videoRef: React.RefObject<HTMLVideoElement> | null;
+  currentTime: number;
+  playbackData: PlaybackData | null;
+  onSeekIndicator?: (indicator: { direction: "forward" | "backward"; amount: number }) => void;
 }
 
-export function TranscriptPanel({ videoId }: TranscriptPanelProps): React.JSX.Element {
-  // Get shared state from atoms
-  const videoRef = useAtomValue(videoRefAtom);
-  const currentTime = useAtomValue(currentTimeAtom);
-  const playbackData = useAtomValue(playbackDataAtom);
-  const setSeekIndicatorAtom = useAtom(seekIndicatorAtom)[1];
-
+export function TranscriptPanel({
+  videoId,
+  videoRef,
+  currentTime,
+  playbackData,
+  onSeekIndicator,
+}: TranscriptPanelProps): React.JSX.Element {
   const queryClient = useQueryClient();
   const { toast: toastHook } = useToast();
 
@@ -544,8 +543,8 @@ export function TranscriptPanel({ videoId }: TranscriptPanelProps): React.JSX.El
       const newTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta));
       video.currentTime = newTime;
 
-      // Trigger shared seek indicator
-      setSeekIndicatorAtom({ direction, amount: seekAmount });
+      // Trigger shared seek indicator via callback
+      onSeekIndicator?.({ direction, amount: seekAmount });
 
       // Reset seeking flag after a short delay
       setTimeout(() => {
@@ -560,7 +559,7 @@ export function TranscriptPanel({ videoId }: TranscriptPanelProps): React.JSX.El
       container.removeEventListener("wheel", handleWheel);
       isSeekingRef.current = false;
     };
-  }, [videoRef, segments.length, setSeekIndicatorAtom]);
+  }, [videoRef, segments.length, onSeekIndicator]);
 
   // Handle word hover with translation
 

@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
+import { useSetAtom } from "jotai";
 import { useSearch, useNavigate } from "@tanstack/react-router";
-import { useSetAtom, useAtomValue } from "jotai";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -15,14 +15,11 @@ import { AnnotationForm } from "./components/AnnotationForm";
 import { PlaylistNavigation } from "./components/PlaylistNavigation";
 import { rightSidebarContentAtom, annotationsSidebarDataAtom } from "@/context/rightSidebar";
 import {
-  videoRefAtom,
-  currentTimeAtom,
-  filePathAtom,
-  playbackDataAtom,
-  seekIndicatorAtom,
-  thumbnailPathAtom,
-  thumbnailUrlAtom,
-} from "@/context/player";
+  beginVideoPlayback,
+  usePlayerStore,
+  updateCurrentTime,
+  setPlaybackData,
+} from "@/context/playerStore";
 import { trpcClient } from "@/utils/trpc";
 import { logger } from "@/helpers/logger";
 
@@ -37,15 +34,14 @@ export default function PlayerPage(): React.JSX.Element {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Atom setters for shared state
-  const setVideoRefAtom = useSetAtom(videoRefAtom);
-  const setCurrentTimeAtom = useSetAtom(currentTimeAtom);
-  const setFilePathAtom = useSetAtom(filePathAtom);
-  const setPlaybackDataAtom = useSetAtom(playbackDataAtom);
-  const setSeekIndicatorAtom = useSetAtom(seekIndicatorAtom);
-  const setThumbnailPathAtom = useSetAtom(thumbnailPathAtom);
-  const setThumbnailUrlAtom = useSetAtom(thumbnailUrlAtom);
-  const seekIndicator = useAtomValue(seekIndicatorAtom);
+  // External store state
+  const playerState = usePlayerStore();
+
+  // Local seek indicator state (replaces atom)
+  const [seekIndicator, setSeekIndicator] = useState<{
+    direction: "forward" | "backward";
+    amount: number;
+  } | null>(null);
 
   // Timeout ref for seek indicator
   const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -62,21 +58,14 @@ export default function PlayerPage(): React.JSX.Element {
       }
       return;
     }
-
-    if (seekTimeoutRef.current) {
-      clearTimeout(seekTimeoutRef.current);
-    }
-
-    seekTimeoutRef.current = setTimeout(() => {
-      setSeekIndicatorAtom(null);
-    }, 800);
-
+    if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
+    seekTimeoutRef.current = setTimeout(() => setSeekIndicator(null), 800);
     return () => {
       if (seekTimeoutRef.current) {
         clearTimeout(seekTimeoutRef.current);
       }
     };
-  }, [seekIndicator, setSeekIndicatorAtom]);
+  }, [seekIndicator]);
 
   const { data: playback, isLoading: playbackIsLoading } = useQuery({
     queryKey: ["video-playback", videoId],
@@ -162,68 +151,41 @@ export default function PlayerPage(): React.JSX.Element {
     }
   }, [playback?.status, playback?.filePath, videoId]);
 
-  // ============================================================================
-  // WATCH PROGRESS (using existing useWatchProgress hook - complex reusable logic)
-  // ============================================================================
-
-  // Determine start time: prefer atom if valid and matches current video, else server data
-  const storedPlaybackData = useAtomValue(playbackDataAtom);
-  const storedCurrentTime = useAtomValue(currentTimeAtom);
-
-  // Clear atom state when videoId changes to prevent using previous video's state
-  useEffect(() => {
-    if (storedPlaybackData?.videoId && storedPlaybackData.videoId !== videoId) {
-      logger.info("[PlayerPage] Clearing atom state for new video", {
-        previousVideoId: storedPlaybackData.videoId,
-        newVideoId: videoId,
-      });
-      setCurrentTimeAtom(0);
-      setPlaybackDataAtom(null);
-    }
-  }, [videoId, storedPlaybackData?.videoId, setCurrentTimeAtom, setPlaybackDataAtom]);
-
+  // WATCH PROGRESS (using existing hook)
   const initialStartTime = React.useMemo(() => {
-    // If we have a stored time for THIS video, use it (client-side state is fresher than server)
-    if (storedPlaybackData?.videoId === videoId && storedCurrentTime > 0) {
-      logger.info("[PlayerPage] Using stored atom time", { videoId, storedCurrentTime });
-      return storedCurrentTime;
+    if (playerState.videoId === videoId && playerState.currentTime > 0) {
+      logger.info("[PlayerPage] Using stored playerStore time", {
+        videoId,
+        currentTime: playerState.currentTime,
+      });
+      return playerState.currentTime;
     }
-    // Otherwise, use the server's last position from the database
     logger.info("[PlayerPage] Using server lastPositionSeconds", {
       videoId,
       lastPositionSeconds: playback?.lastPositionSeconds,
     });
-    return playback?.lastPositionSeconds;
-  }, [videoId, storedPlaybackData, storedCurrentTime, playback]);
+    return playback?.lastPositionSeconds ?? 0;
+  }, [videoId, playerState.videoId, playerState.currentTime, playback?.lastPositionSeconds]);
 
   const { currentTime, handleTimeUpdate } = useWatchProgress(videoId, videoRef, initialStartTime, {
-    onCurrentTimeChange: (time) => {
-      // logger.debug("[PlayerPage] onCurrentTimeChange", { time });
-      setCurrentTimeAtom(time);
-    },
+    onCurrentTimeChange: (time) => updateCurrentTime(time),
   });
 
-  // Update videoRef atom when ref changes
+  // Initialize / update store when video changes
   useEffect(() => {
-    setVideoRefAtom(videoRef);
-  }, [setVideoRefAtom]);
+    if (!videoId) return;
+    beginVideoPlayback({
+      videoId,
+      playlistId: playlistId || null,
+      playlistIndex: playlistIndex ?? null,
+      startTime: initialStartTime,
+    });
+  }, [videoId, playlistId, playlistIndex, initialStartTime]);
 
-  // Update currentTime atom when time changes
-  // Update filePath atom when playback data changes
+  // Update playback data in external store
   useEffect(() => {
-    setFilePathAtom(playback?.filePath || null);
-  }, [playback?.filePath, setFilePathAtom]);
-
-  // Update playbackData atom when playback data changes
-  useEffect(() => {
-    setPlaybackDataAtom(playback || null);
-  }, [playback, setPlaybackDataAtom]);
-
-  // Update thumbnail atoms when playback data changes
-  useEffect(() => {
-    setThumbnailPathAtom(playback?.thumbnailPath ?? null);
-    setThumbnailUrlAtom(playback?.thumbnailUrl ?? null);
-  }, [playback?.thumbnailPath, playback?.thumbnailUrl, setThumbnailPathAtom, setThumbnailUrlAtom]);
+    setPlaybackData(playback || null);
+  }, [playback]);
 
   // Fetch playlist details if we have a playlistId
   const playlistQuery = useQuery({
@@ -468,12 +430,20 @@ export default function PlayerPage(): React.JSX.Element {
             <div className="space-y-4">
               <VideoPlayer
                 videoRef={videoRef}
+                filePath={filePath}
                 onTimeUpdate={handleTimeUpdate}
                 onError={handleVideoLoadError}
+                onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
               />
 
               {/* Transcript - Self-contained, owns all its state */}
-              <TranscriptPanel videoId={videoId} />
+              <TranscriptPanel
+                videoId={videoId}
+                videoRef={videoRef}
+                currentTime={currentTime}
+                playbackData={playback || null}
+                onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
+              />
 
               {/* Playlist Navigation - Show when playing from a playlist */}
               {isPlaylist && (
@@ -489,7 +459,7 @@ export default function PlayerPage(): React.JSX.Element {
               )}
 
               {/* Annotation Form Dialog - Self-contained, owns all its state */}
-              <AnnotationForm videoId={videoId} />
+              <AnnotationForm videoId={videoId} videoRef={videoRef} currentTime={currentTime} />
             </div>
           )}
         </CardContent>

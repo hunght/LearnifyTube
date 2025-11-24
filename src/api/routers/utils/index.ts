@@ -50,7 +50,8 @@ const dictionaryResponseSchema = z.union([z.array(dictionaryEntrySchema), dictio
 // [6] confidence: 1
 // [7] []
 // [8] language metadata
-const googleTranslateResponseSchema = z.tuple([
+// Note: Currently not used for validation, kept for documentation and potential future use
+const _googleTranslateResponseSchema = z.tuple([
   z.array(z.array(z.unknown())), // translations - flexible to handle varying array lengths
   z.null(), // unused
   z.string(), // detected language (required)
@@ -477,24 +478,20 @@ export const utilsRouter = t.router({
           structure: JSON.stringify(rawData).substring(0, 200),
         });
 
-        const parseResult = googleTranslateResponseSchema.safeParse(rawData);
-
-        if (
-          !parseResult.success ||
-          !Array.isArray(parseResult.data) ||
-          !Array.isArray(parseResult.data[0])
-        ) {
+        // More lenient validation - just check if it's an array with the expected structure
+        if (!Array.isArray(rawData) || !Array.isArray(rawData[0])) {
           logger.error("[translation] Invalid API response structure", {
-            zodError: parseResult.success ? null : parseResult.error,
             rawData,
           });
           throw new Error("Invalid translation API response structure");
         }
 
-        const data = parseResult.data;
+        // At this point, rawData is guaranteed to be an array
+        // Type assertion is safe here because we've validated the structure above
+        const data: unknown[] = rawData;
 
         // Safely extract translations from nested structure
-        const firstElement = data[0];
+        const firstElement: unknown = data[0];
         if (!Array.isArray(firstElement)) {
           throw new Error("Translation data format unexpected");
         }

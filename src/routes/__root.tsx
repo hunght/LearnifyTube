@@ -32,19 +32,23 @@ export const RootRoute = createRootRoute({
   errorComponent: function ErrorComponent({ error }) {
     const { toast } = useToast();
     const err = error instanceof Error ? error : new Error(String(error));
-    logger.error("[ErrorComponent] Navigation error", err);
 
-    // Track error events using the safer analytics helper
-    analytics.track("navigation_error", {
-      error_message: err.message,
-      path: window.location.pathname,
-    });
+    useEffect(() => {
+      logger.error("[ErrorComponent] Navigation error", err);
 
-    toast({
-      variant: "destructive",
-      title: "Error",
-      description: err.message,
-    });
+      // Track error events using the safer analytics helper
+      analytics.track("navigation_error", {
+        error_message: err.message,
+        path: window.location.pathname,
+      });
+
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err.message,
+      });
+    }, [err, toast]);
+
     return <Root />;
   },
 });

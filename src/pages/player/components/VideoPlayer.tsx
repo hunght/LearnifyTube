@@ -1,27 +1,25 @@
 import React, { useEffect, useRef } from "react";
-import { useAtom, useAtomValue } from "jotai";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { logger } from "@/helpers/logger";
 import { toLocalFileUrl } from "@/helpers/localFile";
-import { filePathAtom, seekIndicatorAtom, isPlayingAtom } from "@/context/player";
+import { setIsPlaying } from "@/context/playerStore";
 
 interface VideoPlayerProps {
   videoRef: React.RefObject<HTMLVideoElement>;
+  filePath: string | null;
   onTimeUpdate: (e: React.SyntheticEvent<HTMLVideoElement, Event>) => void;
+  onSeekIndicator?: (indicator: { direction: "forward" | "backward"; amount: number }) => void;
   onError?: () => void;
 }
 
 export function VideoPlayer({
   videoRef,
+  filePath,
   onTimeUpdate,
+  onSeekIndicator,
   onError,
 }: VideoPlayerProps): React.JSX.Element {
-  // Get shared state from atoms
-  const filePath = useAtomValue(filePathAtom);
-  const setSeekIndicatorAtom = useAtom(seekIndicatorAtom)[1];
-  const [, setIsPlaying] = useAtom(isPlayingAtom);
-
   const containerRef = useRef<HTMLDivElement>(null);
   const isSeekingRef = useRef<boolean>(false);
 
@@ -68,7 +66,7 @@ export function VideoPlayer({
       video.removeEventListener("play", updatePlayingState);
       video.removeEventListener("pause", updatePlayingState);
     };
-  }, [videoRef, setIsPlaying]);
+  }, [videoRef]);
 
   useEffect(() => {
     if (!videoRef) return;
@@ -186,7 +184,7 @@ export function VideoPlayer({
       video.currentTime = newTime;
 
       // Trigger shared seek indicator
-      setSeekIndicatorAtom({ direction, amount: seekAmount });
+      if (onSeekIndicator) onSeekIndicator({ direction, amount: seekAmount });
 
       // Reset seeking flag after a short delay
       setTimeout(() => {
@@ -201,7 +199,7 @@ export function VideoPlayer({
       container.removeEventListener("wheel", handleWheel);
       isSeekingRef.current = false;
     };
-  }, [videoRef, setSeekIndicatorAtom]);
+  }, [videoRef, onSeekIndicator]);
 
   // Keyboard shortcuts for seeking
   useEffect(() => {
@@ -267,14 +265,14 @@ export function VideoPlayer({
       if (handled) {
         e.preventDefault();
         if (direction) {
-          setSeekIndicatorAtom({ direction, amount: seekAmount });
+          if (onSeekIndicator) onSeekIndicator({ direction, amount: seekAmount });
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [videoRef, setSeekIndicatorAtom]);
+  }, [videoRef, onSeekIndicator]);
 
   return (
     <div className="space-y-4" ref={containerRef}>

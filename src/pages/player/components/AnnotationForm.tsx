@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom } from "jotai";
 import { Clock, Languages, Loader2, BookmarkPlus, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,10 +20,13 @@ import {
 } from "@/context/transcriptSettings";
 import { toast } from "sonner";
 import { openAnnotationFormAtom } from "@/context/annotations";
-import { videoRefAtom, currentTimeAtom } from "@/context/player";
+import { PlaybackData } from "@/context/playerStore";
 
 interface AnnotationFormProps {
   videoId: string;
+  videoRef: React.RefObject<HTMLVideoElement> | null;
+  currentTime: number;
+  playbackData?: PlaybackData | null; // optional if needed later
 }
 
 // Emoji reaction types for quick note categorization
@@ -34,11 +37,11 @@ const EMOJI_REACTIONS = [
   { emoji: "🔖", label: "Bookmark", description: "Save for later review" },
 ] as const;
 
-export function AnnotationForm({ videoId }: AnnotationFormProps): React.JSX.Element {
-  // Get shared state from atoms
-  const videoRef = useAtomValue(videoRefAtom);
-  const currentTime = useAtomValue(currentTimeAtom);
-
+export function AnnotationForm({
+  videoId,
+  videoRef,
+  currentTime,
+}: AnnotationFormProps): React.JSX.Element {
   const queryClient = useQueryClient();
 
   // Atoms for settings and shared state

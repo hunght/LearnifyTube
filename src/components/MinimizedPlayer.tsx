@@ -1,21 +1,16 @@
 import React, { useRef, useEffect } from "react";
-import { useAtomValue, useAtom } from "jotai";
 import { useNavigate, useMatches } from "@tanstack/react-router";
 import { Play, Pause, Maximize2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toLocalFileUrl } from "@/helpers/localFile";
 import {
-  videoRefAtom,
-  currentTimeAtom,
-  filePathAtom,
-  playbackDataAtom,
-  isPlayingAtom,
-  thumbnailPathAtom,
-  thumbnailUrlAtom,
-} from "@/context/player";
+  usePlayerStore,
+  setIsPlaying,
+  updateCurrentTime,
+  setPlayerState,
+} from "@/context/playerStore";
 import { useWatchProgress } from "@/pages/player/hooks/useWatchProgress";
 import Thumbnail from "@/components/Thumbnail";
-import { logger } from "@/helpers/logger";
 
 export function MinimizedPlayer(): React.JSX.Element | null {
   const matches = useMatches();
@@ -24,13 +19,13 @@ export function MinimizedPlayer(): React.JSX.Element | null {
 
   // Use a persistent ref that doesn't change
   const persistentVideoRef = useRef<HTMLVideoElement>(null);
-  const [videoRef, setVideoRefAtom] = useAtom(videoRefAtom);
-  const [currentTime, setCurrentTimeAtom] = useAtom(currentTimeAtom);
-  const filePath = useAtomValue(filePathAtom);
-  const playbackData = useAtomValue(playbackDataAtom);
-  const [isPlaying, setIsPlaying] = useAtom(isPlayingAtom);
-  const thumbnailPath = useAtomValue(thumbnailPathAtom);
-  const thumbnailUrl = useAtomValue(thumbnailUrlAtom);
+  const playerState = usePlayerStore();
+  const filePath = playerState.filePath;
+  const playbackData = playerState.playback;
+  const currentTime = playerState.currentTime;
+  const isPlaying = playerState.isPlaying;
+  const thumbnailPath = playerState.thumbnailPath;
+  const thumbnailUrl = playerState.thumbnailUrl;
   const navigate = useNavigate();
 
   // Check if we have an active video
@@ -42,7 +37,7 @@ export function MinimizedPlayer(): React.JSX.Element | null {
     persistentVideoRef,
     playbackData?.lastPositionSeconds,
     {
-      onCurrentTimeChange: setCurrentTimeAtom,
+      onCurrentTimeChange: (t) => updateCurrentTime(t),
     }
   );
 
@@ -59,8 +54,6 @@ export function MinimizedPlayer(): React.JSX.Element | null {
 
     const persistentVideo = persistentVideoRef.current;
     if (!persistentVideo) return;
-
-    setVideoRefAtom(persistentVideoRef);
 
     // Only restore if filePath or time changed
     const shouldRestore =
@@ -93,7 +86,7 @@ export function MinimizedPlayer(): React.JSX.Element | null {
     return () => {
       persistentVideo.removeEventListener("loadedmetadata", restoreTimeAndPlayback);
     };
-  }, [isOnPlayerPage, filePath, currentTime, isPlaying, setVideoRefAtom, hasVideo]);
+  }, [isOnPlayerPage, filePath, currentTime, isPlaying, hasVideo]);
 
   // Sync playing state to atom
   useEffect(() => {
@@ -120,17 +113,9 @@ export function MinimizedPlayer(): React.JSX.Element | null {
   const videoTitle = playbackData!.title || videoId || "Video";
 
   // Get the active video ref (persistent when not on player page, or VideoPlayer's when on player page)
-  const activeVideoRef = isOnPlayerPage ? videoRef : persistentVideoRef;
+  const activeVideoRef = isOnPlayerPage ? null : persistentVideoRef;
   const activeIsPlaying = activeVideoRef?.current && !activeVideoRef.current.paused;
-  logger.info("[MinimizedPlayer] activeVideoRef", { activeVideoRef });
-  logger.info("[MinimizedPlayer] activeVideoRef.current", { current: activeVideoRef?.current });
-  logger.info("[MinimizedPlayer] activeVideoRef.current.paused", {
-    paused: activeVideoRef?.current?.paused,
-  });
-  logger.info("[MinimizedPlayer] activeIsPlaying", { activeIsPlaying });
-  logger.info("[MinimizedPlayer] isOnPlayerPage", { isOnPlayerPage });
-  logger.info("[MinimizedPlayer] videoRef", { videoRef });
-  logger.info("[MinimizedPlayer] persistentVideoRef", { persistentVideoRef });
+
   // Format time display
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -166,8 +151,7 @@ export function MinimizedPlayer(): React.JSX.Element | null {
   const handleClose = (): void => {
     if (!activeVideoRef?.current) return;
     activeVideoRef.current.pause();
-    // Note: We could add an atom to clear the active video state
-    // For now, just pausing is enough
+    setPlayerState({ isPlaying: false });
   };
 
   return (
