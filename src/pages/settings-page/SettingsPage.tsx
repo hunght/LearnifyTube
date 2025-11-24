@@ -32,21 +32,58 @@ export default function SettingsPage(): React.JSX.Element {
     queryFn: () => trpcClient.preferences.getDownloadPath.query(),
   });
 
+  const ensureLatestDownloadFolderAccess = async (): Promise<void> => {
+    const latest = await trpcClient.preferences.getDownloadPath.query();
+    await ensureDirectoryAccessMutation.mutateAsync(latest.downloadPath);
+  };
+
   // Mutation to update download path
   const updateDownloadPathMutation = useMutation({
     mutationFn: async (downloadPath: string | null) => {
       return await trpcClient.preferences.updateDownloadPath.mutate({ downloadPath });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["preferences", "downloadPath"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["preferences", "downloadPath"] });
       toast({
         title: "Download Path Updated",
         description: "Your download folder path has been updated.",
       });
+      await ensureLatestDownloadFolderAccess();
     },
     onError: (error) => {
       toast({
         title: "Update Failed",
+        description: String(error),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const ensureDirectoryAccessMutation = useMutation({
+    mutationFn: async (directoryPath?: string | null) => {
+      if (!directoryPath) return null;
+      return await trpcClient.preferences.ensureDownloadDirectoryAccess.mutate({
+        directoryPath,
+      });
+    },
+    onSuccess: (result) => {
+      if (!result) return;
+      if (result.success) {
+        toast({
+          title: "Folder access granted",
+          description: `LearnifyTube can now read ${result.downloadPath}.`,
+        });
+      } else if (!result.cancelled) {
+        toast({
+          title: "Folder access was not granted",
+          description: result.message ?? "Please try again.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Unable to request access",
         description: String(error),
         variant: "destructive",
       });

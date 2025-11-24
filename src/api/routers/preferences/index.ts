@@ -91,15 +91,32 @@ const getDefaultDownloadPath = (): string => {
 const hasReadAccess = async (targetPath: string): Promise<boolean> => {
   try {
     await fs.promises.access(targetPath, fs.constants.R_OK);
+    logger.debug("[preferences] Directory is readable", { targetPath });
+    return true;
   } catch (error) {
-    return !(
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      (error.code === "EPERM" || error.code === "EACCES")
-    );
+    const errorCode =
+      typeof error === "object" && error !== null && "code" in error
+        ? String(error.code)
+        : "UNKNOWN";
+    const message = error instanceof Error ? error.message : String(error);
+
+    const isPermissionError = errorCode === "EPERM" || errorCode === "EACCES";
+    if (isPermissionError) {
+      logger.warn("[preferences] Permission denied when accessing directory", {
+        targetPath,
+        errorCode,
+        message,
+      });
+      return false;
+    }
+
+    logger.error("[preferences] Unexpected error when checking directory access", {
+      targetPath,
+      errorCode,
+      message,
+    });
+    return true;
   }
-  return true;
 };
 
 // Initialize user preferences with system language if not exists
@@ -267,7 +284,13 @@ export const preferencesRouter = t.router({
     }),
 
   ensureDownloadDirectoryAccess: publicProcedure
-    .input(z.object({ filePath: z.string().optional() }))
+    .input(
+      z.object({
+        filePath: z.string().optional(),
+        directoryPath: z.string().optional(),
+        forcePrompt: z.boolean().optional(),
+      })
+    )
     .mutation(async ({ input, ctx }): Promise<EnsureDirectoryAccessResult> => {
       const db = ctx.db ?? defaultDb;
       await ensurePreferencesExist(db);
@@ -281,11 +304,30 @@ export const preferencesRouter = t.router({
 
         const storedPath = rows.length > 0 ? rows[0].downloadPath : null;
         const fallbackPath = storedPath ?? getDefaultDownloadPath();
-        const candidateDir = input.filePath ? path.dirname(input.filePath) : fallbackPath;
+        const candidateDir =
+          input.directoryPath ?? (input.filePath ? path.dirname(input.filePath) : fallbackPath);
         const resolvedTarget = path.resolve(candidateDir);
+        const forcePrompt = input.forcePrompt === true;
 
-        if (await hasReadAccess(resolvedTarget)) {
+        logger.info("[preferences] ensureDownloadDirectoryAccess invoked", {
+          requestedFilePath: input.filePath,
+          requestedDirectoryPath: input.directoryPath,
+          storedPath,
+          fallbackPath,
+          candidateDir,
+          resolvedTarget,
+          forcePrompt,
+        });
+
+        if (!forcePrompt && (await hasReadAccess(resolvedTarget))) {
+          logger.info("[preferences] Directory already accessible", { resolvedTarget });
           return { success: true, downloadPath: resolvedTarget, updated: false };
+        }
+
+        if (forcePrompt) {
+          logger.info("[preferences] Forcing user prompt for directory access", { resolvedTarget });
+        } else {
+          logger.warn("[preferences] Directory not accessible, prompting user", { resolvedTarget });
         }
 
         const selection = await dialog.showOpenDialog({
@@ -298,6 +340,10 @@ export const preferencesRouter = t.router({
         });
 
         if (selection.canceled || selection.filePaths.length === 0) {
+          logger.warn("[preferences] Folder selection dialog cancelled", {
+            resolvedTarget,
+            selection,
+          });
           return {
             success: false,
             cancelled: true,
@@ -306,6 +352,10 @@ export const preferencesRouter = t.router({
         }
 
         const selectedPath = selection.filePaths[0];
+        logger.info("[preferences] User granted directory", {
+          selectedPath,
+          previousPath: storedPath,
+        });
         await db
           .update(userPreferences)
           .set({
@@ -314,6 +364,11 @@ export const preferencesRouter = t.router({
           })
           .where(eq(userPreferences.id, "default"))
           .execute();
+
+        logger.info("[preferences] Stored new download directory", {
+          selectedPath,
+          updatedFromStored: selectedPath !== storedPath,
+        });
 
         return {
           success: true,

@@ -320,19 +320,42 @@ export default function PlayerPage(): React.JSX.Element {
     if (!filePath) return;
     const normalizedPath = filePath.toLowerCase();
     if (ensuredDirectoryRef.current.has(normalizedPath)) {
+      logger.debug("[PlayerPage] Directory already ensured", {
+        videoId,
+        filePath,
+      });
       return;
     }
 
+    logger.info("[PlayerPage] Ensuring directory permissions", {
+      videoId,
+      filePath,
+    });
     ensureDirectoryAccessMutation.mutate(filePath, {
       onSuccess: (result) => {
+        logger.info("[PlayerPage] ensureDownloadDirectoryAccess result", {
+          videoId,
+          filePath,
+          result,
+        });
         if (result.success) {
           ensuredDirectoryRef.current.add(normalizedPath);
         } else {
+          logger.warn("[PlayerPage] Failed to gain directory access", {
+            videoId,
+            filePath,
+            result,
+          });
           toast.error(result.message || "LearnifyTube needs access to this folder.");
           setVideoLoadError(true);
         }
       },
       onError: (error) => {
+        logger.error("[PlayerPage] Directory access request failed", {
+          videoId,
+          filePath,
+          error,
+        });
         toast.error(error instanceof Error ? error.message : "Unable to access download folder");
         setVideoLoadError(true);
       },
