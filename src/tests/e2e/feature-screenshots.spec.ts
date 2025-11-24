@@ -2,6 +2,10 @@ import { test, _electron as electron, ElectronApplication, Page } from "@playwri
 import { findLatestBuild, parseElectronApp } from "electron-playwright-helpers";
 import path from "path";
 import fs from "fs";
+import { createDashboardPage, type DashboardPage } from "./pages/DashboardPage";
+import { createSettingsPage, type SettingsPage } from "./pages/SettingsPage";
+import { createChannelsPage, type ChannelsPage } from "./pages/ChannelsPage";
+import { createPlayerPage, type PlayerPage } from "./pages/PlayerPage";
 
 /**
  * Test file for taking comprehensive screenshots of LearnifyTube pages.
@@ -9,6 +13,10 @@ import fs from "fs";
 
 let electronApp: ElectronApplication;
 let page: Page;
+let dashboardPage: DashboardPage;
+let settingsPage: SettingsPage;
+let channelsPage: ChannelsPage;
+let playerPage: PlayerPage;
 
 // Create screenshots directory if it doesn't exist
 const screenshotsDir = path.join(process.cwd(), "screenshots");
@@ -50,24 +58,6 @@ test.beforeAll(async () => {
     },
   });
 
-  // Setup event handlers for debugging
-  electronApp.on("window", async (page) => {
-    const filename = page.url()?.split("/").pop();
-    console.log(`Window opened: ${filename}`);
-
-    if (page.url().startsWith("devtools://")) {
-      await page.close();
-      return;
-    }
-
-    page.on("pageerror", (error) => {
-      console.error(error);
-    });
-    page.on("console", (msg) => {
-      console.log(msg.text());
-    });
-  });
-
   async function waitForMainWindow(app: ElectronApplication): Promise<Page> {
     console.log("Waiting for main window...");
     const windows = app.windows();
@@ -100,6 +90,12 @@ test.beforeAll(async () => {
   // Wait for the app to fully load
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(2000);
+
+  // Initialize Page Objects
+  dashboardPage = createDashboardPage(page);
+  settingsPage = createSettingsPage(page);
+  channelsPage = createChannelsPage(page);
+  playerPage = createPlayerPage(page);
 });
 
 test.afterAll(async () => {
@@ -108,10 +104,6 @@ test.afterAll(async () => {
 
 test("Screenshot Dashboard", async () => {
   // App starts at Dashboard
-  // Ensure we are at Dashboard by clicking the link if needed, but initially we should be there.
-  // We can click just to be safe if this test runs after others (but tests run in order)
-  // Since this is the first test, we assume we are at root.
-
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(1500);
   await page.screenshot({
@@ -121,9 +113,8 @@ test("Screenshot Dashboard", async () => {
 });
 
 test("Screenshot Settings", async () => {
-  // Click Settings in top bar
   console.log("Navigating to Settings...");
-  await page.click('a[href="/settings"]');
+  await dashboardPage.navigateToSettings();
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(1500);
   await page.screenshot({
@@ -133,13 +124,13 @@ test("Screenshot Settings", async () => {
 
   // Navigate back to Dashboard
   console.log("Navigating back to Dashboard...");
-  await page.click('a[href="/"]');
+  await settingsPage.navigateBackToDashboard();
   await page.waitForLoadState("networkidle");
 });
 
 test("Screenshot Channels", async () => {
   console.log("Navigating to Channels...");
-  await page.click('a[href="/channels"]');
+  await dashboardPage.navigateToChannels();
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(1500);
   await page.screenshot({
@@ -149,7 +140,7 @@ test("Screenshot Channels", async () => {
 
   // Navigate back to Dashboard
   console.log("Navigating back to Dashboard...");
-  await page.click('a[href="/"]');
+  await page.click('a[href="/"]'); // Assuming dashboard link is always available or add method to ChannelsPage
   await page.waitForLoadState("networkidle");
 });
 
@@ -162,38 +153,17 @@ test("Download and Play Video", async () => {
   await page.click('a[href="/"]');
   await page.waitForLoadState("networkidle");
 
-  // Fill input
-  console.log("Filling video URL...");
-  await page.fill('input[placeholder*="youtube.com"]', videoUrl);
-
-  // Wait for button to enable
-  console.log("Waiting for download button to enable...");
-  await page.waitForSelector('button:has-text("Download"):not([disabled])', { timeout: 10000 });
-
-  // Wait for preview to load (optional)
-  console.log("Waiting for preview...");
-  try {
-    await page.waitForSelector("text=Me at the zoo", { timeout: 10000 });
-  } catch (e) {
-    console.log("Preview timed out, proceeding to download...");
-  }
-
-  // Click download
-  console.log("Clicking download...");
-  await page.click('button:has-text("Download")');
-
-  // Wait for toast or confirmation
-  console.log("Waiting for download confirmation...");
-  await page.waitForSelector("text=Download added to queue", { timeout: 10000 });
+  // Search and Download
+  console.log("Searching and downloading video...");
+  await dashboardPage.searchAndDownloadVideo(videoUrl);
 
   // Wait for download to complete.
-  // We'll wait a bit then check Channels.
   console.log("Waiting for download to complete...");
   await page.waitForTimeout(20000);
 
   // Go to Channels
   console.log("Navigating to Channels...");
-  await page.click('a[href="/channels"]');
+  await dashboardPage.navigateToChannels();
   await page.waitForLoadState("networkidle");
 
   await page.screenshot({
@@ -201,35 +171,16 @@ test("Download and Play Video", async () => {
     fullPage: true,
   });
 
-  // Wait for channel "jawed"
-  console.log("Waiting for channel 'jawed'...");
-  await page.waitForSelector("text=jawed", { timeout: 30000 });
+  // Select Channel and Video
+  console.log("Selecting channel 'jawed'...");
+  await channelsPage.selectChannel("jawed");
 
-  // Click channel
-  console.log("Clicking channel...");
-  await page.click("text=jawed");
-
-  // Wait for video "Me at the zoo"
-  console.log("Waiting for video...");
-  await page.waitForSelector("text=Me at the zoo", { timeout: 10000 });
-
-  // Click video to play
-  console.log("Clicking video to play...");
-  await page.click("text=Me at the zoo");
-
-  // Wait for navigation to player
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(2000);
-
-  // Take debug screenshot of player page
-  await page.screenshot({
-    path: path.join(screenshotsDir, "debug-player-page.png"),
-    fullPage: true,
-  });
+  console.log("Selecting video 'Me at the zoo'...");
+  await channelsPage.selectVideo("Me at the zoo");
 
   // Verify player
   console.log("Verifying player...");
-  await page.waitForSelector("video", { timeout: 20000 });
+  await playerPage.verifyPlayback();
 
   // Wait a bit for playback
   await page.waitForTimeout(2000);

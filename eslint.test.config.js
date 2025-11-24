@@ -23,7 +23,18 @@ export default {
     '@typescript-eslint/no-unused-vars': 'off',
     'no-console': 'off',
     'no-undef': 'off',
-       '@typescript-eslint/explicit-function-return-type': 'off',
+    '@typescript-eslint/explicit-function-return-type': 'off',
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: 'ClassDeclaration',
+        message: 'Do not use classes in tests; prefer factory functions or helpers.',
+      },
+      {
+        selector: 'ClassExpression',
+        message: 'Avoid class expressions in tests; rely on plain objects or helpers.',
+      },
+    ],
   },
 };
 
