@@ -15,6 +15,13 @@
       "when": 1763105812673,
       "tag": "0001_shallow_bucky",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1764034270277,
+      "tag": "0002_slippery_hemingway",
+      "breakpoints": true
     }
   ]
 }

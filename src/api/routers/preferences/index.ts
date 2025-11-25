@@ -17,6 +17,7 @@ type UserPreferencesResult = {
   preferredLanguages: string[];
   systemLanguage: string;
   downloadPath: string | null;
+  downloadPathBookmark: string | null;
   createdAt: number;
   updatedAt: number | null;
 };
@@ -174,6 +175,7 @@ export const preferencesRouter = t.router({
           preferredLanguages: [systemLang],
           systemLanguage: systemLang,
           downloadPath: null,
+          downloadPathBookmark: null,
           createdAt: Date.now(),
           updatedAt: null,
         } as const;
@@ -188,6 +190,7 @@ export const preferencesRouter = t.router({
         preferredLanguages: langsResult.success ? langsResult.data : [],
         systemLanguage: row.systemLanguage ?? getSystemLanguage(),
         downloadPath: row.downloadPath,
+        downloadPathBookmark: row.downloadPathBookmark,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       } as const;
@@ -199,6 +202,7 @@ export const preferencesRouter = t.router({
         preferredLanguages: [systemLang],
         systemLanguage: systemLang,
         downloadPath: null,
+        downloadPathBookmark: null,
         createdAt: Date.now(),
         updatedAt: null,
       } as const;
@@ -336,7 +340,7 @@ export const preferencesRouter = t.router({
             "macOS blocked access to this folder. Please select the Downloads folder (or another folder) to grant permission.",
           properties: ["openDirectory", "createDirectory"],
           defaultPath: resolvedTarget,
-          securityScopedBookmarks: false,
+          securityScopedBookmarks: true,
         });
 
         if (selection.canceled || selection.filePaths.length === 0) {
@@ -352,14 +356,18 @@ export const preferencesRouter = t.router({
         }
 
         const selectedPath = selection.filePaths[0];
+        const bookmark = selection.bookmarks ? selection.bookmarks[0] : null;
+
         logger.info("[preferences] User granted directory", {
           selectedPath,
+          hasBookmark: !!bookmark,
           previousPath: storedPath,
         });
         await db
           .update(userPreferences)
           .set({
             downloadPath: selectedPath,
+            downloadPathBookmark: bookmark,
             updatedAt: Date.now(),
           })
           .where(eq(userPreferences.id, "default"))

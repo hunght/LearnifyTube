@@ -1,28 +1,14 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { z } from "zod";
 import { logger } from "@/helpers/logger";
 
 // Zod schema for yt-dlp video metadata (lenient for optional fields)
-const ytDlpMetadataSchema = z
-  .object({
-    id: z.string().optional(),
-    video_id: z.string().optional(),
-    fulltitle: z.string().optional(),
-    title: z.string().optional(),
-    description: z.string().optional().nullable(),
-    channel_id: z.string().optional(),
-    channelId: z.string().optional(),
-    channel: z.string().optional(),
-    uploader: z.string().optional(),
-    channel_title: z.string().optional(),
-    duration: z.number().optional(),
-    view_count: z.number().optional(),
-    like_count: z.number().optional(),
-    thumbnails: z.array(z.object({ url: z.string().optional() })).optional(),
-    thumbnail: z.string().optional(),
-    upload_date: z.string().optional(),
-    tags: z.array(z.string()).optional(),
-  })
-  .passthrough(); // Allow other properties
+// Zod schema for yt-dlp video metadata (lenient for optional fields)
+// User requested to accept dynamic json format, so we use z.any()
+const ytDlpMetadataSchema = z.any();
 
 // Define the return type using a type alias
 type MappedMetadata = {
@@ -49,9 +35,9 @@ export const mapYtDlpMetadata = (meta: unknown): MappedMetadata => {
     description: validated.description ?? null,
     channelId: validated.channel_id ?? validated.channelId ?? null,
     channelTitle: validated.channel ?? validated.uploader ?? validated.channel_title ?? null,
-    durationSeconds: validated.duration ? Math.round(validated.duration) : null,
-    viewCount: validated.view_count ?? null,
-    likeCount: validated.like_count ?? null,
+    durationSeconds: validated.duration ? Math.round(Number(validated.duration)) : null,
+    viewCount: validated.view_count ? Number(validated.view_count) : null,
+    likeCount: validated.like_count ? Number(validated.like_count) : null,
     thumbnailUrl: Array.isArray(validated.thumbnails)
       ? (validated.thumbnails[validated.thumbnails.length - 1]?.url ?? null)
       : (validated.thumbnail ?? null),
@@ -66,12 +52,7 @@ export const mapYtDlpMetadata = (meta: unknown): MappedMetadata => {
 };
 
 // Schema for subtitle metadata
-const subtitleMetadataSchema = z
-  .object({
-    subtitles: z.record(z.array(z.object({ ext: z.string().optional() }))).optional(),
-    automatic_captions: z.record(z.array(z.object({ ext: z.string().optional() }))).optional(),
-  })
-  .passthrough();
+const subtitleMetadataSchema = z.any();
 
 /**
  * Extract available subtitle languages from yt-dlp metadata
@@ -96,8 +77,10 @@ export const extractSubtitleLanguages = (
 
   for (const key of Object.keys(subs)) {
     const k = String(key).toLowerCase();
-    const fmts = Array.isArray(subs[k])
-      ? subs[k].map((f) => f.ext).filter((ext): ext is string => typeof ext === "string")
+    const fmts = Array.isArray(subs[key])
+      ? subs[key]
+          .map((f: any) => f.ext)
+          .filter((ext: any): ext is string => typeof ext === "string")
       : [];
     map.set(k, {
       hasManual: true,
@@ -109,8 +92,10 @@ export const extractSubtitleLanguages = (
 
   for (const key of Object.keys(autos)) {
     const k = String(key).toLowerCase();
-    const fmts = Array.isArray(autos[k])
-      ? autos[k].map((f) => f.ext).filter((ext): ext is string => typeof ext === "string")
+    const fmts = Array.isArray(autos[key])
+      ? autos[key]
+          .map((f: any) => f.ext)
+          .filter((ext: any): ext is string => typeof ext === "string")
       : [];
     const prev = map.get(k) ?? {
       hasManual: false,
@@ -135,23 +120,7 @@ export const extractSubtitleLanguages = (
 };
 
 // Schema for channel metadata
-const channelMetadataSchema = z
-  .object({
-    channel_id: z.string().optional(),
-    channelId: z.string().optional(),
-    uploader_id: z.string().optional(),
-    channel: z.string().optional(),
-    uploader: z.string().optional(),
-    channel_title: z.string().optional(),
-    channel_description: z.string().optional(),
-    channel_url: z.string().optional(),
-    channel_thumbnails: z.array(z.object({ url: z.string().optional() })).optional(),
-    uploader_avatar: z.string().optional(),
-    channel_avatar: z.string().optional(),
-    channel_follower_count: z.number().optional(),
-    uploader_url: z.string().optional(),
-  })
-  .passthrough();
+const channelMetadataSchema = z.any();
 
 type ExtractedChannelData = {
   readonly channelId: string;

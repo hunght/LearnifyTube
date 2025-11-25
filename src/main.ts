@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as fs from "fs";
 
+import { eq } from "drizzle-orm";
 import {
   app,
   BrowserWindow,
@@ -22,6 +23,7 @@ import { setWindowReferences } from "./api/routers/window";
 import { logger } from "./helpers/logger";
 import { initializeQueueManager } from "./services/download-queue/queue-manager";
 import defaultDb from "./api/db";
+import { userPreferences } from "./api/db/schema";
 
 import { toggleClockWindow } from "./main/windows/clock";
 import { updateElectronApp } from "update-electron-app";
@@ -29,6 +31,7 @@ import { updateElectronApp } from "update-electron-app";
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuiting: boolean = false;
+let stopAccessingSecurityScopedResource: any | null = null;
 
 /**
  * Initialize auto-update functionality with safe error handling.
@@ -360,6 +363,28 @@ app.whenReady().then(async () => {
     // Don't quit on error, try to continue
   }
 
+  // Restore security scoped bookmark if present (macOS only)
+  if (process.platform === "darwin") {
+    try {
+      const prefs = await defaultDb
+        .select()
+        .from(userPreferences)
+        .where(eq(userPreferences.id, "default"))
+        .limit(1);
+
+      if (prefs.length > 0 && prefs[0].downloadPathBookmark) {
+        logger.info("[app] Restoring security scoped bookmark...");
+        const stopAccessing = app.startAccessingSecurityScopedResource(
+          prefs[0].downloadPathBookmark
+        );
+        stopAccessingSecurityScopedResource = stopAccessing;
+        logger.info("[app] Security scoped bookmark restored");
+      }
+    } catch (err) {
+      logger.error("[app] Failed to restore security scoped bookmark", err);
+    }
+  }
+
   // Register custom protocol that streams local files from main (supports Range)
   // IMPORTANT: Must register BEFORE creating windows to ensure protocol is available in production mode
   protocol.registerStreamProtocol("local-file", (request, callback) => {
@@ -367,13 +392,7 @@ app.whenReady().then(async () => {
       const rawUrl = request.url;
       const decodedPath = decodeURIComponent(rawUrl.replace("local-file://", ""));
       const normalizedPath = decodedPath.startsWith("/") ? decodedPath : `/${decodedPath}`;
-      if (normalizedPath !== decodedPath) {
-        logger.warn("[protocol] normalized path missing leading slash", {
-          rawUrl,
-          decodedPath,
-          normalizedPath,
-        });
-      }
+      // Warning removed as we are handling normalization above
       const filePath = path.resolve(normalizedPath);
       if (!fs.existsSync(filePath)) {
         logger.error("[protocol] Requested local file does not exist", { rawUrl, filePath });
@@ -481,6 +500,11 @@ app.whenReady().then(async () => {
 // Handle app quit
 app.on("before-quit", () => {
   isQuiting = true;
+  if (stopAccessingSecurityScopedResource) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    stopAccessingSecurityScopedResource();
+    stopAccessingSecurityScopedResource = null;
+  }
 });
 
 //osX only

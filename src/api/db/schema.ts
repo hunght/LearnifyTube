@@ -250,6 +250,7 @@ export const userPreferences = sqliteTable("user_preferences", {
   preferredLanguages: text("preferred_languages").notNull().default("[]"), // JSON array of language codes like ["en", "es", "fr"]
   systemLanguage: text("system_language"), // Detected system language (read-only after first detect)
   downloadPath: text("download_path"), // Custom download folder path (null = use default)
+  downloadPathBookmark: text("download_path_bookmark"), // Security Scoped Bookmark for macOS (base64)
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at"),
 });

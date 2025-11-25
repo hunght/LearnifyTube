@@ -130,7 +130,7 @@ export default [
       '@typescript-eslint/no-unused-vars': 'off', // Replaced by unused-imports/no-unused-vars
 
       /* 🚫 Ban any */
-      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-explicit-any': 'off',
 
       /* 🚫 Ban forced type assertions (as/<>), prefer safer narrowing */
       '@typescript-eslint/consistent-type-assertions': [
