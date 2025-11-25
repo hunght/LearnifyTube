@@ -31,7 +31,9 @@ import { updateElectronApp } from "update-electron-app";
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuiting: boolean = false;
-let stopAccessingSecurityScopedResource: any | null = null;
+let stopAccessingSecurityScopedResource: (() => void) | null = null;
+
+const isVoidFunction = (value: unknown): value is () => void => typeof value === "function";
 
 /**
  * Initialize auto-update functionality with safe error handling.
@@ -377,8 +379,16 @@ app.whenReady().then(async () => {
         const stopAccessing = app.startAccessingSecurityScopedResource(
           prefs[0].downloadPathBookmark
         );
-        stopAccessingSecurityScopedResource = stopAccessing;
-        logger.info("[app] Security scoped bookmark restored");
+        if (isVoidFunction(stopAccessing)) {
+          stopAccessingSecurityScopedResource = () => {
+            stopAccessing();
+          };
+          logger.info("[app] Security scoped bookmark restored");
+        } else {
+          logger.warn("[app] Unexpected security scoped bookmark handle type", {
+            handleType: typeof stopAccessing,
+          });
+        }
       }
     } catch (err) {
       logger.error("[app] Failed to restore security scoped bookmark", err);
@@ -387,22 +397,52 @@ app.whenReady().then(async () => {
 
   // Register custom protocol that streams local files from main (supports Range)
   // IMPORTANT: Must register BEFORE creating windows to ensure protocol is available in production mode
+  let localFileRequestCounter = 0;
   protocol.registerStreamProtocol("local-file", (request, callback) => {
+    const requestId = ++localFileRequestCounter;
     try {
       const rawUrl = request.url;
+      const rangeHeader = request.headers.Range || request.headers.range || null;
+      logger.info("[protocol] local-file request received", {
+        requestId,
+        rawUrl,
+        hasRangeHeader: Boolean(rangeHeader),
+      });
       const decodedPath = decodeURIComponent(rawUrl.replace("local-file://", ""));
       const normalizedPath = decodedPath.startsWith("/") ? decodedPath : `/${decodedPath}`;
-      // Warning removed as we are handling normalization above
+      if (normalizedPath !== decodedPath) {
+        logger.debug("[protocol] Normalized local-file path", {
+          requestId,
+          decodedPath,
+          normalizedPath,
+        });
+      }
       const filePath = path.resolve(normalizedPath);
       if (!fs.existsSync(filePath)) {
-        logger.error("[protocol] Requested local file does not exist", { rawUrl, filePath });
+        logger.error("[protocol] Requested local file does not exist", {
+          requestId,
+          rawUrl,
+          filePath,
+        });
         callback({ statusCode: 404, data: Readable.from([]) });
         return;
       }
 
+      try {
+        fs.accessSync(filePath, fs.constants.R_OK);
+      } catch (accessError: unknown) {
+        const accessMessage =
+          accessError instanceof Error ? accessError.message : String(accessError);
+        logger.error("[protocol] local-file lacks read access", {
+          requestId,
+          filePath,
+          accessMessage,
+        });
+      }
+
       const stat = fs.statSync(filePath);
       const totalSize = stat.size;
-      const range = request.headers.Range || request.headers.range;
+      const range = rangeHeader;
 
       // naive content-type based on extension
       const ext = path.extname(filePath).toLowerCase();
@@ -428,7 +468,15 @@ app.whenReady().then(async () => {
             "Content-Type": contentType,
           };
           const stream = fs.createReadStream(filePath, { start, end });
+          stream.on("error", (streamError) => {
+            logger.error("[protocol] local-file partial stream error", {
+              requestId,
+              filePath,
+              message: streamError instanceof Error ? streamError.message : String(streamError),
+            });
+          });
           logger.debug("[protocol] local-file partial stream", {
+            requestId,
             filePath,
             start,
             end,
@@ -447,10 +495,17 @@ app.whenReady().then(async () => {
         "Accept-Ranges": "bytes",
       };
       const stream = fs.createReadStream(filePath);
-      logger.debug("[protocol] local-file full stream", { filePath, totalSize });
+      stream.on("error", (streamError) => {
+        logger.error("[protocol] local-file full stream error", {
+          requestId,
+          filePath,
+          message: streamError instanceof Error ? streamError.message : String(streamError),
+        });
+      });
+      logger.debug("[protocol] local-file full stream", { requestId, filePath, totalSize });
       callback({ statusCode: 200, headers, data: stream });
-    } catch (e) {
-      logger.error("[protocol] Failed to stream local-file URL", e);
+    } catch (error: unknown) {
+      logger.error("[protocol] Failed to stream local-file URL", { requestId, error });
       callback({ statusCode: 500, data: Readable.from([]) });
     }
   });
@@ -501,7 +556,6 @@ app.whenReady().then(async () => {
 app.on("before-quit", () => {
   isQuiting = true;
   if (stopAccessingSecurityScopedResource) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     stopAccessingSecurityScopedResource();
     stopAccessingSecurityScopedResource = null;
   }

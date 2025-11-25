@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { logger } from "@/helpers/logger";
 
-export function DownloadFolderAccessInitializer(): null {
+export default function DownloadFolderAccessInitializer(): null {
   const ensuredPathsRef = useRef<Set<string>>(new Set());
 
   const { data: downloadPathInfo } = useQuery({
@@ -34,7 +34,16 @@ export function DownloadFolderAccessInitializer(): null {
           directoryPath: downloadPath,
         });
 
-        if (!result.success && !cancelled) {
+        if (cancelled) {
+          return;
+        }
+
+        if (result.success) {
+          logger.info("[DownloadFolderAccessInitializer] Folder access confirmed", {
+            downloadPath,
+            updatedPath: result.downloadPath,
+          });
+        } else {
           logger.warn("[DownloadFolderAccessInitializer] Folder access not granted", {
             downloadPath,
             result,

@@ -16,7 +16,7 @@ import { getConfig } from "./config/env";
 import { YtDlpInstaller } from "@/components/ytdlp-installer";
 import { getAppVersion } from "./helpers/version";
 import { logger } from "./helpers/logger";
-import { DownloadFolderAccessInitializer } from "@/components/DownloadFolderAccessInitializer";
+import DownloadFolderAccessInitializer from "@/components/DownloadFolderAccessInitializer";
 
 // Initialize PostHog with enhanced CSP compatibility
 posthog.init(getConfig("posthogKey"), {

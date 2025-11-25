@@ -57,3 +57,5 @@ When the issue occurs, logs show:
 - App: LearnifyTube (Electron-based)
 - Issue appears related to macOS sandboxing and security-scoped bookmarks
 
+
+

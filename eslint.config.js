@@ -193,6 +193,7 @@ export default [
             'src/**/*.d.ts',
             'src/components/ui/**',
             'src/stories/**',
+            'src/components/DownloadFolderAccessInitializer.tsx',
           ],
         },
       ],
