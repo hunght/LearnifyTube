@@ -16,55 +16,41 @@ import defaultDb from "@/api/db";
 import { spawnYtDlpWithLogging } from "../../utils/ytdlp-utils/ytdlp";
 import { downloadImageToCache } from "../../utils/ytdlp-utils/cache";
 
-// Zod schemas for yt-dlp JSON responses (external API, not from DB)
-const ytDlpThumbnailSchema = z.object({
-  url: z.string(),
-  width: z.number().optional(),
-  height: z.number().optional(),
-});
+// Zod schemas for yt-dlp JSON responses (fault-tolerant)
+const ytDlpThumbnailSchema = z
+  .object({
+    url: z.string().optional().catch(undefined),
+    width: z.number().optional().catch(undefined),
+    height: z.number().optional().catch(undefined),
+  })
+  .passthrough();
 
 const ytDlpPlaylistEntrySchema = z.object({
-  id: z.string().optional(),
-  title: z.string().nullish(),
-  duration: z.number().nullish(),
-  view_count: z.number().nullish(),
-  channel: z.string().nullish(),
-  uploader: z.string().nullish(),
-  thumbnails: z.array(ytDlpThumbnailSchema).optional(),
-  thumbnail: z.string().nullish(),
+  id: z.string().optional().catch(undefined),
+  title: z.string().nullish().catch(null),
+  duration: z.number().nullish().catch(null),
+  view_count: z.number().nullish().catch(null),
+  channel: z.string().nullish().catch(null),
+  uploader: z.string().nullish().catch(null),
+  thumbnails: z.array(ytDlpThumbnailSchema).optional().catch([]),
+  thumbnail: z.string().nullish().catch(null),
 });
 
 const ytDlpPlaylistDataSchema = z.object({
-  title: z.string().nullish(),
-  description: z.string().nullish(),
-  channel: z.string().nullish(),
-  uploader: z.string().nullish(),
-  channel_id: z.string().nullish(),
-  channel_url: z.string().nullish(),
-  thumbnails: z.array(ytDlpThumbnailSchema).optional(),
-  entries: z.array(ytDlpPlaylistEntrySchema).optional(),
+  title: z.string().nullish().catch(null),
+  description: z.string().nullish().catch(null),
+  channel: z.string().nullish().catch(null),
+  uploader: z.string().nullish().catch(null),
+  channel_id: z.string().nullish().catch(null),
+  channel_url: z.string().nullish().catch(null),
+  thumbnails: z.array(ytDlpThumbnailSchema).optional().catch([]),
+  entries: z.array(ytDlpPlaylistEntrySchema).optional().catch([]),
 });
 
 // Infer types from Zod schemas (prefixed with _ as they're primarily for documentation)
 type _YtDlpThumbnail = z.infer<typeof ytDlpThumbnailSchema>;
 type _YtDlpPlaylistEntry = z.infer<typeof ytDlpPlaylistEntrySchema>;
 type _YtDlpPlaylistData = z.infer<typeof ytDlpPlaylistDataSchema>;
-
-// Zod schema for extracted channel data (return type of extractChannelData from metadata.ts)
-const extractedChannelDataSchema = z.object({
-  channelId: z.string(),
-  channelTitle: z.string(),
-  channelDescription: z.string().nullable(),
-  channelUrl: z.string().nullable(),
-  thumbnailUrl: z.string().nullable(),
-  subscriberCount: z.number().nullable(),
-  videoCount: z.null(),
-  viewCount: z.null(),
-  customUrl: z.string().nullable(),
-  raw: z.string(),
-});
-
-type _ExtractedChannelData = z.infer<typeof extractedChannelDataSchema>;
 
 export const playlistsRouter = t.router({
   // Get detailed playlist information with videos
@@ -212,7 +198,7 @@ export const playlistsRouter = t.router({
           const { extractChannelData } = await import("@/api/utils/ytdlp-utils/metadata");
           const { upsertChannelData } = await import("@/api/utils/ytdlp-utils/database");
 
-          const channelDataRaw = extractChannelData({
+          const channelData = extractChannelData({
             channel_id: data.channel_id ?? playlistMeta?.channelId ?? null,
             channel: data.channel ?? data.uploader ?? null,
             uploader: data.uploader ?? null,
@@ -225,11 +211,9 @@ export const playlistsRouter = t.router({
             channel_description: data.description ?? null,
           });
 
-          // Validate the channel data with Zod
-          const parseResult = extractedChannelDataSchema.safeParse(channelDataRaw);
-          if (parseResult.success) {
-            const channelData = parseResult.data;
-            await upsertChannelData(db, channelData);
+          // upsertChannelData handles null check internally
+          await upsertChannelData(db, channelData);
+          if (channelData) {
             logger.info("[playlists] Upserted channel before linking videos", {
               channelId: channelData.channelId,
               channelTitle: channelData.channelTitle,

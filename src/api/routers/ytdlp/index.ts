@@ -170,50 +170,67 @@ function toPlaylistResponse(p: ChannelPlaylist): PlaylistResponse {
   };
 }
 
-// Zod schema for yt-dlp flat-playlist response (used in listChannelLatest/Popular)
-const playlistResponseSchema = z.object({
-  channel_id: z.string().nullish(),
-  channel: z.string().nullish(),
-  uploader: z.string().nullish(),
-  channel_url: z.string().nullish(),
-  entries: z
-    .array(
-      z.object({
-        id: z.string(),
-        title: z.string().nullish(),
-        duration: z.number().nullish(),
-        view_count: z.number().nullish(),
-        channel: z.string().nullish(),
-        uploader: z.string().nullish(),
-        thumbnails: z.array(z.object({ url: z.string() })).optional(),
-        thumbnail: z.string().nullish(),
-      })
-    )
-    .optional(),
-});
+// Zod schema for yt-dlp flat-playlist response (fault-tolerant)
+const playlistResponseSchema = z
+  .object({
+    channel_id: z.string().nullish().catch(null),
+    channel: z.string().nullish().catch(null),
+    uploader: z.string().nullish().catch(null),
+    channel_url: z.string().nullish().catch(null),
+    entries: z
+      .array(
+        z.object({
+          id: z.string().optional().catch(undefined),
+          title: z.string().nullish().catch(null),
+          duration: z.number().nullish().catch(null),
+          view_count: z.number().nullish().catch(null),
+          channel: z.string().nullish().catch(null),
+          uploader: z.string().nullish().catch(null),
+          thumbnails: z
+            .array(z.object({ url: z.string().optional().catch(undefined) }))
+            .optional()
+            .catch([]),
+          thumbnail: z.string().nullish().catch(null),
+        })
+      )
+      .optional()
+      .catch([]),
+  })
+  .passthrough();
 
-// Zod schema for yt-dlp playlist metadata response (for channel playlists)
-const playlistEntrySchema = z.object({
-  id: z.string().nullish(),
-  playlist_id: z.string().nullish(),
-  title: z.string().nullish(),
-  url: z.string().nullish(),
-  webpage_url: z.string().nullish(),
-  playlist_count: z.number().nullish(),
-  n_entries: z.number().nullish(),
-  thumbnails: z.array(z.object({ url: z.string() })).optional(),
-  thumbnail: z.string().nullish(),
-});
+// Zod schema for yt-dlp playlist metadata response (fault-tolerant)
+const playlistEntrySchema = z
+  .object({
+    id: z.string().nullish().catch(null),
+    playlist_id: z.string().nullish().catch(null),
+    title: z.string().nullish().catch(null),
+    url: z.string().nullish().catch(null),
+    webpage_url: z.string().nullish().catch(null),
+    playlist_count: z.number().nullish().catch(null),
+    n_entries: z.number().nullish().catch(null),
+    thumbnails: z
+      .array(z.object({ url: z.string().optional().catch(undefined) }))
+      .optional()
+      .catch([]),
+    thumbnail: z.string().nullish().catch(null),
+  })
+  .passthrough();
 
-const playlistsListResponseSchema = z.object({
-  entries: z.array(playlistEntrySchema).optional(),
-});
+const playlistsListResponseSchema = z
+  .object({
+    entries: z.array(playlistEntrySchema).optional().catch([]),
+  })
+  .passthrough();
 
-// Zod schema for playlist detail response (thumbnails enrichment)
-const playlistDetailSchema = z.object({
-  thumbnails: z.array(z.object({ url: z.string() })).optional(),
-});
-
+// Zod schema for playlist detail response (fault-tolerant)
+const playlistDetailSchema = z
+  .object({
+    thumbnails: z
+      .array(z.object({ url: z.string().optional().catch(undefined) }))
+      .optional()
+      .catch([]),
+  })
+  .passthrough();
 async function upsertVideoSearchFts(
   db: Database,
   videoId: string,

@@ -11,18 +11,21 @@ import {
   getYtDlpAssetName,
 } from "@/api/utils/ytdlp-utils/ytdlp-utils";
 
-// Zod schema for GitHub release API response
-const githubReleaseSchema = z.object({
-  tag_name: z.string().optional(),
-  assets: z
-    .array(
-      z.object({
-        name: z.string(),
-        browser_download_url: z.string(),
-      })
-    )
-    .optional(),
-});
+// Zod schema for GitHub release API response (fault-tolerant)
+const githubReleaseSchema = z
+  .object({
+    tag_name: z.string().optional().catch(undefined),
+    assets: z
+      .array(
+        z.object({
+          name: z.string().optional().catch(undefined),
+          browser_download_url: z.string().optional().catch(undefined),
+        })
+      )
+      .optional()
+      .catch([]),
+  })
+  .passthrough();
 
 const getBinDir = (): string => path.join(app.getPath("userData"), "bin");
 const getVersionFilePath = (): string => path.join(getBinDir(), "yt-dlp-version.txt");
