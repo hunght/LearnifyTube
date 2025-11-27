@@ -28,6 +28,28 @@ import { userPreferences } from "./api/db/schema";
 import { toggleClockWindow } from "./main/windows/clock";
 import { updateElectronApp } from "update-electron-app";
 
+// Global error handlers to prevent crashes from logging errors
+process.on("uncaughtException", (error) => {
+  // Ignore EIO errors from console/stdout (happens when terminal is closed)
+  if (error.message?.includes("EIO") || error.message?.includes("write E")) {
+    return;
+  }
+  // Log other errors to file only (avoid console to prevent recursive errors)
+  try {
+    logger.error("[uncaughtException]", error);
+  } catch {
+    // Ignore if logging also fails
+  }
+});
+
+process.on("unhandledRejection", (reason) => {
+  try {
+    logger.error("[unhandledRejection]", reason);
+  } catch {
+    // Ignore if logging fails
+  }
+});
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuiting: boolean = false;
@@ -438,6 +460,8 @@ app.whenReady().then(async () => {
           filePath,
           accessMessage,
         });
+        callback({ statusCode: 403, data: Readable.from([]) });
+        return;
       }
 
       const stat = fs.statSync(filePath);
@@ -455,26 +479,21 @@ app.whenReady().then(async () => {
               ? "video/x-matroska"
               : "application/octet-stream";
 
+      // Enhanced headers for Chromium media playback
+      const baseHeaders = {
+        "Content-Type": contentType,
+        "Accept-Ranges": "bytes",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-cache",
+      };
+
       if (range && typeof range === "string") {
         const match = range.match(/bytes=(\d+)-(\d*)/);
         if (match) {
           const start = parseInt(match[1], 10);
           const end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
           const chunkSize = end - start + 1;
-          const headers = {
-            "Content-Range": `bytes ${start}-${end}/${totalSize}`,
-            "Accept-Ranges": "bytes",
-            "Content-Length": String(chunkSize),
-            "Content-Type": contentType,
-          };
-          const stream = fs.createReadStream(filePath, { start, end });
-          stream.on("error", (streamError) => {
-            logger.error("[protocol] local-file partial stream error", {
-              requestId,
-              filePath,
-              message: streamError instanceof Error ? streamError.message : String(streamError),
-            });
-          });
+
           logger.debug("[protocol] local-file partial stream", {
             requestId,
             filePath,
@@ -483,18 +502,34 @@ app.whenReady().then(async () => {
             chunkSize,
             totalSize,
           });
-          callback({ statusCode: 206, headers, data: stream });
+
+          const stream = fs.createReadStream(filePath, { start, end });
+
+          stream.on("error", (streamError) => {
+            logger.error("[protocol] local-file partial stream error", {
+              requestId,
+              filePath,
+              message: streamError instanceof Error ? streamError.message : String(streamError),
+            });
+          });
+
+          callback({
+            statusCode: 206,
+            headers: {
+              ...baseHeaders,
+              "Content-Range": `bytes ${start}-${end}/${totalSize}`,
+              "Content-Length": String(chunkSize),
+            },
+            data: stream,
+          });
           return;
         }
       }
 
       // full file
-      const headers = {
-        "Content-Length": String(totalSize),
-        "Content-Type": contentType,
-        "Accept-Ranges": "bytes",
-      };
+      logger.debug("[protocol] local-file full stream", { requestId, filePath, totalSize });
       const stream = fs.createReadStream(filePath);
+
       stream.on("error", (streamError) => {
         logger.error("[protocol] local-file full stream error", {
           requestId,
@@ -502,13 +537,27 @@ app.whenReady().then(async () => {
           message: streamError instanceof Error ? streamError.message : String(streamError),
         });
       });
-      logger.debug("[protocol] local-file full stream", { requestId, filePath, totalSize });
-      callback({ statusCode: 200, headers, data: stream });
+
+      callback({
+        statusCode: 200,
+        headers: {
+          ...baseHeaders,
+          "Content-Length": String(totalSize),
+        },
+        data: stream,
+      });
     } catch (error: unknown) {
       logger.error("[protocol] Failed to stream local-file URL", { requestId, error });
       callback({ statusCode: 500, data: Readable.from([]) });
     }
   });
+
+  // Start media server for reliable video streaming
+  logger.info("[app] Starting media server...");
+  const { getMediaServer } = await import("./main/mediaServer");
+  const mediaServer = getMediaServer();
+  await mediaServer.start();
+  logger.info("[app] Media server started successfully");
 
   logger.info("[app] Creating tray...");
   await createTray();
@@ -526,9 +575,9 @@ app.whenReady().then(async () => {
         "Content-Security-Policy": [
           "default-src 'self'; " +
             "script-src 'self' 'unsafe-inline' https://*.posthog.com; " +
-            "connect-src 'self' https://*.posthog.com; " +
+            "connect-src 'self' http://127.0.0.1:* https://*.posthog.com; " +
             "img-src 'self' data: file: local-file: https://*.posthog.com https://i.ytimg.com https://*.ytimg.com https://yt3.ggpht.com; " +
-            "media-src 'self' file: local-file:; " +
+            "media-src 'self' file: local-file: http://127.0.0.1:*; " +
             "style-src 'self' 'unsafe-inline'; " +
             "frame-src 'self';",
         ],

@@ -857,11 +857,27 @@ export const ytdlpRouter = t.router({
         // Silently fail - watch stats might not exist
       }
 
+      // Generate media server URL for reliable streaming
+      let mediaUrl: string | null = null;
+      if (v.downloadFilePath && fs.existsSync(v.downloadFilePath)) {
+        try {
+          const { getMediaServer } = await import("@/main/mediaServer");
+          const mediaServer = getMediaServer();
+          mediaUrl = mediaServer.getMediaUrl(v.downloadFilePath);
+        } catch (error) {
+          logger.error("[ytdlp] Failed to generate media URL", {
+            videoId: input.videoId,
+            error: String(error),
+          });
+        }
+      }
+
       return {
         videoId: v.videoId,
         title: v.title,
         description: v.description,
         filePath: v.downloadFilePath,
+        mediaUrl, // HTTP URL for streaming
         status: v.downloadStatus,
         progress: v.downloadProgress,
         availableLanguages,

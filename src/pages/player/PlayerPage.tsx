@@ -171,6 +171,11 @@ export default function PlayerPage(): React.JSX.Element {
     onCurrentTimeChange: (time) => updateCurrentTime(time),
   });
 
+  // Extract playback data for easier access
+  const videoTitle = playback?.title ?? "Untitled";
+  const filePath = playback?.filePath ?? null;
+  const mediaUrl = playback?.mediaUrl ?? null; // HTTP streaming URL
+
   // Initialize / update store when video changes
   useEffect(() => {
     if (!videoId) return;
@@ -285,8 +290,6 @@ export default function PlayerPage(): React.JSX.Element {
   const setRightSidebarContent = useSetAtom(rightSidebarContentAtom);
   const setAnnotationsSidebarData = useSetAtom(annotationsSidebarDataAtom);
 
-  const filePath = playback?.filePath || null;
-  const videoTitle = playback?.title || playback?.videoId || "Video";
   const playbackStatus = playback && typeof playback.status === "string" ? playback.status : null;
 
   // Handle video load error (e.g., file was deleted)
@@ -453,7 +456,7 @@ export default function PlayerPage(): React.JSX.Element {
             <div className="space-y-4">
               <VideoPlayer
                 videoRef={videoRef}
-                filePath={filePath}
+                videoSrc={mediaUrl} // Use HTTP streaming URL
                 onTimeUpdate={handleTimeUpdate}
                 onError={handleVideoLoadError}
                 onSeekIndicator={(indicator) => setSeekIndicator(indicator)}

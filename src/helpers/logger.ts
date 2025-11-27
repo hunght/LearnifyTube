@@ -237,24 +237,44 @@ const resolveLogFilePath = async (): Promise<string | null> => {
 // Adapter that preserves previous API surface
 export const logger: UniversalLogger = {
   debug: (...args: unknown[]) => {
-    const log = getCurrentLogger();
-    log.debug?.(...args);
+    try {
+      const log = getCurrentLogger();
+      log.debug?.(...args);
+    } catch {
+      // Silently ignore write errors
+    }
   },
   info: (...args: unknown[]) => {
-    const log = getCurrentLogger();
-    log.info?.(...args);
+    try {
+      const log = getCurrentLogger();
+      log.info?.(...args);
+    } catch {
+      // Silently ignore write errors
+    }
   },
   warn: (...args: unknown[]) => {
-    const log = getCurrentLogger();
-    log.warn?.(...normalizeLogArgs(args));
+    try {
+      const log = getCurrentLogger();
+      log.warn?.(...normalizeLogArgs(args));
+    } catch {
+      // Silently ignore write errors
+    }
   },
   error: (...args: unknown[]) => {
-    const log = getCurrentLogger();
-    log.error?.(...normalizeLogArgs(args));
+    try {
+      const log = getCurrentLogger();
+      log.error?.(...normalizeLogArgs(args));
+    } catch {
+      // Silently ignore write errors
+    }
   },
   fatal: (...args: unknown[]) => {
-    const log = getCurrentLogger();
-    log.error?.("FATAL:", ...normalizeLogArgs(args));
+    try {
+      const log = getCurrentLogger();
+      log.error?.("FATAL:", ...normalizeLogArgs(args));
+    } catch {
+      // Silently ignore write errors
+    }
   },
   clearLogFile: async () => {
     if (!isMain) return; // no-op in renderer

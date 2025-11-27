@@ -2,12 +2,11 @@ import React, { useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { logger } from "@/helpers/logger";
-import { toLocalFileUrl } from "@/helpers/localFile";
 import { setIsPlaying } from "@/context/playerStore";
 
 interface VideoPlayerProps {
   videoRef: React.RefObject<HTMLVideoElement>;
-  filePath: string | null;
+  videoSrc: string | null; // Can be mediaUrl (HTTP) or local-file:// URL
   onTimeUpdate: (e: React.SyntheticEvent<HTMLVideoElement, Event>) => void;
   onSeekIndicator?: (indicator: { direction: "forward" | "backward"; amount: number }) => void;
   onError?: () => void;
@@ -15,7 +14,7 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({
   videoRef,
-  filePath,
+  videoSrc,
   onTimeUpdate,
   onSeekIndicator,
   onError,
@@ -277,11 +276,11 @@ export function VideoPlayer({
   return (
     <div className="space-y-4" ref={containerRef}>
       <div className="group relative">
-        {videoRef && filePath && (
+        {videoRef && videoSrc && (
           <video
             ref={videoRef}
-            key={filePath}
-            src={toLocalFileUrl(filePath)}
+            key={videoSrc}
+            src={videoSrc}
             autoPlay
             controls
             className="max-h-[60vh] w-full rounded border bg-black"
