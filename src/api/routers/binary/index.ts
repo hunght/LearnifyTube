@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { publicProcedure, t } from "@/api/trpc";
 import { logger } from "@/helpers/logger";
+import { ensureFfmpegStaticAvailable } from "@/utils/ffmpeg-static-helper";
 import { app, net } from "electron";
 import fs from "fs";
 import path from "path";
@@ -358,27 +359,10 @@ export const binaryRouter = t.router({
         return { installed: true, version, path: binPath };
       }
 
-      // 2. Check for ffmpeg-static npm package
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const ffmpegStatic = require("ffmpeg-static");
-        if (ffmpegStatic && typeof ffmpegStatic === "string" && fs.existsSync(ffmpegStatic)) {
-          logger.debug("[ffmpeg] Found ffmpeg-static package", { path: ffmpegStatic });
-          // Try to get version
-          try {
-            const versionOutput = execSync(`"${ffmpegStatic}" -version`, {
-              encoding: "utf-8",
-              timeout: 5000,
-            });
-            const versionMatch = versionOutput.match(/ffmpeg version ([^\s]+)/);
-            const version = versionMatch ? versionMatch[1] : "unknown";
-            return { installed: true, version, path: ffmpegStatic };
-          } catch {
-            return { installed: true, version: "unknown", path: ffmpegStatic };
-          }
-        }
-      } catch {
-        // ffmpeg-static not available
+      // 2. Ensure ffmpeg-static npm package is extracted to userData/bin
+      const { path: staticPath, version: staticVersion } = ensureFfmpegStaticAvailable();
+      if (staticPath && fs.existsSync(staticPath)) {
+        return { installed: true, version: staticVersion ?? null, path: staticPath };
       }
 
       return { installed: false, version: null, path: null };

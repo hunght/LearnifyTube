@@ -6,6 +6,7 @@ import type { Database } from "@/api/db";
 import type { WorkerState } from "./types";
 import fs from "fs";
 import { logger } from "@/helpers/logger";
+import { ensureFfmpegStaticAvailable } from "@/utils/ffmpeg-static-helper";
 
 /**
  * Active download workers
@@ -204,22 +205,16 @@ const getFfmpegPath = (): string | null => {
     return bundledPath;
   }
 
-  // 2. Check ffmpeg-static npm package (primary source)
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const ffmpegStatic = require("ffmpeg-static");
-    if (ffmpegStatic && typeof ffmpegStatic === "string" && fs.existsSync(ffmpegStatic)) {
-      logger.debug("[download-worker] Using ffmpeg-static", { path: ffmpegStatic });
-      return ffmpegStatic;
-    }
-  } catch (error) {
-    logger.debug("[download-worker] ffmpeg-static not available", { error });
+  // 2. Ensure ffmpeg-static npm package is extracted to userData/bin
+  const { path: staticPath } = ensureFfmpegStaticAvailable();
+  if (staticPath && fs.existsSync(staticPath)) {
+    logger.debug("[download-worker] Using ffmpeg-static copy", { path: staticPath });
+    return staticPath;
   }
 
   // 3. Check downloaded version (from userData/bin)
   const binDir = path.join(app.getPath("userData"), "bin");
-  const downloadedPath =
-    platform === "win32" ? path.join(binDir, "ffmpeg.exe") : path.join(binDir, "ffmpeg");
+  const downloadedPath = path.join(binDir, platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
 
   if (fs.existsSync(downloadedPath)) {
     logger.debug("[download-worker] Using downloaded ffmpeg", { path: downloadedPath });
