@@ -119,13 +119,6 @@ const StorageRoute = createRoute({
   component: StorageManagerPage,
 });
 
-// Log route - only added to route tree in development mode
-const LogRoute = createRoute({
-  getParentRoute: () => RootRoute,
-  path: "/logs",
-  component: LogPage,
-});
-
 const baseRoutes = [
   DashboardRoute,
   SettingsRoute,
@@ -141,6 +134,15 @@ const baseRoutes = [
 ];
 
 // Add log route only in development mode
-const routes = isDevelopment() ? [...baseRoutes, LogRoute] : baseRoutes;
+const routes = isDevelopment()
+  ? [
+      ...baseRoutes,
+      createRoute({
+        getParentRoute: () => RootRoute,
+        path: "/logs",
+        component: LogPage,
+      }),
+    ]
+  : baseRoutes;
 
 export const rootTree = RootRoute.addChildren(routes);
