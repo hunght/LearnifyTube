@@ -14,9 +14,11 @@ export const getFfmpegDownloadUrl = (platform: SupportedPlatform): string => {
       return "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip";
     case "darwin": {
       // For macOS, detect architecture
+      // evermeet.cx provides static builds with .zip extension
       const arch = process.arch === "arm64" ? "arm64" : "x86_64";
       // Using evermeet.cx static builds (official, well-maintained)
-      return `https://evermeet.cx/ffmpeg/ffmpeg-${arch}`;
+      // URL format: https://evermeet.cx/ffmpeg/get/ffmpeg-{arch}.zip
+      return `https://evermeet.cx/ffmpeg/get/ffmpeg-${arch}.zip`;
     }
     case "linux":
     default: {
@@ -30,17 +32,21 @@ export const getFfmpegDownloadUrl = (platform: SupportedPlatform): string => {
 /**
  * Check if the platform requires extracting from archive
  */
-export const requiresExtraction = (platform: SupportedPlatform): boolean => {
-  return platform === "win32" || platform === "linux";
+export const requiresExtraction = (_platform: SupportedPlatform): boolean => {
+  // All platforms now use archives (zip for macOS/Windows, tar.xz for Linux)
+  return true;
 };
 
 /**
- * Get the path to ffmpeg binary inside the archive (for Windows/Linux)
+ * Get the path to ffmpeg binary inside the archive
  */
 export const getFfmpegBinaryPathInArchive = (platform: SupportedPlatform): string => {
   switch (platform) {
     case "win32":
       return "ffmpeg-master-latest-win64-gpl/bin/ffmpeg.exe";
+    case "darwin":
+      // evermeet.cx zip contains ffmpeg directly in root
+      return "ffmpeg";
     case "linux":
       return "ffmpeg";
     default:

@@ -133,6 +133,17 @@ const extractArchive = async (
           };
         }
       }
+    } else if (platform === "darwin") {
+      // For macOS, extract zip using unzip (available by default)
+      try {
+        execSync(`unzip -q "${archivePath}" -d "${extractTo}"`, { stdio: "ignore" });
+        return { success: true };
+      } catch (e) {
+        return {
+          success: false,
+          error: `Failed to extract zip: ${String(e)}`,
+        };
+      }
     } else if (platform === "linux") {
       // For Linux, extract tar.xz
       try {
@@ -369,10 +380,16 @@ export const binaryRouter = t.router({
       const platform = process.platform;
       const downloadUrl = getFfmpegDownloadUrl(platform);
       const needsExtraction = requiresExtraction(platform);
-      const tmpPath = path.join(
-        os.tmpdir(),
-        `ffmpeg-${Date.now()}${needsExtraction ? (platform === "win32" ? ".zip" : ".tar.xz") : ""}`
-      );
+      // Determine file extension based on platform
+      let fileExt = "";
+      if (needsExtraction) {
+        if (platform === "win32" || platform === "darwin") {
+          fileExt = ".zip";
+        } else if (platform === "linux") {
+          fileExt = ".tar.xz";
+        }
+      }
+      const tmpPath = path.join(os.tmpdir(), `ffmpeg-${Date.now()}${fileExt}`);
 
       logger.info("[ffmpeg] Download starting", { url: downloadUrl, platform, needsExtraction });
 
