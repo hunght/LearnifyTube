@@ -51,7 +51,6 @@
     "db:vacuum": "npx tsx scripts/db-vacuum.ts",
     "db:analyze": "npx tsx scripts/db-analyze.ts",
     "icons:generate": "node scripts/svg-to-icons.js",
-    "ffmpeg:download": "./scripts/download-ffmpeg-binaries.sh",
     "postinstall": "lefthook install || true"
   },
   "author": "HungHoang <hth321@gmail.com>",
