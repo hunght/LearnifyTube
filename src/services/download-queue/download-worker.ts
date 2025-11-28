@@ -321,18 +321,6 @@ const parseProgressAndMetadata = (db: Database, downloadId: string, output: stri
       }
     }
 
-    // Log parsed progress data (only log when speed/ETA are missing to avoid spam)
-    if (!speed || !eta) {
-      logger.debug("[download-worker] Parsed progress (no speed/ETA)", {
-        downloadId,
-        progress: Math.round(progress),
-        downloadedSize,
-        totalSize,
-        speed: speed || "unknown",
-        eta: eta || "unknown",
-      });
-    }
-
     // Update progress in database (throttled)
     const worker = activeWorkers.get(downloadId);
     if (worker) {

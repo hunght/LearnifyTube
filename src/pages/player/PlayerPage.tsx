@@ -152,20 +152,13 @@ export default function PlayerPage(): React.JSX.Element {
   }, [playback?.status, playback?.filePath, videoId]);
 
   // WATCH PROGRESS (using existing hook)
+  // Only calculate initial start time when video changes, not on every time update
   const initialStartTime = React.useMemo(() => {
     if (playerState.videoId === videoId && playerState.currentTime > 0) {
-      logger.info("[PlayerPage] Using stored playerStore time", {
-        videoId,
-        currentTime: playerState.currentTime,
-      });
       return playerState.currentTime;
     }
-    logger.info("[PlayerPage] Using server lastPositionSeconds", {
-      videoId,
-      lastPositionSeconds: playback?.lastPositionSeconds,
-    });
     return playback?.lastPositionSeconds ?? 0;
-  }, [videoId, playerState.videoId, playerState.currentTime, playback?.lastPositionSeconds]);
+  }, [videoId, playerState.videoId, playback?.lastPositionSeconds]);
 
   const { currentTime, handleTimeUpdate } = useWatchProgress(videoId, videoRef, initialStartTime, {
     onCurrentTimeChange: (time) => updateCurrentTime(time),
@@ -303,19 +296,12 @@ export default function PlayerPage(): React.JSX.Element {
 
   useEffect(() => {
     if (!videoId) return;
-    if (filePath) {
-      logger.info("[PlayerPage] Ready to play local file", { videoId, filePath });
-    } else if (playbackStatus === "completed") {
+    if (!filePath && playbackStatus === "completed") {
       logger.warn("[PlayerPage] Completed download missing file path", { videoId });
-    } else {
-      logger.debug("[PlayerPage] Awaiting file availability", {
-        videoId,
-        playbackStatus,
-      });
     }
 
     return () => {
-      logger.info("[PlayerPage] Unmounting/Changing video", { videoId });
+      // Cleanup on unmount
     };
   }, [videoId, filePath, playbackStatus]);
 
@@ -323,24 +309,11 @@ export default function PlayerPage(): React.JSX.Element {
     if (!filePath) return;
     const normalizedPath = filePath.toLowerCase();
     if (ensuredDirectoryRef.current.has(normalizedPath)) {
-      logger.debug("[PlayerPage] Directory already ensured", {
-        videoId,
-        filePath,
-      });
       return;
     }
 
-    logger.info("[PlayerPage] Ensuring directory permissions", {
-      videoId,
-      filePath,
-    });
     ensureDirectoryAccessMutation.mutate(filePath, {
       onSuccess: (result) => {
-        logger.info("[PlayerPage] ensureDownloadDirectoryAccess result", {
-          videoId,
-          filePath,
-          result,
-        });
         if (result.success) {
           ensuredDirectoryRef.current.add(normalizedPath);
         } else {
