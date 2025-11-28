@@ -1,5 +1,14 @@
 import React, { useState, useMemo } from "react";
-import { Timer, Clapperboard, History, Users, List, Languages, HardDrive } from "lucide-react";
+import {
+  Timer,
+  Clapperboard,
+  History,
+  Users,
+  List,
+  Languages,
+  HardDrive,
+  ScrollText,
+} from "lucide-react";
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";
 import { cn } from "@/lib/utils";
@@ -17,45 +26,87 @@ import {
 import { SidebarThemeToggle } from "@/components/SidebarThemeToggle";
 import { MinimizedPlayer } from "@/components/MinimizedPlayer";
 
+// Check if we're in development mode
+// In Electron renderer, check window.location - if it's http(s)://, we're in dev mode
+const isDevelopment = (): boolean => {
+  return true;
+  // if (typeof window === "undefined") {
+  //   return false;
+  // }
+
+  // // If loading from http://localhost (dev server), we're in development
+  // const href = window.location.href;
+  // if (href.startsWith("http://") || href.startsWith("https://")) {
+  //   return true;
+  // }
+
+  // // Fallback: check for Electron Forge dev server URL global
+  // // @ts-ignore - MAIN_WINDOW_VITE_DEV_SERVER_URL is a global defined by Electron Forge
+  // if (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined" && MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+  //   return true;
+  // }
+
+  // // Last fallback: if NODE_ENV is not explicitly production, assume development
+  // return process.env.NODE_ENV !== "production";
+};
+
 // This is sample data.
-const items = [
-  {
-    title: "Dashboard",
-    icon: Timer,
-    url: "/",
-    isActive: true,
-  },
-  {
-    title: "Channels",
-    icon: Users,
-    url: "/channels",
-  },
-  {
-    title: "Playlists",
-    icon: List,
-    url: "/playlists",
-  },
-  {
-    title: "Subscriptions",
-    icon: Clapperboard,
-    url: "/subscriptions",
-  },
-  {
-    title: "History",
-    icon: History,
-    url: "/history",
-  },
-  {
-    title: "My Words",
-    icon: Languages,
-    url: "/my-words",
-  },
-  {
-    title: "Storage",
-    icon: HardDrive,
-    url: "/storage",
-  },
-];
+const getItems = (): Array<{
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  url: string;
+  isActive?: boolean;
+}> => {
+  const baseItems = [
+    {
+      title: "Dashboard",
+      icon: Timer,
+      url: "/",
+      isActive: true,
+    },
+    {
+      title: "Channels",
+      icon: Users,
+      url: "/channels",
+    },
+    {
+      title: "Playlists",
+      icon: List,
+      url: "/playlists",
+    },
+    {
+      title: "Subscriptions",
+      icon: Clapperboard,
+      url: "/subscriptions",
+    },
+    {
+      title: "History",
+      icon: History,
+      url: "/history",
+    },
+    {
+      title: "My Words",
+      icon: Languages,
+      url: "/my-words",
+    },
+    {
+      title: "Storage",
+      icon: HardDrive,
+      url: "/storage",
+    },
+  ];
+
+  // Add log page in development mode
+  if (isDevelopment()) {
+    baseItems.push({
+      title: "Logs",
+      icon: ScrollText,
+      url: "/logs",
+    });
+  }
+
+  return baseItems;
+};
 
 export function AppSidebar({
   className,
@@ -64,6 +115,7 @@ export function AppSidebar({
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const matches = useMatches();
   const currentPath = useMemo(() => matches[matches.length - 1]?.pathname ?? "/", [matches]);
+  const items = useMemo(() => getItems(), []);
 
   return (
     <Sidebar
