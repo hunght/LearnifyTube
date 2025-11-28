@@ -79,15 +79,18 @@ export const spawnDownload = async (
       });
     } else {
       // Prefer WebM (always works) or H.264 MP4 (Chromium-compatible)
-      // Format string: prefer WebM, fallback to H.264 MP4, then best available
+      // Format string with quality restrictions to prevent huge file sizes:
+      // - Limit to 1080p max (height<=1080)
+      // - Prefer WebM, fallback to H.264 MP4, then best available
+      // - Use single file format when possible to avoid merging overhead
       selectedFormat =
-        "bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]/bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best";
+        "bestvideo[height<=1080][ext=webm]+bestaudio[ext=webm]/best[height<=1080][ext=webm]/bestvideo[height<=1080][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]";
       args.push("-f", selectedFormat);
       logger.info("[download-worker] Using format preference for Chromium compatibility", {
         downloadId,
         videoId,
         preferredFormat: selectedFormat,
-        note: "Format preference: WebM > H.264 MP4 > best available",
+        note: "Format preference: WebM (max 1080p) > H.264 MP4 (max 1080p) > best available (max 1080p)",
       });
     }
 
@@ -133,12 +136,30 @@ export const spawnDownload = async (
       // Pattern 1: [info] 123: format description (details)
       const formatMatch = output.match(/\[info\]\s+(\d+):\s+(.+?)(?:\s+\((.+?)\))?/);
       if (formatMatch) {
+        const formatDescription = formatMatch[2];
+        const formatDetails = formatMatch[3] || "";
+
+        // Extract resolution/height from format description (e.g., "1080p", "720p", "4K")
+        const resolutionMatch = formatDescription.match(/(\d+)p|(\d+)x(\d+)|(\d+)K/i);
+        let resolution: string | null = null;
+        if (resolutionMatch) {
+          if (resolutionMatch[1]) {
+            resolution = `${resolutionMatch[1]}p`;
+          } else if (resolutionMatch[2] && resolutionMatch[3]) {
+            resolution = `${resolutionMatch[2]}x${resolutionMatch[3]}`;
+          } else if (resolutionMatch[4]) {
+            resolution = `${resolutionMatch[4]}K`;
+          }
+        }
+
         logger.info("[download-worker] yt-dlp format info", {
           downloadId,
           videoId,
           formatId: formatMatch[1],
-          formatDescription: formatMatch[2],
-          formatDetails: formatMatch[3],
+          formatDescription,
+          formatDetails,
+          resolution,
+          note: resolution ? `Selected resolution: ${resolution}` : undefined,
         });
       }
 
@@ -157,6 +178,26 @@ export const spawnDownload = async (
           downloadId,
           videoId,
           output: output.trim(),
+        });
+      }
+
+      // Pattern 4: [info] Downloading X format(s): 123+456-789 (video+audio merge)
+      const downloadingFormatsMatch = output.match(
+        /\[info\].*Downloading\s+(\d+)\s+format\(s\):\s+(.+)/
+      );
+      if (downloadingFormatsMatch) {
+        const formatCount = downloadingFormatsMatch[1];
+        const formatIds = downloadingFormatsMatch[2].trim();
+        const isMerging = formatIds.includes("+") || formatIds.includes("-");
+        logger.info("[download-worker] yt-dlp downloading formats", {
+          downloadId,
+          videoId,
+          formatCount: parseInt(formatCount, 10),
+          formatIds,
+          isMerging,
+          note: isMerging
+            ? "Downloading separate video+audio streams (will be merged)"
+            : "Downloading single format file",
         });
       }
 
