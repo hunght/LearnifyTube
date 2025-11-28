@@ -86,6 +86,25 @@ The issue is **codec compatibility**, not folder permissions:
   - Checks `canPlayType` for codec support
 - **Expected Result**: New downloads should prefer WebM or H.264-compatible MP4
 
+### v1.0.43 - Single-File Format Preference
+- **Issue Discovered**: App was downloading two separate files (video-only and audio-only) instead of a single merged file
+- **Root Cause**: Format string prioritized `bestvideo+bestaudio` which requires merging
+- **Fix**: Reordered format priority to prefer single-file formats first:
+  - `best[height<=1080][ext=webm]` - Single WebM file (video+audio combined)
+  - `best[height<=1080][ext=mp4][vcodec^=avc1]` - Single H.264 MP4 file
+  - Separate streams only as fallback
+- **Result**: Downloads now produce single merged files instead of multiple separate files
+
+### v1.0.45 - Aggressive WebM Preference + Comprehensive Diagnostics
+- **Issue**: MP4 files still being downloaded and failing on company MacBooks
+- **Root Cause Unknown**: Need to identify if it's H.265 codec, file corruption, or browser issue
+- **Fixes Applied**:
+  1. **Aggressive WebM Preference**: Format string now tries WebM at 1080p, 720p, and 480p before accepting MP4
+  2. **Codec Detection**: Extracts and logs actual codec (H.264 vs H.265) from yt-dlp output
+  3. **Comprehensive Error Diagnostics**: Logs full video element state, browser capabilities, and specific error diagnosis
+  4. **Format Selection Logging**: Logs which format was selected and why, with codec compatibility warnings
+- **Expected Result**: Logs will reveal root cause when tested on company MacBook
+
 ## Logs Observed
 
 When the issue occurs, logs show:
@@ -108,9 +127,61 @@ When the issue occurs, logs show:
 ## Current Status
 
 - **v1.0.41**: Format preference fix deployed to prefer WebM/H.264 MP4
-- **Expected**: New downloads should work correctly
-- **Existing files**: H.265/HEVC MP4 files will still fail, but errors are now clearer
-- **Monitoring**: Enhanced logging will help identify any remaining codec issues
+- **v1.0.45+**: Enhanced codec detection and comprehensive diagnostics added
+
+### Recent Findings (v1.0.45+)
+
+**Issue**: Even with WebM-first format preference, MP4 files are still being downloaded on some machines, and playback fails on company MacBooks.
+
+**Root Cause Investigation**:
+- MP4 files should work in Chromium if they use H.264/AVC1 codec
+- The issue might be:
+  1. MP4 files are using H.265/HEVC codec (not supported)
+  2. File corruption or incomplete downloads
+  3. Protocol handler issues
+  4. Browser codec detection problems
+
+**Recent Improvements**:
+
+1. **Aggressive WebM Preference** (v1.0.45):
+   - Format string now tries WebM at multiple quality levels (1080p, 720p, 480p) before accepting MP4
+   - MP4 is only used as absolute last resort
+   - Format priority: `best[height<=1080][ext=webm]` → `best[height<=720][ext=webm]` → `best[height<=480][ext=webm]` → MP4 fallback
+
+2. **Comprehensive Codec Detection** (v1.0.45):
+   - Extracts actual video/audio codec from yt-dlp format info
+   - Detects H.264/AVC1 vs H.265/HEVC automatically
+   - Logs codec compatibility warnings during download
+   - Identifies when H.265/HEVC is selected (will fail in Chromium)
+
+3. **Enhanced Playback Diagnostics** (v1.0.45):
+   - Logs comprehensive video element state on errors:
+     - Error code and name (DECODE, SRC_NOT_SUPPORTED, NETWORK, etc.)
+     - Video dimensions, duration, buffered ranges
+     - Network state and ready state
+     - Browser codec support capabilities (`canPlayType` checks)
+   - Logs successful video load with metadata
+   - Provides specific diagnosis based on error type
+
+4. **Format Selection Logging**:
+   - Logs which format yt-dlp actually selected
+   - Shows format ID, description, and codec details
+   - Warns when MP4 is selected instead of WebM
+   - Logs when multiple files are created (merge failures)
+
+**Next Steps**:
+- Test on company MacBook to capture actual logs
+- Check logs for:
+  - Actual codec in downloaded MP4 files (H.264 vs H.265)
+  - Browser codec support capabilities
+  - Exact error code and diagnosis
+  - Why WebM wasn't selected if MP4 was chosen
+
+**Expected Outcome**:
+- Logs will reveal the root cause:
+  - If H.265/HEVC: Format preference needs to be even more aggressive
+  - If H.264: Issue is elsewhere (file access, corruption, browser issue)
+  - If WebM not available: Need to investigate why yt-dlp can't find WebM formats
 
 
 
