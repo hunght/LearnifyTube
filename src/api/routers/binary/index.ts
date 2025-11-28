@@ -361,8 +361,11 @@ export const binaryRouter = t.router({
 
       // 2. Ensure ffmpeg-static npm package is extracted to userData/bin
       const { path: staticPath, version: staticVersion } = ensureFfmpegStaticAvailable();
+      logger.debug("[ffmpeg] ensureFfmpegStaticAvailable result", { staticPath, staticVersion });
       if (staticPath && fs.existsSync(staticPath)) {
         return { installed: true, version: staticVersion ?? null, path: staticPath };
+      } else {
+        logger.warn("[ffmpeg] ensureFfmpegStaticAvailable returned no path");
       }
 
       return { installed: false, version: null, path: null };

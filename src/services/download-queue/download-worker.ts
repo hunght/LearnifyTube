@@ -206,10 +206,19 @@ const getFfmpegPath = (): string | null => {
   }
 
   // 2. Ensure ffmpeg-static npm package is extracted to userData/bin
-  const { path: staticPath } = ensureFfmpegStaticAvailable();
+  const { path: staticPath, version: staticVersion } = ensureFfmpegStaticAvailable();
+  logger.debug("[download-worker] ensureFfmpegStaticAvailable result", {
+    staticPath,
+    staticVersion,
+  });
   if (staticPath && fs.existsSync(staticPath)) {
-    logger.debug("[download-worker] Using ffmpeg-static copy", { path: staticPath });
+    logger.debug("[download-worker] Using ffmpeg-static copy", {
+      path: staticPath,
+      version: staticVersion,
+    });
     return staticPath;
+  } else {
+    logger.warn("[download-worker] ffmpeg-static copy not available");
   }
 
   // 3. Check downloaded version (from userData/bin)

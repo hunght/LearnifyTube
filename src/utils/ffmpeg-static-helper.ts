@@ -29,14 +29,21 @@ const resolveAsarAwarePath = (maybeAsarPath: string): string | null => {
 
 const getFfmpegStaticSource = (): string | null => {
   try {
+    logger.debug("[ffmpeg-static] Attempting to resolve module", {
+      cwd: process.cwd(),
+      baseDir: __dirname,
+    });
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const ffmpegStatic: string | undefined = require("ffmpeg-static");
     if (!ffmpegStatic || typeof ffmpegStatic !== "string") {
+      logger.warn("[ffmpeg-static] Module resolved but path is invalid", { ffmpegStatic });
       return null;
     }
     const resolved = resolveAsarAwarePath(ffmpegStatic);
     if (!resolved) {
       logger.warn("[ffmpeg-static] Source binary not found", { ffmpegStatic });
+    } else {
+      logger.debug("[ffmpeg-static] Resolved source binary path", { resolved });
     }
     return resolved;
   } catch (error) {
@@ -53,15 +60,24 @@ const copyIfNeeded = (sourcePath: string, targetPath: string): void => {
       const targetStats = fs.statSync(targetPath);
       needsCopy =
         sourceStats.size !== targetStats.size || sourceStats.mtimeMs > targetStats.mtimeMs;
+      logger.debug("[ffmpeg-static] Existing binary found", {
+        targetPath,
+        needsCopy,
+        sourceSize: sourceStats.size,
+        targetSize: targetStats.size,
+      });
     }
-  } catch {
+  } catch (error) {
+    logger.debug("[ffmpeg-static] Error comparing binary stats", { error });
     needsCopy = true;
   }
 
   if (!needsCopy) {
+    logger.debug("[ffmpeg-static] Reusing existing binary", { targetPath });
     return;
   }
 
+  logger.debug("[ffmpeg-static] Copying binary", { sourcePath, targetPath });
   fs.copyFileSync(sourcePath, targetPath);
   if (process.platform !== "win32") {
     fs.chmodSync(targetPath, 0o755);
@@ -84,13 +100,17 @@ const safeGetVersion = (binaryPath: string): string | null => {
 };
 
 export const ensureFfmpegStaticAvailable = (): { path: string | null; version: string | null } => {
+  logger.debug("[ffmpeg-static] ensureFfmpegStaticAvailable invoked");
   const sourcePath = getFfmpegStaticSource();
   if (!sourcePath) {
+    logger.warn("[ffmpeg-static] Unable to resolve ffmpeg-static source path");
     return { path: null, version: null };
   }
 
   const targetPath = getUserDataBinaryPath();
+  logger.debug("[ffmpeg-static] Ensuring target binary", { targetPath, sourcePath });
   copyIfNeeded(sourcePath, targetPath);
   const version = safeGetVersion(targetPath);
+  logger.debug("[ffmpeg-static] Binary ready", { targetPath, version });
   return { path: targetPath, version };
 };
