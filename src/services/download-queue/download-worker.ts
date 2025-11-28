@@ -397,6 +397,25 @@ export const spawnDownload = async (
         output: errorOutput.trim(),
       });
 
+      // CRITICAL: Check for missing ffmpeg (prevents merging, results in incomplete downloads)
+      if (
+        errorOutput.toLowerCase().includes("ffmpeg is not installed") ||
+        errorOutput.toLowerCase().includes("ffmpeg not found") ||
+        (errorOutput.toLowerCase().includes("merging") &&
+          errorOutput.toLowerCase().includes("ffmpeg") &&
+          errorOutput.toLowerCase().includes("not"))
+      ) {
+        logger.error("[download-worker] CRITICAL: ffmpeg is not installed - merging will fail", {
+          downloadId,
+          videoId,
+          message: errorOutput.trim(),
+          impact:
+            "Download will only save one file (usually audio-only). Video file will be lost. Install ffmpeg or use single-file formats only.",
+          recommendation:
+            "Install ffmpeg or adjust format preference to avoid formats requiring merging (bestvideo+bestaudio)",
+        });
+      }
+
       // Check for format-related errors
       if (
         errorOutput.toLowerCase().includes("format") ||
@@ -467,11 +486,17 @@ export const spawnDownload = async (
           }
         }
 
+        // Detect if file has format code (indicates unmerged file from separate streams)
+        const hasFormatCode = completedPath && /\.f\d+\./.test(completedPath);
+
         // Determine codec compatibility warning
         let codecWarning: string | undefined;
         if (fileExtension === ".mp4") {
           codecWarning =
             "⚠️ MP4 file - verify codec is H.264/AVC1 (supported) not H.265/HEVC (not supported). Check logs for codec detection.";
+        } else if (hasFormatCode) {
+          codecWarning =
+            "⚠️ File has format code (.fXXX.) - this is likely an unmerged file from separate video+audio streams. Check if ffmpeg is installed and merging succeeded.";
         } else if (fileExtension === ".webm" && fileSize && fileSize < 10 * 1024 * 1024) {
           codecWarning = "Small WebM file - may be audio-only";
         }
@@ -492,6 +517,19 @@ export const spawnDownload = async (
                 : "❓ Unknown format",
           note: codecWarning,
         });
+
+        // If format code detected, this is a critical issue - merge failed
+        if (hasFormatCode) {
+          logger.error("[download-worker] CRITICAL: Unmerged file detected - merge failed", {
+            downloadId,
+            videoId,
+            finalPath: completedPath,
+            fileSize: fileSize ? `${(fileSize / 1024 / 1024).toFixed(2)} MB` : null,
+            note: "File has format code (.fXXX.) indicating it's an unmerged stream. Only one file (video OR audio) was saved. The other stream was lost. This usually means ffmpeg is not installed. Check stderr logs for 'ffmpeg is not installed' warning.",
+            impact:
+              "Download is incomplete - only one stream was saved. Video playback will fail if only audio was saved, or audio will be missing if only video was saved.",
+          });
+        }
 
         // If MP4, log a reminder to check codec
         if (fileExtension === ".mp4") {
