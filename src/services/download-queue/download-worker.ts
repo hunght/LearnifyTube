@@ -171,6 +171,22 @@ const getYtDlpPath = (): string => {
 };
 
 /**
+ * Get ffmpeg binary path (if installed)
+ */
+const getFfmpegPath = (): string | null => {
+  const binDir = path.join(app.getPath("userData"), "bin");
+  const platform = process.platform;
+  const ffmpegPath =
+    platform === "win32" ? path.join(binDir, "ffmpeg.exe") : path.join(binDir, "ffmpeg");
+
+  // Check if ffmpeg exists
+  if (fs.existsSync(ffmpegPath)) {
+    return ffmpegPath;
+  }
+  return null;
+};
+
+/**
  * Spawn a download worker for a queued item
  */
 export const spawnDownload = async (
@@ -193,6 +209,9 @@ export const spawnDownload = async (
     // Get yt-dlp binary path
     const ytDlpPath = getYtDlpPath();
 
+    // Get ffmpeg path if available
+    const ffmpegPath = getFfmpegPath();
+
     // Build yt-dlp command arguments
     const args = [
       url,
@@ -204,6 +223,22 @@ export const spawnDownload = async (
       // Note: Since we now prefer single-file formats, merging should be rare
       "--no-mtime", // Don't set file modification time (avoids merge issues)
     ];
+
+    // Add ffmpeg location if available (enables merging of separate streams)
+    if (ffmpegPath) {
+      args.push("--ffmpeg-location", ffmpegPath);
+      logger.info("[download-worker] Using bundled ffmpeg for merging", {
+        downloadId,
+        videoId,
+        ffmpegPath,
+      });
+    } else {
+      logger.warn("[download-worker] ffmpeg not found - merging will fail if needed", {
+        downloadId,
+        videoId,
+        note: "ffmpeg will be auto-downloaded on next app start",
+      });
+    }
 
     // Add format if specified, otherwise prefer WebM or H.264-compatible MP4
     let selectedFormat: string;

@@ -14,6 +14,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { getConfig } from "./config/env";
 
 import { YtDlpInstaller } from "@/components/ytdlp-installer";
+import { FfmpegInstaller } from "@/components/ffmpeg-installer";
 import { getAppVersion } from "./helpers/version";
 import { logger } from "./helpers/logger";
 import DownloadFolderAccessInitializer from "@/components/DownloadFolderAccessInitializer";
@@ -94,6 +95,7 @@ function App(): React.JSX.Element {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <YtDlpInstaller />
+        <FfmpegInstaller />
         <DownloadFolderAccessInitializer />
         <MainApp />
       </TooltipProvider>
