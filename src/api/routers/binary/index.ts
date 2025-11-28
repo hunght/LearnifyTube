@@ -472,7 +472,7 @@ export const binaryRouter = t.router({
           fs.unlinkSync(tmpPath);
           fs.rmSync(extractDir, { recursive: true, force: true });
         } else {
-          // Direct binary (macOS)
+          // No extraction needed (shouldn't happen with current implementation)
           fs.copyFileSync(tmpPath, binPath);
           fs.unlinkSync(tmpPath);
         }

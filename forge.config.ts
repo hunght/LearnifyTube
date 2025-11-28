@@ -1,7 +1,7 @@
 // forge.config.ts - Configuration for Electron Forge build process
 
 import type { ForgeConfig, ForgePackagerOptions } from "@electron-forge/shared-types";
-import { readdirSync, rmdirSync, statSync } from "node:fs";
+import { readdirSync, rmdirSync, statSync, copyFileSync, mkdirSync, existsSync } from "node:fs";
 import path, { join, normalize } from "node:path";
 import { MakerDeb } from "@electron-forge/maker-deb";
 import { MakerRpm } from "@electron-forge/maker-rpm";
@@ -175,6 +175,22 @@ const config: ForgeConfig = {
       };
       const nativeModuleDependencies = await getExternalNestedDependencies(EXTERNAL_DEPENDENCIES);
       nativeModuleDependenciesToPackage = Array.from(nativeModuleDependencies);
+
+      // Copy FFmpeg binary from ffmpeg-static to assets/bin for bundling
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const ffmpegStatic: string | undefined = require("ffmpeg-static");
+        if (ffmpegStatic && typeof ffmpegStatic === "string" && existsSync(ffmpegStatic)) {
+          const assetsBinDir = join(projectRoot, "assets", "bin");
+          mkdirSync(assetsBinDir, { recursive: true });
+          const targetName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+          const targetPath = join(assetsBinDir, targetName);
+          copyFileSync(ffmpegStatic, targetPath);
+          console.log("✅ Copied FFmpeg binary to assets/bin for bundling");
+        }
+      } catch (error) {
+        console.warn("⚠️  Could not copy FFmpeg binary (ffmpeg-static may not be installed):", error);
+      }
     },
     // Post-package hook to remove empty directories
     packageAfterPrune: async (_forgeConfig, buildPath) => {

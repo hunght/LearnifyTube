@@ -171,8 +171,8 @@ const getYtDlpPath = (): string => {
 };
 
 /**
- * Get ffmpeg binary path (bundled or downloaded)
- * Priority: 1. Bundled with app (from resources/bin), 2. Downloaded to userData/bin
+ * Get ffmpeg binary path (bundled, from ffmpeg-static, or downloaded)
+ * Priority: 1. Bundled with app, 2. ffmpeg-static npm package, 3. Downloaded to userData/bin
  */
 const getFfmpegPath = (): string | null => {
   const platform = process.platform;
@@ -204,7 +204,19 @@ const getFfmpegPath = (): string | null => {
     return bundledPath;
   }
 
-  // 2. Check downloaded version (from userData/bin)
+  // 2. Check ffmpeg-static npm package (primary source)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const ffmpegStatic = require("ffmpeg-static");
+    if (ffmpegStatic && typeof ffmpegStatic === "string" && fs.existsSync(ffmpegStatic)) {
+      logger.debug("[download-worker] Using ffmpeg-static", { path: ffmpegStatic });
+      return ffmpegStatic;
+    }
+  } catch (error) {
+    logger.debug("[download-worker] ffmpeg-static not available", { error });
+  }
+
+  // 3. Check downloaded version (from userData/bin)
   const binDir = path.join(app.getPath("userData"), "bin");
   const downloadedPath =
     platform === "win32" ? path.join(binDir, "ffmpeg.exe") : path.join(binDir, "ffmpeg");

@@ -13,12 +13,11 @@ export const getFfmpegDownloadUrl = (platform: SupportedPlatform): string => {
       // BtbN FFmpeg builds for Windows
       return "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip";
     case "darwin": {
-      // For macOS, detect architecture
-      // evermeet.cx provides static builds with .zip extension
-      const arch = process.arch === "arm64" ? "arm64" : "x86_64";
-      // Using evermeet.cx static builds (official, well-maintained)
-      // URL format: https://evermeet.cx/ffmpeg/get/ffmpeg-{arch}.zip
-      return `https://evermeet.cx/ffmpeg/get/ffmpeg-${arch}.zip`;
+      // For macOS, use BtbN FFmpeg builds (same as Windows, supports macOS)
+      const arch = process.arch === "arm64" ? "arm64" : "x64";
+      // Using BtbN FFmpeg builds - reliable and well-maintained
+      // Format: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-{os}-{arch}-gpl.zip
+      return `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-darwin-${arch}-gpl.zip`;
     }
     case "linux":
     default: {
@@ -33,7 +32,7 @@ export const getFfmpegDownloadUrl = (platform: SupportedPlatform): string => {
  * Check if the platform requires extracting from archive
  */
 export const requiresExtraction = (_platform: SupportedPlatform): boolean => {
-  // All platforms now use archives (zip for macOS/Windows, tar.xz for Linux)
+  // All platforms use archives (zip for macOS/Windows, tar.xz for Linux)
   return true;
 };
 
@@ -44,9 +43,11 @@ export const getFfmpegBinaryPathInArchive = (platform: SupportedPlatform): strin
   switch (platform) {
     case "win32":
       return "ffmpeg-master-latest-win64-gpl/bin/ffmpeg.exe";
-    case "darwin":
-      // evermeet.cx zip contains ffmpeg directly in root
-      return "ffmpeg";
+    case "darwin": {
+      // BtbN builds for macOS
+      const arch = process.arch === "arm64" ? "arm64" : "x64";
+      return `ffmpeg-master-latest-darwin-${arch}-gpl/bin/ffmpeg`;
+    }
     case "linux":
       return "ffmpeg";
     default:
