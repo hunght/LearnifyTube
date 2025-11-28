@@ -351,10 +351,37 @@ export const binaryRouter = t.router({
   // FFmpeg procedures
   getFfmpegInstallInfo: publicProcedure.query(async (): Promise<GetInstallInfoResult> => {
     try {
+      // 1. Check for downloaded FFmpeg in userData/bin
       const binPath = getFfmpegBinaryFilePath();
-      const installed = fs.existsSync(binPath);
-      const version = readFfmpegInstalledVersion();
-      return { installed, version, path: installed ? binPath : null };
+      if (fs.existsSync(binPath)) {
+        const version = readFfmpegInstalledVersion();
+        return { installed: true, version, path: binPath };
+      }
+
+      // 2. Check for ffmpeg-static npm package
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const ffmpegStatic = require("ffmpeg-static");
+        if (ffmpegStatic && typeof ffmpegStatic === "string" && fs.existsSync(ffmpegStatic)) {
+          logger.debug("[ffmpeg] Found ffmpeg-static package", { path: ffmpegStatic });
+          // Try to get version
+          try {
+            const versionOutput = execSync(`"${ffmpegStatic}" -version`, {
+              encoding: "utf-8",
+              timeout: 5000,
+            });
+            const versionMatch = versionOutput.match(/ffmpeg version ([^\s]+)/);
+            const version = versionMatch ? versionMatch[1] : "unknown";
+            return { installed: true, version, path: ffmpegStatic };
+          } catch {
+            return { installed: true, version: "unknown", path: ffmpegStatic };
+          }
+        }
+      } catch {
+        // ffmpeg-static not available
+      }
+
+      return { installed: false, version: null, path: null };
     } catch (e) {
       logger.error("[ffmpeg] getInstallInfo failed", e);
       return { installed: false, version: null, path: null };

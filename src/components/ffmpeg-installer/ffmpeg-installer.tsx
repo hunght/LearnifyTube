@@ -1,11 +1,11 @@
 import { useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { logger } from "@/helpers/logger";
 
 /**
- * FfmpegInstaller - Ensures ffmpeg binary is installed on app startup.
- * Checks for installation status and automatically downloads if needed.
+ * FfmpegInstaller - Checks for ffmpeg availability on app startup.
+ * Uses ffmpeg-static npm package (no download needed).
  */
 export const FfmpegInstaller = (): null => {
   // Query to check if ffmpeg is installed
@@ -16,39 +16,39 @@ export const FfmpegInstaller = (): null => {
     refetchOnWindowFocus: false,
   });
 
-  // Mutation to download ffmpeg
-  const downloadMutation = useMutation({
-    mutationFn: () => trpcClient.binary.downloadFfmpeg.mutate(),
-    onSuccess: (result) => {
-      if (result.success) {
-        logger.info("[FfmpegInstaller] Successfully installed ffmpeg", {
-          version: result.version,
-          path: result.path,
-          alreadyInstalled: result.alreadyInstalled,
-        });
-      } else {
-        logger.error("[FfmpegInstaller] Failed to install ffmpeg", {
-          message: result.message,
-        });
-      }
-    },
-    onError: (error) => {
-      logger.error("[FfmpegInstaller] Download mutation failed", error);
-    },
-  });
-
-  // Auto-download when we detect ffmpeg is not installed
+  // Log installation status
   useEffect(() => {
     if (isCheckingInstall) return;
 
-    if (installInfo && !installInfo.installed) {
-      logger.info("[FfmpegInstaller] ffmpeg not found, starting download...");
-      downloadMutation.mutate();
-    } else if (installInfo?.installed) {
-      logger.info("[FfmpegInstaller] ffmpeg already installed", {
+    if (installInfo?.installed) {
+      logger.info("[FfmpegInstaller] ffmpeg available", {
         version: installInfo.version,
         path: installInfo.path,
+        source: installInfo.path?.includes("node_modules")
+          ? "ffmpeg-static npm package"
+          : "userData/bin",
       });
+    } else if (installInfo && !installInfo.installed) {
+      // Check if ffmpeg-static npm package is available
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const ffmpegStatic = require("ffmpeg-static");
+        if (ffmpegStatic && typeof ffmpegStatic === "string") {
+          logger.warn("[FfmpegInstaller] ffmpeg-static package found but binary not accessible", {
+            path: ffmpegStatic,
+            note: "This may be a path resolution issue. The app will try to use it at runtime.",
+          });
+          return;
+        }
+      } catch {
+        // ffmpeg-static not installed
+      }
+
+      logger.warn("[FfmpegInstaller] ffmpeg not found", {
+        note: "ffmpeg-static npm package should be installed. Download fallback may not work reliably.",
+      });
+      // Don't auto-download - let the app use ffmpeg-static from node_modules at runtime
+      // The download method is unreliable (404 errors), so we rely on npm package
     }
   }, [installInfo, isCheckingInstall]);
 
