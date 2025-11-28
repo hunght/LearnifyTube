@@ -67,9 +67,19 @@ export const spawnDownload = async (
       outputPath,
     ];
 
-    // Add format if specified
+    // Add format if specified, otherwise prefer WebM or H.264-compatible MP4
     if (format) {
       args.push("-f", format);
+    } else {
+      // Prefer WebM (always works) or H.264 MP4 (Chromium-compatible)
+      // Format string: prefer WebM, fallback to H.264 MP4, then best available
+      const preferredFormat =
+        "bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]/bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best";
+      args.push("-f", preferredFormat);
+      logger.debug("[download-worker] Using format preference for Chromium compatibility", {
+        downloadId,
+        preferredFormat,
+      });
     }
 
     // Spawn yt-dlp process

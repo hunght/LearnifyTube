@@ -27,13 +27,43 @@ export function VideoPlayer({
     if (!videoRef) return;
     const video = videoRef.current;
     const mediaError = video?.error;
-    logger.error("[VideoPlayer] video playback error", {
+
+    // Enhanced error logging for codec/format issues
+    const errorDetails: Record<string, unknown> = {
       src: video?.currentSrc,
       code: mediaError?.code,
       message: mediaError?.message,
       readyState: video?.readyState,
       networkState: video?.networkState,
-    });
+    };
+
+    // Add format and codec information
+    if (video) {
+      // Check file format from source URL
+      const src = video.currentSrc || video.src || "";
+      if (src.includes(".mp4") || src.toLowerCase().includes("mp4")) {
+        errorDetails.fileFormat = "mp4";
+        errorDetails.possibleIssue =
+          "MP4 codec may not be supported (e.g., H.265/HEVC). Chromium requires H.264/AVC1.";
+      } else if (src.includes(".webm") || src.toLowerCase().includes("webm")) {
+        errorDetails.fileFormat = "webm";
+      }
+
+      // Check codec support
+      errorDetails.canPlayTypeMp4 = video.canPlayType("video/mp4");
+      errorDetails.canPlayTypeWebm = video.canPlayType("video/webm");
+
+      // MEDIA_ERR codes: 1=ABORTED, 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED
+      const errorCodeNames: Record<number, string> = {
+        1: "MEDIA_ERR_ABORTED",
+        2: "MEDIA_ERR_NETWORK",
+        3: "MEDIA_ERR_DECODE",
+        4: "MEDIA_ERR_SRC_NOT_SUPPORTED",
+      };
+      errorDetails.errorCodeName = mediaError?.code ? errorCodeNames[mediaError.code] : "UNKNOWN";
+    }
+
+    logger.error("[VideoPlayer] video playback error", errorDetails);
     if (onError) {
       onError();
     }

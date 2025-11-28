@@ -468,16 +468,25 @@ app.whenReady().then(async () => {
       const totalSize = stat.size;
       const range = rangeHeader;
 
-      // naive content-type based on extension
+      // Content-type based on extension with enhanced MP4 handling
       const ext = path.extname(filePath).toLowerCase();
-      const contentType =
-        ext === ".mp4"
-          ? "video/mp4"
-          : ext === ".webm"
-            ? "video/webm"
-            : ext === ".mkv"
-              ? "video/x-matroska"
-              : "application/octet-stream";
+      let contentType: string;
+      if (ext === ".mp4") {
+        contentType = "video/mp4";
+        // Log MP4 file details for codec debugging
+        logger.info("[protocol] Serving MP4 file", {
+          requestId,
+          filePath,
+          fileSize: totalSize,
+          note: "MP4 may use H.265/HEVC codec which Chromium doesn't support",
+        });
+      } else if (ext === ".webm") {
+        contentType = "video/webm";
+      } else if (ext === ".mkv") {
+        contentType = "video/x-matroska";
+      } else {
+        contentType = "application/octet-stream";
+      }
 
       // Enhanced headers for Chromium media playback
       const baseHeaders = {
