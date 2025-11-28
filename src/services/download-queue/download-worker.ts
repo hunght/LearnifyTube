@@ -65,6 +65,9 @@ export const spawnDownload = async (
       "--no-playlist", // Don't download playlists
       "-o",
       outputPath,
+      // Ensure proper merging when separate video+audio streams are downloaded
+      // Note: Since we now prefer single-file formats, merging should be rare
+      "--no-mtime", // Don't set file modification time (avoids merge issues)
     ];
 
     // Add format if specified, otherwise prefer WebM or H.264-compatible MP4
@@ -81,16 +84,22 @@ export const spawnDownload = async (
       // Prefer WebM (always works) or H.264 MP4 (Chromium-compatible)
       // Format string with quality restrictions to prevent huge file sizes:
       // - Limit to 1080p max (height<=1080)
-      // - Prefer WebM, fallback to H.264 MP4, then best available
-      // - Use single file format when possible to avoid merging overhead
+      // - Prefer single-file formats (video+audio combined) to avoid merging issues
+      // - Only use separate video+audio as last resort
+      // Format priority:
+      // 1. Single WebM file (video+audio) - best compatibility, no merging
+      // 2. Single H.264 MP4 file (video+audio) - good compatibility, no merging
+      // 3. Separate WebM video+audio (requires merging)
+      // 4. Separate H.264 MP4 video+audio (requires merging)
+      // 5. Best available single file
       selectedFormat =
-        "bestvideo[height<=1080][ext=webm]+bestaudio[ext=webm]/best[height<=1080][ext=webm]/bestvideo[height<=1080][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]";
+        "best[height<=1080][ext=webm]/best[height<=1080][ext=mp4][vcodec^=avc1]/bestvideo[height<=1080][ext=webm]+bestaudio[ext=webm]/bestvideo[height<=1080][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=1080]";
       args.push("-f", selectedFormat);
       logger.info("[download-worker] Using format preference for Chromium compatibility", {
         downloadId,
         videoId,
         preferredFormat: selectedFormat,
-        note: "Format preference: WebM (max 1080p) > H.264 MP4 (max 1080p) > best available (max 1080p)",
+        note: "Format priority: Single-file WebM > Single-file H.264 MP4 > Separate WebM streams > Separate MP4 streams > Best available (all max 1080p)",
       });
     }
 
@@ -222,6 +231,31 @@ export const spawnDownload = async (
         });
       }
 
+      // Check for merge completion
+      if (
+        output.includes("has already been downloaded") ||
+        output.includes("Deleting original file")
+      ) {
+        logger.debug("[download-worker] yt-dlp post-merge cleanup", {
+          downloadId,
+          videoId,
+          output: output.trim(),
+        });
+      }
+
+      // Check for merge errors or warnings
+      if (
+        output.toLowerCase().includes("error merging") ||
+        output.toLowerCase().includes("merge failed") ||
+        output.toLowerCase().includes("could not merge")
+      ) {
+        logger.error("[download-worker] yt-dlp merge error detected", {
+          downloadId,
+          videoId,
+          output: output.trim(),
+        });
+      }
+
       parseProgressAndMetadata(db, downloadId, output);
     });
 
@@ -263,7 +297,25 @@ export const spawnDownload = async (
         if (!finalPath && w.videoId && w.outputDir && fs.existsSync(w.outputDir)) {
           try {
             const files = fs.readdirSync(w.outputDir);
-            const match = files.find((f) => f.includes(`[${w.videoId}]`));
+            const matches = files.filter((f) => f.includes(`[${w.videoId}]`));
+
+            // Check for multiple files (indicates failed merge)
+            if (matches.length > 1) {
+              logger.warn(
+                "[download-worker] Multiple files found for video - merge may have failed",
+                {
+                  downloadId,
+                  videoId,
+                  fileCount: matches.length,
+                  files: matches,
+                  note: "yt-dlp may have downloaded separate video/audio files without merging",
+                }
+              );
+            }
+
+            // Prefer files without format codes (merged files) over format-specific files
+            const mergedFile = matches.find((f) => !f.match(/\.f\d+\./));
+            const match = mergedFile || matches[0];
             if (match) finalPath = path.join(w.outputDir, match);
           } catch {
             // Ignore file system errors when searching for video file
