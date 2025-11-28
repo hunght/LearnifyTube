@@ -28,6 +28,141 @@ const getYtDlpAssetName = (platform: NodeJS.Platform): string => {
 };
 
 /**
+ * Extract codec information from yt-dlp format details
+ */
+const extractCodecInfo = (
+  formatDetails: string
+): { videoCodec: string | null; audioCodec: string | null } => {
+  let videoCodec: string | null = null;
+  let audioCodec: string | null = null;
+
+  // Try to extract codec from format details
+  // Common patterns: "avc1", "h264", "h265", "hevc", "vp8", "vp9", "av01"
+  const codecPatterns = [
+    /(avc1\.\d+[a-z0-9]+)/i, // avc1.42E01E (H.264)
+    /(h\.?264)/i, // H.264
+    /(h\.?265|hevc)/i, // H.265/HEVC
+    /(vp8)/i, // VP8
+    /(vp9)/i, // VP9
+    /(av01)/i, // AV1
+    /(avc)/i, // AVC (generic)
+  ];
+
+  for (const pattern of codecPatterns) {
+    const match = formatDetails.match(pattern);
+    if (match) {
+      videoCodec = match[1];
+      break;
+    }
+  }
+
+  // Extract audio codec
+  const audioCodecPatterns = [/(aac)/i, /(opus)/i, /(vorbis)/i, /(mp3)/i];
+
+  for (const pattern of audioCodecPatterns) {
+    const match = formatDetails.match(pattern);
+    if (match) {
+      audioCodec = match[1];
+      break;
+    }
+  }
+
+  return { videoCodec, audioCodec };
+};
+
+/**
+ * Process and log format information from yt-dlp output
+ */
+const processFormatInfo = (
+  formatMatch: RegExpMatchArray,
+  downloadId: string,
+  videoId: string | null
+): void => {
+  const formatDescription = formatMatch[2];
+  const formatDetails = formatMatch[3] || "";
+
+  // Extract resolution/height from format description (e.g., "1080p", "720p", "4K")
+  const resolutionMatch = formatDescription.match(/(\d+)p|(\d+)x(\d+)|(\d+)K/i);
+  let resolution: string | null = null;
+  if (resolutionMatch) {
+    if (resolutionMatch[1]) {
+      resolution = `${resolutionMatch[1]}p`;
+    } else if (resolutionMatch[2] && resolutionMatch[3]) {
+      resolution = `${resolutionMatch[2]}x${resolutionMatch[3]}`;
+    } else if (resolutionMatch[4]) {
+      resolution = `${resolutionMatch[4]}K`;
+    }
+  }
+
+  // Detect if MP4 was selected (should be rare with WebM-first strategy)
+  const isMp4 =
+    formatDescription.toLowerCase().includes("mp4") || formatDetails.toLowerCase().includes("mp4");
+  const isWebm =
+    formatDescription.toLowerCase().includes("webm") ||
+    formatDetails.toLowerCase().includes("webm");
+
+  // Extract codec information from format details
+  const { videoCodec, audioCodec } = extractCodecInfo(formatDetails);
+
+  // Check if H.265/HEVC was detected (problematic for Chromium)
+  const isH265 =
+    videoCodec &&
+    (videoCodec.toLowerCase().includes("h265") || videoCodec.toLowerCase().includes("hevc"));
+  const isH264 =
+    videoCodec &&
+    (videoCodec.toLowerCase().includes("h264") ||
+      videoCodec.toLowerCase().includes("avc1") ||
+      videoCodec.toLowerCase().includes("avc"));
+
+  logger.info("[download-worker] yt-dlp format info with codec detection", {
+    downloadId,
+    videoId,
+    formatId: formatMatch[1],
+    formatDescription,
+    formatDetails,
+    resolution,
+    videoCodec: videoCodec || "unknown",
+    audioCodec: audioCodec || "unknown",
+    format: isWebm ? "WebM" : isMp4 ? "MP4" : "Unknown",
+    codecCompatibility: isH265
+      ? "⚠️ H.265/HEVC - NOT supported in Chromium"
+      : isH264
+        ? "✅ H.264/AVC1 - supported in Chromium"
+        : isWebm
+          ? "✅ WebM - fully supported in Chromium"
+          : "❓ Unknown codec compatibility",
+    note:
+      isMp4 && isH265
+        ? "⚠️ MP4 with H.265/HEVC selected - will NOT play in Chromium!"
+        : isMp4
+          ? "⚠️ MP4 selected - WebM may not be available for this video"
+          : resolution
+            ? `Selected resolution: ${resolution}`
+            : undefined,
+  });
+
+  if (isMp4 && isH265) {
+    logger.error("[download-worker] H.265/HEVC codec detected in MP4 - playback will fail", {
+      downloadId,
+      videoId,
+      formatId: formatMatch[1],
+      formatDescription,
+      videoCodec,
+      note: "H.265/HEVC is NOT supported in Chromium. This file will not play. WebM should be preferred.",
+    });
+  } else if (isMp4) {
+    logger.warn("[download-worker] MP4 format selected instead of WebM", {
+      downloadId,
+      videoId,
+      formatId: formatMatch[1],
+      formatDescription,
+      videoCodec: videoCodec || "unknown",
+      note: "MP4 selected. If playback fails, check if codec is H.264/AVC1 (supported) or H.265/HEVC (not supported).",
+    });
+  }
+};
+
+/**
  * Get yt-dlp binary path
  */
 const getYtDlpPath = (): string => {
@@ -81,25 +216,26 @@ export const spawnDownload = async (
         format: selectedFormat,
       });
     } else {
-      // Prefer WebM (always works) or H.264 MP4 (Chromium-compatible)
+      // STRONGLY prefer WebM (always works on all Chromium-based apps, including company MacBooks)
       // Format string with quality restrictions to prevent huge file sizes:
       // - Limit to 1080p max (height<=1080)
       // - Prefer single-file formats (video+audio combined) to avoid merging issues
-      // - Only use separate video+audio as last resort
-      // Format priority:
-      // 1. Single WebM file (video+audio) - best compatibility, no merging
-      // 2. Single H.264 MP4 file (video+audio) - good compatibility, no merging
-      // 3. Separate WebM video+audio (requires merging)
-      // 4. Separate H.264 MP4 video+audio (requires merging)
-      // 5. Best available single file
+      // - WebM-first strategy: try WebM in all quality levels before falling back to MP4
+      // Format priority (aggressive WebM preference):
+      // 1. Single WebM file (video+audio) - BEST compatibility
+      // 2. Separate WebM video+audio - still WebM, just needs merging
+      // 3. Lower quality WebM if high quality not available
+      // 4. Single H.264/AVC1 MP4 file - only if WebM completely unavailable
+      // 5. Separate H.264/AVC1 MP4 - absolute last resort
+      // Strategy: Try WebM at multiple quality levels before accepting MP4
       selectedFormat =
-        "best[height<=1080][ext=webm]/best[height<=1080][ext=mp4][vcodec^=avc1]/bestvideo[height<=1080][ext=webm]+bestaudio[ext=webm]/bestvideo[height<=1080][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=1080]";
+        "best[height<=1080][ext=webm]/bestvideo[height<=1080][ext=webm]+bestaudio[ext=webm]/best[height<=720][ext=webm]/bestvideo[height<=720][ext=webm]+bestaudio[ext=webm]/best[height<=480][ext=webm]/best[height<=1080][ext=mp4][vcodec^=avc1]/bestvideo[height<=1080][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]";
       args.push("-f", selectedFormat);
       logger.info("[download-worker] Using format preference for Chromium compatibility", {
         downloadId,
         videoId,
         preferredFormat: selectedFormat,
-        note: "Format priority: Single-file WebM > Single-file H.264 MP4 > Separate WebM streams > Separate MP4 streams > Best available (all max 1080p)",
+        note: "WebM-first strategy: Tries WebM at 1080p/720p/480p before accepting MP4. MP4 only as last resort.",
       });
     }
 
@@ -145,31 +281,7 @@ export const spawnDownload = async (
       // Pattern 1: [info] 123: format description (details)
       const formatMatch = output.match(/\[info\]\s+(\d+):\s+(.+?)(?:\s+\((.+?)\))?/);
       if (formatMatch) {
-        const formatDescription = formatMatch[2];
-        const formatDetails = formatMatch[3] || "";
-
-        // Extract resolution/height from format description (e.g., "1080p", "720p", "4K")
-        const resolutionMatch = formatDescription.match(/(\d+)p|(\d+)x(\d+)|(\d+)K/i);
-        let resolution: string | null = null;
-        if (resolutionMatch) {
-          if (resolutionMatch[1]) {
-            resolution = `${resolutionMatch[1]}p`;
-          } else if (resolutionMatch[2] && resolutionMatch[3]) {
-            resolution = `${resolutionMatch[2]}x${resolutionMatch[3]}`;
-          } else if (resolutionMatch[4]) {
-            resolution = `${resolutionMatch[4]}K`;
-          }
-        }
-
-        logger.info("[download-worker] yt-dlp format info", {
-          downloadId,
-          videoId,
-          formatId: formatMatch[1],
-          formatDescription,
-          formatDetails,
-          resolution,
-          note: resolution ? `Selected resolution: ${resolution}` : undefined,
-        });
+        processFormatInfo(formatMatch, downloadId, videoId);
       }
 
       // Pattern 2: [info] Available formats for...
@@ -181,13 +293,28 @@ export const spawnDownload = async (
         });
       }
 
-      // Pattern 3: [info] Selecting format...
-      if (output.includes("Selecting format") || output.includes("format selected")) {
-        logger.info("[download-worker] yt-dlp format selection", {
+      // Pattern 3: [info] Selecting format... or [download] Downloading format...
+      if (
+        output.includes("Selecting format") ||
+        output.includes("format selected") ||
+        output.includes("Downloading format")
+      ) {
+        logger.info("[download-worker] yt-dlp format selection/start", {
           downloadId,
           videoId,
           output: output.trim(),
         });
+
+        // Try to extract the actual format ID being downloaded
+        const downloadingFormatMatch = output.match(/Downloading format\s+(\d+)/i);
+        if (downloadingFormatMatch) {
+          logger.info("[download-worker] yt-dlp downloading specific format ID", {
+            downloadId,
+            videoId,
+            formatId: downloadingFormatMatch[1],
+            output: output.trim(),
+          });
+        }
       }
 
       // Pattern 4: [info] Downloading X format(s): 123+456-789 (video+audio merge)
@@ -340,6 +467,15 @@ export const spawnDownload = async (
           }
         }
 
+        // Determine codec compatibility warning
+        let codecWarning: string | undefined;
+        if (fileExtension === ".mp4") {
+          codecWarning =
+            "⚠️ MP4 file - verify codec is H.264/AVC1 (supported) not H.265/HEVC (not supported). Check logs for codec detection.";
+        } else if (fileExtension === ".webm" && fileSize && fileSize < 10 * 1024 * 1024) {
+          codecWarning = "Small WebM file - may be audio-only";
+        }
+
         logger.info("[download-worker] Download completed successfully", {
           downloadId,
           videoId,
@@ -348,11 +484,24 @@ export const spawnDownload = async (
           fileSize: fileSize ? `${(fileSize / 1024 / 1024).toFixed(2)} MB` : null,
           fileExists,
           formatUsed,
-          note:
-            fileExtension === ".webm" && fileSize && fileSize < 10 * 1024 * 1024
-              ? "Small WebM file - may be audio-only"
-              : undefined,
+          codecCompatibility:
+            fileExtension === ".webm"
+              ? "✅ WebM - fully supported in Chromium"
+              : fileExtension === ".mp4"
+                ? "⚠️ MP4 - check codec (H.264=supported, H.265=not supported)"
+                : "❓ Unknown format",
+          note: codecWarning,
         });
+
+        // If MP4, log a reminder to check codec
+        if (fileExtension === ".mp4") {
+          logger.info("[download-worker] MP4 file downloaded - codec check reminder", {
+            downloadId,
+            videoId,
+            finalPath: completedPath,
+            note: "If playback fails, check format selection logs above for actual codec (H.264/AVC1 vs H.265/HEVC). H.265 will not play in Chromium.",
+          });
+        }
       } else {
         // Failed
         const queueManager = requireQueueManager();

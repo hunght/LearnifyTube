@@ -28,7 +28,7 @@ export function VideoPlayer({
     const video = videoRef.current;
     const mediaError = video?.error;
 
-    // Enhanced error logging for codec/format issues
+    // Comprehensive error logging to identify root cause
     const errorDetails: Record<string, unknown> = {
       src: video?.currentSrc,
       code: mediaError?.code,
@@ -37,21 +37,51 @@ export function VideoPlayer({
       networkState: video?.networkState,
     };
 
-    // Add format and codec information
+    // Add comprehensive video element state
     if (video) {
       // Check file format from source URL
       const src = video.currentSrc || video.src || "";
+      errorDetails.sourceUrl = src;
+
       if (src.includes(".mp4") || src.toLowerCase().includes("mp4")) {
         errorDetails.fileFormat = "mp4";
-        errorDetails.possibleIssue =
-          "MP4 codec may not be supported (e.g., H.265/HEVC). Chromium requires H.264/AVC1.";
       } else if (src.includes(".webm") || src.toLowerCase().includes("webm")) {
         errorDetails.fileFormat = "webm";
       }
 
-      // Check codec support
+      // Video element properties to diagnose file validity
+      errorDetails.videoWidth = video.videoWidth;
+      errorDetails.videoHeight = video.videoHeight;
+      errorDetails.duration = video.duration;
+      errorDetails.buffered =
+        video.buffered.length > 0
+          ? {
+              start: video.buffered.start(0),
+              end: video.buffered.end(0),
+              length: video.buffered.length,
+            }
+          : null;
+      errorDetails.seekable =
+        video.seekable.length > 0
+          ? {
+              start: video.seekable.start(0),
+              end: video.seekable.end(0),
+              length: video.seekable.length,
+            }
+          : null;
+      errorDetails.paused = video.paused;
+      errorDetails.ended = video.ended;
+      errorDetails.muted = video.muted;
+      errorDetails.volume = video.volume;
+
+      // Check codec support capabilities
       errorDetails.canPlayTypeMp4 = video.canPlayType("video/mp4");
       errorDetails.canPlayTypeWebm = video.canPlayType("video/webm");
+      errorDetails.canPlayTypeMp4H264 = video.canPlayType('video/mp4; codecs="avc1.42E01E"');
+      errorDetails.canPlayTypeMp4H265 = video.canPlayType('video/mp4; codecs="hev1.1.6.L93.B0"');
+
+      // Note: getVideoTracks is not available on HTMLVideoElement (only on MediaStream)
+      // Codec information is better obtained from yt-dlp format logs or file metadata
 
       // MEDIA_ERR codes: 1=ABORTED, 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED
       const errorCodeNames: Record<number, string> = {
@@ -61,9 +91,20 @@ export function VideoPlayer({
         4: "MEDIA_ERR_SRC_NOT_SUPPORTED",
       };
       errorDetails.errorCodeName = mediaError?.code ? errorCodeNames[mediaError.code] : "UNKNOWN";
+
+      // Additional diagnosis based on error code
+      if (mediaError?.code === 3) {
+        errorDetails.diagnosis =
+          "DECODE error - file may be corrupted, incomplete, or use unsupported codec";
+      } else if (mediaError?.code === 4) {
+        errorDetails.diagnosis = "SRC_NOT_SUPPORTED - format/codec not supported by browser";
+      } else if (mediaError?.code === 2) {
+        errorDetails.diagnosis =
+          "NETWORK error - file may not be accessible or protocol handler issue";
+      }
     }
 
-    logger.error("[VideoPlayer] video playback error", errorDetails);
+    logger.error("[VideoPlayer] video playback error - comprehensive diagnostics", errorDetails);
     if (onError) {
       onError();
     }
@@ -94,6 +135,56 @@ export function VideoPlayer({
     return () => {
       video.removeEventListener("play", updatePlayingState);
       video.removeEventListener("pause", updatePlayingState);
+    };
+  }, [videoRef]);
+
+  // Log video metadata when successfully loaded
+  useEffect(() => {
+    if (!videoRef) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleLoadedMetadata = (): void => {
+      const src = video.currentSrc || video.src || "";
+      const fileFormat = src.includes(".mp4") ? "mp4" : src.includes(".webm") ? "webm" : "unknown";
+
+      logger.info("[VideoPlayer] Video metadata loaded successfully", {
+        src,
+        fileFormat,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        duration: video.duration,
+        readyState: video.readyState,
+        networkState: video.networkState,
+        canPlayTypeMp4: video.canPlayType("video/mp4"),
+        canPlayTypeWebm: video.canPlayType("video/webm"),
+        canPlayTypeMp4H264: video.canPlayType('video/mp4; codecs="avc1.42E01E"'),
+        canPlayTypeMp4H265: video.canPlayType('video/mp4; codecs="hev1.1.6.L93.B0"'),
+        note: "Video file loaded and metadata available. If playback fails, check error logs.",
+      });
+    };
+
+    const handleCanPlay = (): void => {
+      logger.info("[VideoPlayer] Video can start playing", {
+        src: video.currentSrc || video.src || "",
+        readyState: video.readyState,
+        networkState: video.networkState,
+        buffered:
+          video.buffered.length > 0
+            ? {
+                start: video.buffered.start(0),
+                end: video.buffered.end(0),
+              }
+            : null,
+      });
+    };
+
+    video.addEventListener("loadedmetadata", handleLoadedMetadata);
+    video.addEventListener("canplay", handleCanPlay);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      video.removeEventListener("canplay", handleCanPlay);
     };
   }, [videoRef]);
 
