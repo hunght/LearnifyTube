@@ -171,18 +171,49 @@ const getYtDlpPath = (): string => {
 };
 
 /**
- * Get ffmpeg binary path (if installed)
+ * Get ffmpeg binary path (bundled or downloaded)
+ * Priority: 1. Bundled with app (from resources/bin), 2. Downloaded to userData/bin
  */
 const getFfmpegPath = (): string | null => {
-  const binDir = path.join(app.getPath("userData"), "bin");
   const platform = process.platform;
-  const ffmpegPath =
+  const isDev = !app.isPackaged;
+
+  // 1. Check bundled version (from resources/bin when packaged, or assets/bin in dev)
+  let bundledPath: string;
+  if (isDev) {
+    // Development: check assets/bin from project root
+    // __dirname is .vite/build/services/download-queue, so go up to project root
+    const rootDir = path.resolve(path.join(__dirname, "..", "..", "..", ".."));
+    bundledPath = path.join(
+      rootDir,
+      "assets",
+      "bin",
+      platform === "win32" ? "ffmpeg.exe" : "ffmpeg"
+    );
+  } else {
+    // Production: check resources/bin (from extraResource: "./assets/bin" -> "bin" in resourcesPath)
+    bundledPath = path.join(
+      process.resourcesPath,
+      "bin",
+      platform === "win32" ? "ffmpeg.exe" : "ffmpeg"
+    );
+  }
+
+  if (fs.existsSync(bundledPath)) {
+    logger.debug("[download-worker] Using bundled ffmpeg", { path: bundledPath });
+    return bundledPath;
+  }
+
+  // 2. Check downloaded version (from userData/bin)
+  const binDir = path.join(app.getPath("userData"), "bin");
+  const downloadedPath =
     platform === "win32" ? path.join(binDir, "ffmpeg.exe") : path.join(binDir, "ffmpeg");
 
-  // Check if ffmpeg exists
-  if (fs.existsSync(ffmpegPath)) {
-    return ffmpegPath;
+  if (fs.existsSync(downloadedPath)) {
+    logger.debug("[download-worker] Using downloaded ffmpeg", { path: downloadedPath });
+    return downloadedPath;
   }
+
   return null;
 };
 

@@ -65,3 +65,7 @@ screenshots/*.jpg
 
 # Turbo (legacy from monorepo)
 .turbo/
+
+# Bundled FFmpeg binaries (platform-specific, large files)
+assets/bin/*
+!assets/bin/README.md

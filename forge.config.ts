@@ -82,7 +82,7 @@ const packagerConfig: ForgePackagerOptions = {
     },
   ],
   // Include additional resources in the final build
-  extraResource: ["./resources", "./drizzle"],
+  extraResource: ["./resources", "./drizzle", "./assets/bin"],
 };
 
 // Configure macOS-specific settings (both development and production)
@@ -246,8 +246,8 @@ const config: ForgeConfig = {
     prune: true,
     // Unpack *.node files from the asar archive
     asar: { unpack: "*.node" },
-    // Add resources folder and migrations
-    extraResource: ["./resources", "./drizzle"],
+    // Add resources folder, migrations, and bundled binaries
+    extraResource: ["./resources", "./drizzle", "./assets/bin"],
     // Ignore files that match the following conditions
     ignore: (file) => {
       const filePath = file.toLowerCase();
