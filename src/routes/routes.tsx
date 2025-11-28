@@ -11,29 +11,30 @@ import SubscriptionsPage from "@/pages/subscriptions/SubscriptionsPage";
 import HistoryPage from "@/pages/history/HistoryPage";
 import MyWordsPage from "@/pages/my-words/MyWordsPage";
 import StorageManagerPage from "@/pages/storage/StorageManagerPage";
-import LogPage from "@/pages/logs/index";
+import LogPage from "@/pages/app-debug-logs/index";
 
 // Check if we're in development mode
 // In Electron renderer, check window.location - if it's http(s)://, we're in dev mode
 const isDevelopment = (): boolean => {
-  if (typeof window === "undefined") {
-    return false;
-  }
+  // if (typeof window === "undefined") {
+  //   return false;
+  // }
 
-  // If loading from http://localhost (dev server), we're in development
-  const href = window.location.href;
-  if (href.startsWith("http://") || href.startsWith("https://")) {
-    return true;
-  }
+  // // If loading from http://localhost (dev server), we're in development
+  // const href = window.location.href;
+  // if (href.startsWith("http://") || href.startsWith("https://")) {
+  //   return true;
+  // }
 
-  // Fallback: check for Electron Forge dev server URL global
-  // @ts-ignore - MAIN_WINDOW_VITE_DEV_SERVER_URL is a global defined by Electron Forge
-  if (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined" && MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    return true;
-  }
+  // // Fallback: check for Electron Forge dev server URL global
+  // // @ts-ignore - MAIN_WINDOW_VITE_DEV_SERVER_URL is a global defined by Electron Forge
+  // if (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined" && MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+  //   return true;
+  // }
 
-  // Last fallback: if NODE_ENV is not explicitly production, assume development
-  return process.env.NODE_ENV !== "production";
+  // // Last fallback: if NODE_ENV is not explicitly production, assume development
+  // return process.env.NODE_ENV !== "production";
+  return true;
 };
 
 const DashboardRoute = createRoute({
