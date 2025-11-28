@@ -68,19 +68,39 @@ export const spawnDownload = async (
     ];
 
     // Add format if specified, otherwise prefer WebM or H.264-compatible MP4
+    let selectedFormat: string;
     if (format) {
+      selectedFormat = format;
       args.push("-f", format);
+      logger.info("[download-worker] Using user-specified format", {
+        downloadId,
+        videoId,
+        format: selectedFormat,
+      });
     } else {
       // Prefer WebM (always works) or H.264 MP4 (Chromium-compatible)
       // Format string: prefer WebM, fallback to H.264 MP4, then best available
-      const preferredFormat =
+      selectedFormat =
         "bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]/bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best";
-      args.push("-f", preferredFormat);
-      logger.debug("[download-worker] Using format preference for Chromium compatibility", {
+      args.push("-f", selectedFormat);
+      logger.info("[download-worker] Using format preference for Chromium compatibility", {
         downloadId,
-        preferredFormat,
+        videoId,
+        preferredFormat: selectedFormat,
+        note: "Format preference: WebM > H.264 MP4 > best available",
       });
     }
+
+    // Log full command for debugging
+    logger.info("[download-worker] Starting yt-dlp download", {
+      downloadId,
+      videoId,
+      url,
+      ytDlpPath,
+      outputPath,
+      format: selectedFormat,
+      fullCommand: `${ytDlpPath} ${args.join(" ")}`,
+    });
 
     // Spawn yt-dlp process
     const process = spawn(ytDlpPath, args);
@@ -97,16 +117,96 @@ export const spawnDownload = async (
     };
     activeWorkers.set(downloadId, worker);
 
+    // Store format in closure for completion logging
+    const formatUsed = selectedFormat;
+
     // Handle stdout - parse progress and file path
     process.stdout?.on("data", (data: Buffer) => {
       const output = data.toString();
+
+      // Log format selection messages
+      if (output.includes("[info]") || output.includes("format")) {
+        logger.debug("[download-worker] yt-dlp info output", { downloadId, videoId, output });
+      }
+
+      // Check for format selection - multiple patterns
+      // Pattern 1: [info] 123: format description (details)
+      const formatMatch = output.match(/\[info\]\s+(\d+):\s+(.+?)(?:\s+\((.+?)\))?/);
+      if (formatMatch) {
+        logger.info("[download-worker] yt-dlp format info", {
+          downloadId,
+          videoId,
+          formatId: formatMatch[1],
+          formatDescription: formatMatch[2],
+          formatDetails: formatMatch[3],
+        });
+      }
+
+      // Pattern 2: [info] Available formats for...
+      if (output.includes("Available formats")) {
+        logger.debug("[download-worker] yt-dlp listing available formats", {
+          downloadId,
+          videoId,
+          output: output.trim(),
+        });
+      }
+
+      // Pattern 3: [info] Selecting format...
+      if (output.includes("Selecting format") || output.includes("format selected")) {
+        logger.info("[download-worker] yt-dlp format selection", {
+          downloadId,
+          videoId,
+          output: output.trim(),
+        });
+      }
+
+      // Check for audio-only warnings
+      if (
+        output.toLowerCase().includes("audio only") ||
+        output.toLowerCase().includes("audio-only")
+      ) {
+        logger.warn("[download-worker] Audio-only format detected", {
+          downloadId,
+          videoId,
+          output: output.trim(),
+        });
+      }
+
+      // Check for video+audio merging
+      if (output.includes("[Merger]") || output.includes("Merging formats")) {
+        logger.info("[download-worker] yt-dlp merging video+audio", {
+          downloadId,
+          videoId,
+          output: output.trim(),
+        });
+      }
+
       parseProgressAndMetadata(db, downloadId, output);
     });
 
-    // Handle stderr - log errors
+    // Handle stderr - log errors and warnings
     process.stderr?.on("data", (data: Buffer) => {
       const errorOutput = data.toString();
-      logger.debug("[download-worker] yt-dlp stderr output", { downloadId, output: errorOutput });
+
+      // Log all stderr output for debugging format issues
+      logger.info("[download-worker] yt-dlp stderr output", {
+        downloadId,
+        videoId,
+        output: errorOutput.trim(),
+      });
+
+      // Check for format-related errors
+      if (
+        errorOutput.toLowerCase().includes("format") ||
+        errorOutput.toLowerCase().includes("codec") ||
+        errorOutput.toLowerCase().includes("not available")
+      ) {
+        logger.warn("[download-worker] Format-related message in stderr", {
+          downloadId,
+          videoId,
+          message: errorOutput.trim(),
+        });
+      }
     });
 
     // Handle process completion
@@ -128,10 +228,37 @@ export const spawnDownload = async (
             // Ignore file system errors when searching for video file
           }
         }
-        await queueManager.markCompleted(downloadId, finalPath || outputPath);
+        const completedPath = finalPath || outputPath;
+        await queueManager.markCompleted(downloadId, completedPath);
+
+        // Log file details for debugging format issues
+        let fileExtension: string | null = null;
+        let fileSize: number | null = null;
+        let fileExists = false;
+
+        if (completedPath && fs.existsSync(completedPath)) {
+          fileExists = true;
+          fileExtension = path.extname(completedPath).toLowerCase();
+          try {
+            const stats = fs.statSync(completedPath);
+            fileSize = stats.size;
+          } catch {
+            // Ignore stat errors
+          }
+        }
+
         logger.info("[download-worker] Download completed successfully", {
           downloadId,
-          finalPath: finalPath || outputPath,
+          videoId,
+          finalPath: completedPath,
+          fileExtension,
+          fileSize: fileSize ? `${(fileSize / 1024 / 1024).toFixed(2)} MB` : null,
+          fileExists,
+          formatUsed,
+          note:
+            fileExtension === ".webm" && fileSize && fileSize < 10 * 1024 * 1024
+              ? "Small WebM file - may be audio-only"
+              : undefined,
         });
       } else {
         // Failed
