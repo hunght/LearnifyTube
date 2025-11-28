@@ -139,7 +139,7 @@ const routes = isDevelopment()
       ...baseRoutes,
       createRoute({
         getParentRoute: () => RootRoute,
-        path: "/logs",
+        path: "/app-debug-logs",
         component: LogPage,
       }),
     ]

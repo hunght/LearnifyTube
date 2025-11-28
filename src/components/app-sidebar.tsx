@@ -101,7 +101,7 @@ const getItems = (): Array<{
     baseItems.push({
       title: "Logs",
       icon: ScrollText,
-      url: "/logs",
+      url: "/app-debug-logs",
     });
   }
 
