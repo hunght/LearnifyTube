@@ -105,8 +105,32 @@ The issue is **codec compatibility**, not folder permissions:
   4. **Format Selection Logging**: Logs which format was selected and why, with codec compatibility warnings
 - **Expected Result**: Logs will reveal root cause when tested on company MacBook
 
+### v1.0.46 - CRITICAL: Missing ffmpeg Root Cause Identified
+- **Issue Discovered**: Downloads result in incomplete files (audio-only or video-only)
+- **Root Cause**: **ffmpeg is not installed** on the system
+- **What Happens**:
+  1. yt-dlp selects format requiring merging (e.g., `303+251` = separate video+audio streams)
+  2. yt-dlp attempts to merge using ffmpeg
+  3. **ffmpeg is missing** → merge fails
+  4. Only one file is saved (usually audio file like `.f251.webm`)
+  5. The other stream (video) is lost
+  6. Result: Incomplete download (audio-only file, ~12MB for a 17-minute video)
+- **Why WebM-first didn't work**:
+  - No single-file WebM available for some videos
+  - Falls back to `bestvideo[height<=1080][ext=webm]+bestaudio[ext=webm]` (requires merging)
+  - Without ffmpeg, merge fails and only one stream is saved
+- **Fixes Applied**:
+  1. **Critical Error Detection**: Detects "ffmpeg is not installed" warning and logs as critical error
+  2. **Unmerged File Detection**: Detects format code pattern (`.f251.`, `.f303.`) indicating incomplete downloads
+  3. **Enhanced Completion Logging**: Warns when only one stream was saved
+- **Solution Planned**: Bundle ffmpeg binary with the app (similar to yt-dlp)
+  - Download ffmpeg static builds for each platform
+  - Use bundled ffmpeg for merging video+audio streams
+  - Enable future features: video optimization, format conversion, compression
+
 ## Logs Observed
 
+### Original Issue (Codec/Format):
 When the issue occurs, logs show:
 - `[preferences] Directory is readable` - permission check passes ✅
 - `[preferences] Directory already accessible` - no prompt needed ✅
@@ -116,6 +140,19 @@ When the issue occurs, logs show:
   - `fileFormat: "mp4"`
   - `possibleIssue: "MP4 codec may not be supported (e.g., H.265/HEVC)"`
   - `canPlayTypeMp4: ""` (empty = not supported)
+
+### Critical Issue (Missing ffmpeg - v1.0.46+):
+When ffmpeg is missing, logs show:
+- `[download-worker] yt-dlp downloading formats` with `formatIds: '303+251'` and `isMerging: true`
+- `[download-worker] yt-dlp stderr output` with:
+  - `WARNING: You have requested merging of multiple formats but ffmpeg is not installed. The formats won't be merged`
+- `[download-worker] CRITICAL: ffmpeg is not installed - merging will fail` (v1.0.46+)
+- `[download-worker] Download completed successfully` with:
+  - `finalPath: '/path/to/file.f251.webm'` (format code indicates unmerged file)
+  - `fileSize: '12.69 MB'` (suspiciously small = audio-only)
+- `[download-worker] CRITICAL: Unmerged file detected - merge failed` (v1.0.46+)
+  - `note: "File has format code (.fXXX.) indicating it's an unmerged stream"`
+  - `impact: "Download is incomplete - only one stream was saved"`
 
 ## Environment
 
@@ -128,18 +165,34 @@ When the issue occurs, logs show:
 
 - **v1.0.41**: Format preference fix deployed to prefer WebM/H.264 MP4
 - **v1.0.45+**: Enhanced codec detection and comprehensive diagnostics added
+- **v1.0.46**: **CRITICAL ROOT CAUSE IDENTIFIED** - Missing ffmpeg causes incomplete downloads
+  - Detection and logging added for missing ffmpeg warnings
+  - Detection for unmerged files (format code pattern)
+  - Critical error logging when merge fails
+- **v1.0.47+ (Planned)**: Bundle ffmpeg with app to enable proper merging and future video optimization features
 
-### Recent Findings (v1.0.45+)
+### Recent Findings (v1.0.46)
 
-**Issue**: Even with WebM-first format preference, MP4 files are still being downloaded on some machines, and playback fails on company MacBooks.
+**CRITICAL ROOT CAUSE IDENTIFIED**: **ffmpeg is not installed**
 
-**Root Cause Investigation**:
-- MP4 files should work in Chromium if they use H.264/AVC1 codec
-- The issue might be:
-  1. MP4 files are using H.265/HEVC codec (not supported)
-  2. File corruption or incomplete downloads
-  3. Protocol handler issues
-  4. Browser codec detection problems
+**Issue**: Downloads result in incomplete files (audio-only or video-only), causing playback failures.
+
+**Actual Root Cause**:
+- **ffmpeg is missing** from the system
+- When yt-dlp selects formats requiring merging (separate video+audio streams), it needs ffmpeg
+- Without ffmpeg, merging fails and only one stream is saved
+- Example: Format `303+251` selected → only `.f251.webm` (audio) saved → video stream lost
+
+**Evidence from Logs**:
+- Warning: `WARNING: You have requested merging of multiple formats but ffmpeg is not installed`
+- Final file: `.f251.webm` (format code indicates unmerged file)
+- File size: 12.69 MB for a 17-minute video (suspiciously small = audio-only)
+- Missing video stream: Format 303 (video) was downloaded but lost during failed merge
+
+**Why This Causes Playback Issues**:
+- Audio-only files play but have no video
+- Video-only files (if saved) have no audio
+- Incomplete downloads cannot be played properly
 
 **Recent Improvements**:
 
@@ -169,19 +222,30 @@ When the issue occurs, logs show:
    - Warns when MP4 is selected instead of WebM
    - Logs when multiple files are created (merge failures)
 
-**Next Steps**:
-- Test on company MacBook to capture actual logs
-- Check logs for:
-  - Actual codec in downloaded MP4 files (H.264 vs H.265)
-  - Browser codec support capabilities
-  - Exact error code and diagnosis
-  - Why WebM wasn't selected if MP4 was chosen
+**Solution Plan** (v1.0.47+):
 
-**Expected Outcome**:
-- Logs will reveal the root cause:
-  - If H.265/HEVC: Format preference needs to be even more aggressive
-  - If H.264: Issue is elsewhere (file access, corruption, browser issue)
-  - If WebM not available: Need to investigate why yt-dlp can't find WebM formats
+1. **Bundle ffmpeg with the app** (similar to yt-dlp):
+   - Download ffmpeg static builds for each platform (macOS, Windows, Linux)
+   - Store in app's `bin/` directory alongside yt-dlp
+   - Auto-download on first run if not present
+   - Use bundled ffmpeg for merging video+audio streams
+
+2. **Use bundled ffmpeg for merging**:
+   - When yt-dlp selects formats requiring merging, use bundled ffmpeg
+   - Ensure successful merge of video+audio streams
+   - Complete downloads with both video and audio
+
+3. **Future Features Enabled**:
+   - Video optimization and compression
+   - Format conversion (MP4 ↔ WebM, etc.)
+   - Quality adjustment and re-encoding
+   - User-controlled video processing options
+
+**Implementation Status**:
+- ✅ Root cause identified (missing ffmpeg)
+- ✅ Detection and logging added (v1.0.46)
+- 🔄 ffmpeg bundling in progress (v1.0.47+)
+- ⏳ Video optimization features (future)
 
 
 
