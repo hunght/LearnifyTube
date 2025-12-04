@@ -25,7 +25,6 @@ import { initializeQueueManager } from "./services/download-queue/queue-manager"
 import defaultDb from "./api/db";
 import { userPreferences } from "./api/db/schema";
 
-import { toggleClockWindow } from "./main/windows/clock";
 import { updateElectronApp } from "update-electron-app";
 
 // Global error handlers to prevent crashes from logging errors
@@ -217,12 +216,6 @@ async function createTray(): Promise<void> {
           mainWindow.show();
           mainWindow.focus();
         }
-      },
-    },
-    {
-      label: "Toggle Clock",
-      click: () => {
-        toggleClockWindow();
       },
     },
     { type: "separator" },

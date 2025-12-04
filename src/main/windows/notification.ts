@@ -10,7 +10,8 @@ export async function createNotificationWindow(): Promise<BrowserWindow> {
   // Don't create multiple notification windows
   if (notificationWindow && !notificationWindow.isDestroyed()) {
     logger.info("Reusing existing notification window");
-    notificationWindow.focus();
+    // We do NOT automatically show/focus here anymore.
+    // Consumers must call showNotificationWindow() explicitly.
     return notificationWindow;
   }
   const preload = path.join(__dirname, "./preload/notification.js");
@@ -36,6 +37,7 @@ export async function createNotificationWindow(): Promise<BrowserWindow> {
     skipTaskbar: true,
     resizable: true,
     transparent: true,
+    show: false, // Start hidden to prevent ghost window
     webPreferences: {
       preload,
       contextIsolation: true,
@@ -90,20 +92,49 @@ export async function createNotificationWindow(): Promise<BrowserWindow> {
   // Open DevTools for debugging
   if (process.env.NODE_ENV === "development") {
     logger.info("Opening notification window DevTools");
-    notificationWindow.webContents.openDevTools();
+    notificationWindow.webContents.openDevTools({ mode: "detach" });
   }
 
   return notificationWindow;
 }
 
-export function getNotificationWindow(): BrowserWindow | null {
-  logger.info("Getting notification window reference");
-  return notificationWindow;
+export function showNotificationWindow(): void {
+  if (notificationWindow && !notificationWindow.isDestroyed()) {
+    logger.info("Showing notification window");
+    // Ensure we capture mouse events when showing
+    try {
+      notificationWindow.setIgnoreMouseEvents(false);
+    } catch (error) {
+      logger.error("Failed to enable mouse events:", error);
+    }
+    notificationWindow.show();
+    notificationWindow.focus();
+  }
+}
+
+// eslint-disable-next-line import/no-unused-modules
+export function hideNotificationWindow(): void {
+  if (notificationWindow && !notificationWindow.isDestroyed()) {
+    logger.info("Hiding notification window");
+    // Ignore mouse events to prevent ghost window
+    try {
+      notificationWindow.setIgnoreMouseEvents(true);
+    } catch (error) {
+      logger.error("Failed to ignore mouse events:", error);
+    }
+    notificationWindow.hide();
+  }
 }
 
 export function closeNotificationWindow(): void {
   if (notificationWindow && !notificationWindow.isDestroyed()) {
     logger.info("Closing notification window");
+    // Ignore mouse events before closing to prevent ghost window
+    try {
+      notificationWindow.setIgnoreMouseEvents(true);
+    } catch (error) {
+      logger.error("Failed to ignore mouse events before close:", error);
+    }
     notificationWindow.close();
     notificationWindow = null;
   }
