@@ -47,7 +47,7 @@ export function CustomizationSection(): React.JSX.Element {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Customization</h2>
+          <h1 className="text-3xl font-bold text-foreground">Settings</h1>
           <p className="text-sm text-muted-foreground">
             Personalize LearnifyTube to match your learning style
           </p>

@@ -395,29 +395,40 @@ export const preferencesRouter = t.router({
     }),
 
   // Get customization preferences
-  getCustomizationPreferences: publicProcedure.query(async (): Promise<UserPreferences> => {
-    try {
-      const stored = localStorage.getItem("user.customization");
-      if (!stored) {
+  getCustomizationPreferences: publicProcedure.query(
+    async ({ ctx }): Promise<UserPreferences> => {
+      const db = ctx.db ?? defaultDb;
+      await ensurePreferencesExist(db);
+
+      try {
+        const rows = await db
+          .select()
+          .from(userPreferences)
+          .where(eq(userPreferences.id, "default"))
+          .limit(1);
+
+        if (rows.length === 0 || !rows[0].customizationSettings) {
+          return DEFAULT_USER_PREFERENCES;
+        }
+
+        const stored = JSON.parse(rows[0].customizationSettings);
+        const preferences = stored as unknown as UserPreferences;
+
+        // Merge with defaults to ensure all fields exist
+        return {
+          ...DEFAULT_USER_PREFERENCES,
+          ...preferences,
+          sidebar: { ...DEFAULT_USER_PREFERENCES.sidebar, ...preferences.sidebar },
+          appearance: { ...DEFAULT_USER_PREFERENCES.appearance, ...preferences.appearance },
+          player: { ...DEFAULT_USER_PREFERENCES.player, ...preferences.player },
+          learning: { ...DEFAULT_USER_PREFERENCES.learning, ...preferences.learning },
+        };
+      } catch (error) {
+        logger.error("[preferences] Error loading customization preferences", { error });
         return DEFAULT_USER_PREFERENCES;
       }
-
-      const preferences = JSON.parse(stored) as unknown as UserPreferences;
-
-      // Merge with defaults to ensure all fields exist
-      return {
-        ...DEFAULT_USER_PREFERENCES,
-        ...preferences,
-        sidebar: { ...DEFAULT_USER_PREFERENCES.sidebar, ...preferences.sidebar },
-        appearance: { ...DEFAULT_USER_PREFERENCES.appearance, ...preferences.appearance },
-        player: { ...DEFAULT_USER_PREFERENCES.player, ...preferences.player },
-        learning: { ...DEFAULT_USER_PREFERENCES.learning, ...preferences.learning },
-      };
-    } catch (error) {
-      logger.error("[preferences] Error loading customization preferences", { error });
-      return DEFAULT_USER_PREFERENCES;
     }
-  }),
+  ),
 
   // Update customization preferences
   updateCustomizationPreferences: publicProcedure
@@ -472,11 +483,21 @@ export const preferencesRouter = t.router({
           .optional(),
       })
     )
-    .mutation(async ({ input }): Promise<UserPreferences> => {
+    .mutation(async ({ input, ctx }): Promise<UserPreferences> => {
+      const db = ctx.db ?? defaultDb;
+      await ensurePreferencesExist(db);
+
       try {
-        const stored = localStorage.getItem("user.customization");
-        const current = stored
-          ? (JSON.parse(stored) as unknown as UserPreferences)
+        // Get current preferences from database
+        const rows = await db
+          .select()
+          .from(userPreferences)
+          .where(eq(userPreferences.id, "default"))
+          .limit(1);
+
+        const storedSettings = rows[0]?.customizationSettings;
+        const current = storedSettings
+          ? (JSON.parse(storedSettings) as unknown as UserPreferences)
           : DEFAULT_USER_PREFERENCES;
 
         const updated: UserPreferences = {
@@ -490,7 +511,15 @@ export const preferencesRouter = t.router({
           version: 1,
         };
 
-        localStorage.setItem("user.customization", JSON.stringify(updated));
+        // Save to database
+        await db
+          .update(userPreferences)
+          .set({
+            customizationSettings: JSON.stringify(updated),
+            updatedAt: Date.now(),
+          })
+          .where(eq(userPreferences.id, "default"));
+
         logger.info("[preferences] Customization preferences updated", { updates: input });
 
         return updated;
@@ -501,16 +530,28 @@ export const preferencesRouter = t.router({
     }),
 
   // Reset customization preferences
-  resetCustomizationPreferences: publicProcedure.mutation(async (): Promise<UserPreferences> => {
-    try {
-      localStorage.setItem("user.customization", JSON.stringify(DEFAULT_USER_PREFERENCES));
-      logger.info("[preferences] Customization preferences reset to defaults");
-      return DEFAULT_USER_PREFERENCES;
-    } catch (error) {
-      logger.error("[preferences] Error resetting customization preferences", { error });
-      throw error;
+  resetCustomizationPreferences: publicProcedure.mutation(
+    async ({ ctx }): Promise<UserPreferences> => {
+      const db = ctx.db ?? defaultDb;
+      await ensurePreferencesExist(db);
+
+      try {
+        await db
+          .update(userPreferences)
+          .set({
+            customizationSettings: JSON.stringify(DEFAULT_USER_PREFERENCES),
+            updatedAt: Date.now(),
+          })
+          .where(eq(userPreferences.id, "default"));
+
+        logger.info("[preferences] Customization preferences reset to defaults");
+        return DEFAULT_USER_PREFERENCES;
+      } catch (error) {
+        logger.error("[preferences] Error resetting customization preferences", { error });
+        throw error;
+      }
     }
-  }),
+  ),
 });
 
 // Router type not exported (unused)

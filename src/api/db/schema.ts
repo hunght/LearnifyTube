@@ -251,6 +251,7 @@ export const userPreferences = sqliteTable("user_preferences", {
   systemLanguage: text("system_language"), // Detected system language (read-only after first detect)
   downloadPath: text("download_path"), // Custom download folder path (null = use default)
   downloadPathBookmark: text("download_path_bookmark"), // Security Scoped Bookmark for macOS (base64)
+  customizationSettings: text("customization_settings"), // JSON string of user customization preferences (appearance, sidebar, player, learning)
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at"),
 });
