@@ -22,6 +22,13 @@
       "when": 1764034270277,
       "tag": "0002_slippery_hemingway",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1764924412813,
+      "tag": "0003_wealthy_carnage",
+      "breakpoints": true
     }
   ]
 }
