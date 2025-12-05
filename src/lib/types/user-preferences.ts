@@ -13,7 +13,8 @@ export type SidebarItem =
   | "history"
   | "my-words"
   | "storage"
-  | "logs";
+  | "logs"
+  | "settings";
 
 export type UISize = "compact" | "comfortable" | "spacious";
 export type FontScale = "small" | "normal" | "large" | "x-large";
@@ -69,6 +70,7 @@ export const DEFAULT_SIDEBAR_PREFERENCES: SidebarPreferences = {
     "my-words",
     "storage",
     "logs",
+    "settings",
   ],
   collapsed: false,
 };

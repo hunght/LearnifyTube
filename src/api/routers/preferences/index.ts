@@ -447,6 +447,7 @@ export const preferencesRouter = t.router({
                   "my-words",
                   "storage",
                   "logs",
+                  "settings",
                 ])
               )
               .optional(),

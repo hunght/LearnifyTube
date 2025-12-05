@@ -8,6 +8,7 @@ import {
   Languages,
   HardDrive,
   ScrollText,
+  Settings,
 } from "lucide-react";
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";

@@ -12,6 +12,7 @@ const SIDEBAR_ITEMS: { id: SidebarItem; label: string; description: string }[] =
   { id: "my-words", label: "My Words", description: "Saved vocabulary" },
   { id: "storage", label: "Storage", description: "Manage downloaded videos" },
   { id: "logs", label: "Logs", description: "Debug logs (dev mode)" },
+  { id: "settings", label: "Settings", description: "App configuration" },
 ];
 
 interface SidebarTabProps {
@@ -33,6 +34,7 @@ export function SidebarTab({ preferences, updatePreferences }: SidebarTabProps):
         <CardContent className="space-y-3">
           {SIDEBAR_ITEMS.map((item) => {
             const isVisible = preferences.sidebar.visibleItems.includes(item.id);
+            const isSettings = item.id === "settings";
 
             return (
               <div
@@ -42,11 +44,17 @@ export function SidebarTab({ preferences, updatePreferences }: SidebarTabProps):
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <Label className="font-medium">{item.label}</Label>
+                    {isSettings && (
+                      <Badge variant="outline" className="text-xs">
+                        Required
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground">{item.description}</p>
                 </div>
                 <Switch
                   checked={isVisible}
+                  disabled={isSettings}
                   onCheckedChange={(checked) => {
                     const newVisibleItems = checked
                       ? [...preferences.sidebar.visibleItems, item.id]
