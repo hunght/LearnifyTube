@@ -12,6 +12,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { getConfig } from "./config/env";
+import { useAppearancePreferences } from "./hooks/useAppearancePreferences";
 
 import { YtDlpInstaller } from "@/components/ytdlp-installer";
 import { FfmpegInstaller } from "@/components/ffmpeg-installer";
@@ -82,6 +83,9 @@ syncThemeWithLocal().catch((error) => logger.error("Failed to sync theme", error
 
 function MainApp(): React.JSX.Element {
   const { i18n } = useTranslation();
+
+  // Apply appearance preferences
+  useAppearancePreferences();
 
   useEffect(() => {
     updateAppLanguage(i18n);

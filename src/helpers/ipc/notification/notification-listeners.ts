@@ -5,7 +5,7 @@ import {
 } from "./notification-channels";
 
 import { safelyRegisterListener } from "../safelyRegisterListener";
-import { closeNotificationWindow } from "../../../main/windows/notification";
+import { getNotificationWindow } from "../../../main/windows/notification";
 import { sendNotificationToWindow } from "../../notification/notification-window-utils";
 import { logger } from "../../logger";
 
@@ -26,8 +26,14 @@ export const addNotificationEventListeners = (): void => {
   safelyRegisterListener(NOTIFICATION_CLOSE_CHANNEL, async () => {
     try {
       logger.debug("Closing notification window");
-      closeNotificationWindow();
-      logger.debug("Notification window close command sent");
+      const notificationWindow = getNotificationWindow();
+      if (notificationWindow && !notificationWindow.isDestroyed()) {
+        logger.debug("Notification window found, closing...");
+        notificationWindow.close();
+        logger.debug("Notification window close command sent");
+      } else {
+        logger.warn("Notification window not found or already destroyed");
+      }
     } catch (error) {
       logger.error("Failed to close notification window", { error });
       throw error; // Re-throw so the IPC call fails appropriately

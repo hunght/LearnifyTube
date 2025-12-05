@@ -46,7 +46,7 @@ function createClockWindow(): BrowserWindow {
     maximizable: false,
     closable: true,
     focusable: true,
-    show: false, // Start hidden
+    show: false,
     hasShadow: false, // Disable shadow for cleaner transparent look
     webPreferences: {
       preload,
@@ -78,26 +78,10 @@ function createClockWindow(): BrowserWindow {
 
   clockWindow.on("show", () => {
     isClockVisible = true;
-    // Ensure mouse events are enabled when showing
-    if (clockWindow && !clockWindow.isDestroyed()) {
-      try {
-        clockWindow.setIgnoreMouseEvents(false);
-      } catch (error) {
-        logger.error("Clock: Failed to enable mouse events on show", error);
-      }
-    }
   });
 
   clockWindow.on("hide", () => {
     isClockVisible = false;
-    // Ignore mouse events when hiding to prevent ghost window
-    if (clockWindow && !clockWindow.isDestroyed()) {
-      try {
-        clockWindow.setIgnoreMouseEvents(true);
-      } catch (error) {
-        logger.error("Clock: Failed to ignore mouse events on hide", error);
-      }
-    }
   });
 
   // Open DevTools for debugging in development
@@ -118,12 +102,6 @@ export function showClockWindow(): void {
 
   if (clockWindow) {
     logger.info("Showing clock window");
-    // Re-enable mouse events when showing
-    try {
-      clockWindow.setIgnoreMouseEvents(false);
-    } catch (error) {
-      logger.error("Clock: Failed to enable mouse events", error);
-    }
     clockWindow.show();
     clockWindow.focus();
     isClockVisible = true;
@@ -133,12 +111,6 @@ export function showClockWindow(): void {
 export function hideClockWindow(): void {
   if (clockWindow && !clockWindow.isDestroyed() && isClockVisible) {
     logger.info("Hiding clock window");
-    // Ignore mouse events before hiding to prevent ghost window
-    try {
-      clockWindow.setIgnoreMouseEvents(true);
-    } catch (error) {
-      logger.error("Clock: Failed to ignore mouse events", error);
-    }
     clockWindow.hide();
     isClockVisible = false;
   }
@@ -150,7 +122,6 @@ function isClockWindowVisible(): boolean {
   return isClockVisible && clockWindow !== null && !clockWindow.isDestroyed();
 }
 
-// eslint-disable-next-line import/no-unused-modules
 export function toggleClockWindow(): void {
   if (isClockWindowVisible()) {
     hideClockWindow();

@@ -37,7 +37,7 @@ export function createBlockingNotificationWindow(): BrowserWindow {
     maximizable: true,
     closable: true,
     focusable: true,
-    show: false, // Start hidden
+    show: false,
     webPreferences: {
       preload,
       contextIsolation: true,
@@ -78,14 +78,6 @@ export function createBlockingNotificationWindow(): BrowserWindow {
   // Handle close event to ensure proper cleanup
   blockingNotificationWindow.on("close", () => {
     logger.info("Blocking notification window close event triggered");
-    // Ignore mouse events before closing to prevent ghost window
-    if (blockingNotificationWindow && !blockingNotificationWindow.isDestroyed()) {
-      try {
-        blockingNotificationWindow.setIgnoreMouseEvents(true);
-      } catch (error) {
-        logger.error("Failed to ignore mouse events before close:", error);
-      }
-    }
     // Trigger close channel to handle response if needed
     blockingNotificationWindow?.webContents.send("trigger-close");
   });
@@ -109,12 +101,6 @@ export function createBlockingNotificationWindow(): BrowserWindow {
 export function closeBlockingNotificationWindow(): void {
   if (blockingNotificationWindow && !blockingNotificationWindow.isDestroyed()) {
     logger.info("Closing blocking notification window");
-    // Ignore mouse events before closing to prevent ghost window
-    try {
-      blockingNotificationWindow.setIgnoreMouseEvents(true);
-    } catch (error) {
-      logger.error("Failed to ignore mouse events before close:", error);
-    }
     blockingNotificationWindow.close();
     blockingNotificationWindow = null;
   }

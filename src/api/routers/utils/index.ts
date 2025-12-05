@@ -4,7 +4,6 @@ import { shell, net, app, dialog } from "electron";
 import {
   createNotificationWindow,
   closeNotificationWindow as closeWindow,
-  showNotificationWindow,
 } from "@/main/windows/notification";
 import { sendNotificationToWindow } from "@/helpers/notification/notification-window-utils";
 
@@ -741,11 +740,6 @@ export const utilsRouter = t.router({
             autoDismiss: input.autoDismiss ?? false, // Default is false
           });
           return { success };
-        }
-
-        // If no input, just show the empty window
-        if (window) {
-          showNotificationWindow();
         }
 
         return { success: !!window };

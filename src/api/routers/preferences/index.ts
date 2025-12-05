@@ -7,6 +7,8 @@ import { userPreferences } from "@/api/db/schema";
 import defaultDb, { type Database } from "@/api/db";
 import * as path from "path";
 import * as fs from "fs";
+import type { UserPreferences } from "@/lib/types/user-preferences";
+import { DEFAULT_USER_PREFERENCES } from "@/lib/types/user-preferences";
 
 // Zod schema for preferred languages JSON
 const languagesArraySchema = z.array(z.string());
@@ -391,6 +393,124 @@ export const preferencesRouter = t.router({
         };
       }
     }),
+
+  // Get customization preferences
+  getCustomizationPreferences: publicProcedure.query(async (): Promise<UserPreferences> => {
+    try {
+      const stored = localStorage.getItem("user.customization");
+      if (!stored) {
+        return DEFAULT_USER_PREFERENCES;
+      }
+
+      const preferences = JSON.parse(stored) as unknown as UserPreferences;
+
+      // Merge with defaults to ensure all fields exist
+      return {
+        ...DEFAULT_USER_PREFERENCES,
+        ...preferences,
+        sidebar: { ...DEFAULT_USER_PREFERENCES.sidebar, ...preferences.sidebar },
+        appearance: { ...DEFAULT_USER_PREFERENCES.appearance, ...preferences.appearance },
+        player: { ...DEFAULT_USER_PREFERENCES.player, ...preferences.player },
+        learning: { ...DEFAULT_USER_PREFERENCES.learning, ...preferences.learning },
+      };
+    } catch (error) {
+      logger.error("[preferences] Error loading customization preferences", { error });
+      return DEFAULT_USER_PREFERENCES;
+    }
+  }),
+
+  // Update customization preferences
+  updateCustomizationPreferences: publicProcedure
+    .input(
+      z.object({
+        sidebar: z
+          .object({
+            visibleItems: z
+              .array(
+                z.enum([
+                  "dashboard",
+                  "channels",
+                  "playlists",
+                  "subscriptions",
+                  "history",
+                  "my-words",
+                  "storage",
+                  "logs",
+                ])
+              )
+              .optional(),
+            collapsed: z.boolean().optional(),
+          })
+          .optional(),
+        appearance: z
+          .object({
+            themeMode: z.enum(["light", "dark"]).optional(),
+            fontScale: z.enum(["small", "normal", "large", "x-large"]).optional(),
+            fontFamily: z.enum(["default", "sans", "mono", "dyslexic"]).optional(),
+            uiSize: z.enum(["compact", "comfortable", "spacious"]).optional(),
+            showAnimations: z.enum(["none", "reduced", "normal", "enhanced"]).optional(),
+            reducedMotion: z.boolean().optional(),
+            showIcons: z.boolean().optional(),
+            roundedCorners: z.boolean().optional(),
+          })
+          .optional(),
+        player: z
+          .object({
+            autoPlay: z.boolean().optional(),
+            defaultSpeed: z.number().min(0.25).max(2).optional(),
+            defaultVolume: z.number().min(0).max(100).optional(),
+            showSubtitles: z.boolean().optional(),
+            subtitleLanguage: z.string().optional(),
+          })
+          .optional(),
+        learning: z
+          .object({
+            pauseOnNewWord: z.boolean().optional(),
+            highlightTranslations: z.boolean().optional(),
+            autoSaveWords: z.boolean().optional(),
+          })
+          .optional(),
+      })
+    )
+    .mutation(async ({ input }): Promise<UserPreferences> => {
+      try {
+        const stored = localStorage.getItem("user.customization");
+        const current = stored
+          ? (JSON.parse(stored) as unknown as UserPreferences)
+          : DEFAULT_USER_PREFERENCES;
+
+        const updated: UserPreferences = {
+          ...current,
+          ...input,
+          sidebar: { ...current.sidebar, ...input.sidebar },
+          appearance: { ...current.appearance, ...input.appearance },
+          player: { ...current.player, ...input.player },
+          learning: { ...current.learning, ...input.learning },
+          lastUpdated: Date.now(),
+          version: 1,
+        };
+
+        localStorage.setItem("user.customization", JSON.stringify(updated));
+        logger.info("[preferences] Customization preferences updated", { updates: input });
+
+        return updated;
+      } catch (error) {
+        logger.error("[preferences] Error updating customization preferences", { error, input });
+        throw error;
+      }
+    }),
+
+  // Reset customization preferences
+  resetCustomizationPreferences: publicProcedure.mutation(async (): Promise<UserPreferences> => {
+    try {
+      localStorage.setItem("user.customization", JSON.stringify(DEFAULT_USER_PREFERENCES));
+      logger.info("[preferences] Customization preferences reset to defaults");
+      return DEFAULT_USER_PREFERENCES;
+    } catch (error) {
+      logger.error("[preferences] Error resetting customization preferences", { error });
+      throw error;
+    }
+  }),
 });
 
 // Router type not exported (unused)

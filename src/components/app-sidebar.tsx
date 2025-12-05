@@ -12,6 +12,9 @@ import {
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { trpcClient } from "@/utils/trpc";
+import type { SidebarItem } from "@/lib/types/user-preferences";
 
 import {
   Sidebar,
@@ -50,63 +53,64 @@ const isDevelopment = (): boolean => {
   // return process.env.NODE_ENV !== "production";
 };
 
-// This is sample data.
-const getItems = (): Array<{
+// All available sidebar items
+const ALL_ITEMS: Array<{
+  id: SidebarItem;
   title: string;
   icon: React.ComponentType<{ className?: string }>;
   url: string;
   isActive?: boolean;
-}> => {
-  const baseItems = [
-    {
-      title: "Dashboard",
-      icon: Timer,
-      url: "/",
-      isActive: true,
-    },
-    {
-      title: "Channels",
-      icon: Users,
-      url: "/channels",
-    },
-    {
-      title: "Playlists",
-      icon: List,
-      url: "/playlists",
-    },
-    {
-      title: "Subscriptions",
-      icon: Clapperboard,
-      url: "/subscriptions",
-    },
-    {
-      title: "History",
-      icon: History,
-      url: "/history",
-    },
-    {
-      title: "My Words",
-      icon: Languages,
-      url: "/my-words",
-    },
-    {
-      title: "Storage",
-      icon: HardDrive,
-      url: "/storage",
-    },
-  ];
-
-  // Add log page in development mode
-  if (isDevelopment()) {
-    baseItems.push({
-      title: "Logs",
-      icon: ScrollText,
-      url: "/app-debug-logs",
-    });
-  }
-
-  return baseItems;
-};
+}> = [
+  {
+    id: "dashboard",
+    title: "Dashboard",
+    icon: Timer,
+    url: "/",
+    isActive: true,
+  },
+  {
+    id: "channels",
+    title: "Channels",
+    icon: Users,
+    url: "/channels",
+  },
+  {
+    id: "playlists",
+    title: "Playlists",
+    icon: List,
+    url: "/playlists",
+  },
+  {
+    id: "subscriptions",
+    title: "Subscriptions",
+    icon: Clapperboard,
+    url: "/subscriptions",
+  },
+  {
+    id: "history",
+    title: "History",
+    icon: History,
+    url: "/history",
+  },
+  {
+    id: "my-words",
+    title: "My Words",
+    icon: Languages,
+    url: "/my-words",
+  },
+  {
+    id: "storage",
+    title: "Storage",
+    icon: HardDrive,
+    url: "/storage",
+  },
+  {
+    id: "logs",
+    title: "Logs",
+    icon: ScrollText,
+    url: "/app-debug-logs",
+  },
+];
 
 export function AppSidebar({
   className,
@@ -115,7 +119,30 @@ export function AppSidebar({
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const matches = useMatches();
   const currentPath = useMemo(() => matches[matches.length - 1]?.pathname ?? "/", [matches]);
-  const items = useMemo(() => getItems(), []);
+
+  // Load user preferences
+  const { data: preferences } = useQuery({
+    queryKey: ["preferences.customization"],
+    queryFn: async () => {
+      return trpcClient.preferences.getCustomizationPreferences.query();
+    },
+  });
+
+  // Filter items based on user preferences
+  const items = useMemo(() => {
+    if (!preferences) {
+      // Show all items except logs if not in dev mode
+      return ALL_ITEMS.filter((item) => item.id !== "logs" || isDevelopment());
+    }
+
+    return ALL_ITEMS.filter((item) => {
+      // Always hide logs if not in dev mode
+      if (item.id === "logs" && !isDevelopment()) {
+        return false;
+      }
+      return preferences.sidebar.visibleItems.includes(item.id);
+    });
+  }, [preferences]);
 
   return (
     <Sidebar
