@@ -2,6 +2,8 @@
 
 LearnifyTube is the modern YouTube downloader for students, educators and lifelong learners who want to build a personal, distraction‑free learning library. Turn any playlist, lecture or tutorial into beautifully organized offline lessons that sync across your classroom, campus or commute.
 
+[![Watch the Demo](http://img.youtube.com/vi/pBTxg5TlHBA/0.jpg)](https://www.youtube.com/watch?v=pBTxg5TlHBA)
+
 ## Why Learners Love LearnifyTube
 - 🎓 **Education-Ready Downloads** – Grab videos, whole playlists, shorts, transcripts and subtitles in one click.
 - 🚀 **Speed & Reliability** – yt-dlp performance wrapped in a friendly UI built for macOS & Windows.
