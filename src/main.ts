@@ -586,7 +586,7 @@ app.whenReady().then(async () => {
             "script-src 'self' 'unsafe-inline' https://*.posthog.com; " +
             "connect-src 'self' http://127.0.0.1:* https://*.posthog.com; " +
             "img-src 'self' data: file: local-file: https://*.posthog.com https://i.ytimg.com https://*.ytimg.com https://yt3.ggpht.com; " +
-            "media-src 'self' file: local-file: http://127.0.0.1:*; " +
+            "media-src 'self' data: file: local-file: http://127.0.0.1:*; " +
             "style-src 'self' 'unsafe-inline'; " +
             "frame-src 'self';",
         ],

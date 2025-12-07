@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import { logger } from "@/helpers/logger";
 import { cn } from "@/lib/utils";
+import type { GeneratePodcastInput } from "@/api/routers/podcast";
 
 const PODCAST_STYLES = [
   { id: "Roast", label: "Roast", description: "Comedic take with witty sarcasm", icon: "🔥" },
@@ -39,21 +40,14 @@ export default function PodcastAnythingPage(): React.JSX.Element {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const generateMutation = useMutation({
-    mutationFn: async (input: {
-      content?: string;
-      fileData?: string;
-      type: "url" | "text" | "pdf";
-      style: string;
-      length: string;
-    }) => {
-      // @ts-ignore - TRPC types might lag slightly behind local file changes
+    mutationFn: async (input: GeneratePodcastInput) => {
       return await trpcClient.podcast.generatePodcast.mutate(input);
     },
     onSuccess: (data) => {
       setResult({
         script: data.script,
         audioData: data.audioData,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
         audioMimeType: data.audioMimeType,
       });
       toast.success("Podcast generated successfully!");
@@ -74,9 +68,10 @@ export default function PodcastAnythingPage(): React.JSX.Element {
 
       const reader = new FileReader();
       reader.onload = () => {
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-        const base64 = (reader.result as string).split(",")[1];
-        setSelectedFile({ name: file.name, base64 });
+        if (typeof reader.result === "string") {
+          const base64 = reader.result.split(",")[1];
+          setSelectedFile({ name: file.name, base64 });
+        }
         setInputText(""); // Clear text if file is selected
         setInputUrl(""); // Clear URL if file is selected
       };
