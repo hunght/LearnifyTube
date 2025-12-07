@@ -16,6 +16,7 @@ import { useAppearancePreferences } from "./hooks/useAppearancePreferences";
 
 import { YtDlpInstaller } from "@/components/ytdlp-installer";
 import { FfmpegInstaller } from "@/components/ffmpeg-installer";
+import { BinaryInitializationGuard } from "@/components/BinaryInitializationGuard";
 import { getAppVersion } from "./helpers/version";
 import { logger } from "./helpers/logger";
 import DownloadFolderAccessInitializer from "@/components/DownloadFolderAccessInitializer";
@@ -100,8 +101,10 @@ function App(): React.JSX.Element {
       <TooltipProvider>
         <YtDlpInstaller />
         <FfmpegInstaller />
-        <DownloadFolderAccessInitializer />
-        <MainApp />
+        <BinaryInitializationGuard>
+          <DownloadFolderAccessInitializer />
+          <MainApp />
+        </BinaryInitializationGuard>
       </TooltipProvider>
     </QueryClientProvider>
   );

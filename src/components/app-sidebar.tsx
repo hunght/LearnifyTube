@@ -106,6 +106,12 @@ const ALL_ITEMS: Array<{
     url: "/storage",
   },
   {
+    id: "settings",
+    title: "Settings",
+    icon: Settings,
+    url: "/settings",
+  },
+  {
     id: "logs",
     title: "Logs",
     icon: ScrollText,
