@@ -1,14 +1,21 @@
+import { useAtom } from "jotai";
+import { sidebarPreferencesAtom } from "@/atoms/sidebar-atoms";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import type { UserPreferences, SidebarItem } from "@/lib/types/user-preferences";
+import type { SidebarItem } from "@/lib/types/user-preferences";
 
 const SIDEBAR_ITEMS: { id: SidebarItem; label: string; description: string }[] = [
   { id: "dashboard", label: "Dashboard", description: "Overview and quick stats" },
   { id: "channels", label: "Channels", description: "Browse YouTube channels" },
   { id: "playlists", label: "Playlists", description: "Manage playlists" },
   { id: "subscriptions", label: "Subscriptions", description: "Your subscribed channels" },
+  {
+    id: "podcast-anything",
+    label: "Podcast Generator",
+    description: "Generate podcasts from content",
+  },
   { id: "history", label: "History", description: "Watch history" },
   { id: "my-words", label: "My Words", description: "Saved vocabulary" },
   { id: "storage", label: "Storage", description: "Manage downloaded videos" },
@@ -16,12 +23,9 @@ const SIDEBAR_ITEMS: { id: SidebarItem; label: string; description: string }[] =
   { id: "settings", label: "Settings", description: "App configuration" },
 ];
 
-interface SidebarTabProps {
-  preferences: UserPreferences;
-  updatePreferences: (updates: { sidebar?: Partial<UserPreferences["sidebar"]> }) => Promise<void>;
-}
+export function SidebarTab(): React.JSX.Element {
+  const [preferences, setPreferences] = useAtom(sidebarPreferencesAtom);
 
-export function SidebarTab({ preferences, updatePreferences }: SidebarTabProps): React.JSX.Element {
   return (
     <div className="space-y-4">
       <Card>
@@ -34,7 +38,7 @@ export function SidebarTab({ preferences, updatePreferences }: SidebarTabProps):
         </CardHeader>
         <CardContent className="space-y-3">
           {SIDEBAR_ITEMS.map((item) => {
-            const isVisible = preferences.sidebar.visibleItems.includes(item.id);
+            const isVisible = preferences.visibleItems.includes(item.id);
             const isSettings = item.id === "settings";
 
             return (
@@ -58,11 +62,12 @@ export function SidebarTab({ preferences, updatePreferences }: SidebarTabProps):
                   disabled={isSettings}
                   onCheckedChange={(checked) => {
                     const newVisibleItems = checked
-                      ? [...preferences.sidebar.visibleItems, item.id]
-                      : preferences.sidebar.visibleItems.filter((id) => id !== item.id);
+                      ? [...preferences.visibleItems, item.id]
+                      : preferences.visibleItems.filter((id) => id !== item.id);
 
-                    updatePreferences({
-                      sidebar: { visibleItems: newVisibleItems },
+                    setPreferences({
+                      ...preferences,
+                      visibleItems: newVisibleItems,
                     });
                   }}
                 />
@@ -86,10 +91,11 @@ export function SidebarTab({ preferences, updatePreferences }: SidebarTabProps):
               </p>
             </div>
             <Switch
-              checked={preferences.sidebar.collapsed}
+              checked={preferences.collapsed}
               onCheckedChange={(checked) =>
-                updatePreferences({
-                  sidebar: { collapsed: checked },
+                setPreferences({
+                  ...preferences,
+                  collapsed: checked,
                 })
               }
             />

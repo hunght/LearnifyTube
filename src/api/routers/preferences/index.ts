@@ -395,40 +395,40 @@ export const preferencesRouter = t.router({
     }),
 
   // Get customization preferences
-  getCustomizationPreferences: publicProcedure.query(
-    async ({ ctx }): Promise<UserPreferences> => {
-      const db = ctx.db ?? defaultDb;
-      await ensurePreferencesExist(db);
+  getCustomizationPreferences: publicProcedure.query(async ({ ctx }): Promise<UserPreferences> => {
+    const db = ctx.db ?? defaultDb;
+    await ensurePreferencesExist(db);
 
-      try {
-        const rows = await db
-          .select()
-          .from(userPreferences)
-          .where(eq(userPreferences.id, "default"))
-          .limit(1);
+    try {
+      const rows = await db
+        .select()
+        .from(userPreferences)
+        .where(eq(userPreferences.id, "default"))
+        .limit(1);
 
-        if (rows.length === 0 || !rows[0].customizationSettings) {
-          return DEFAULT_USER_PREFERENCES;
-        }
-
-        const stored = JSON.parse(rows[0].customizationSettings);
-        const preferences = stored as unknown as UserPreferences;
-
-        // Merge with defaults to ensure all fields exist
-        return {
-          ...DEFAULT_USER_PREFERENCES,
-          ...preferences,
-          sidebar: { ...DEFAULT_USER_PREFERENCES.sidebar, ...preferences.sidebar },
-          appearance: { ...DEFAULT_USER_PREFERENCES.appearance, ...preferences.appearance },
-          player: { ...DEFAULT_USER_PREFERENCES.player, ...preferences.player },
-          learning: { ...DEFAULT_USER_PREFERENCES.learning, ...preferences.learning },
-        };
-      } catch (error) {
-        logger.error("[preferences] Error loading customization preferences", { error });
+      if (rows.length === 0 || !rows[0].customizationSettings) {
         return DEFAULT_USER_PREFERENCES;
       }
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const stored = JSON.parse(rows[0].customizationSettings);
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      const preferences = stored as unknown as UserPreferences;
+
+      // Merge with defaults to ensure all fields exist
+      return {
+        ...DEFAULT_USER_PREFERENCES,
+        ...preferences,
+        sidebar: { ...DEFAULT_USER_PREFERENCES.sidebar, ...preferences.sidebar },
+        appearance: { ...DEFAULT_USER_PREFERENCES.appearance, ...preferences.appearance },
+        player: { ...DEFAULT_USER_PREFERENCES.player, ...preferences.player },
+        learning: { ...DEFAULT_USER_PREFERENCES.learning, ...preferences.learning },
+      };
+    } catch (error) {
+      logger.error("[preferences] Error loading customization preferences", { error });
+      return DEFAULT_USER_PREFERENCES;
     }
-  ),
+  }),
 
   // Update customization preferences
   updateCustomizationPreferences: publicProcedure
@@ -446,6 +446,7 @@ export const preferencesRouter = t.router({
                   "history",
                   "my-words",
                   "storage",
+                  "podcast-anything",
                   "logs",
                   "settings",
                 ])
@@ -498,7 +499,8 @@ export const preferencesRouter = t.router({
 
         const storedSettings = rows[0]?.customizationSettings;
         const current = storedSettings
-          ? (JSON.parse(storedSettings) as unknown as UserPreferences)
+          ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+            (JSON.parse(storedSettings) as unknown as UserPreferences)
           : DEFAULT_USER_PREFERENCES;
 
         const updated: UserPreferences = {

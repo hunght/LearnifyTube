@@ -1,3 +1,4 @@
+/* eslint-disable import/no-unused-modules */
 /**
  * User Preferences System for LearnifyTube
  * Allows users to customize their learning experience
@@ -13,6 +14,7 @@ export type SidebarItem =
   | "history"
   | "my-words"
   | "storage"
+  | "podcast-anything"
   | "logs"
   | "settings";
 
@@ -69,6 +71,7 @@ export const DEFAULT_SIDEBAR_PREFERENCES: SidebarPreferences = {
     "history",
     "my-words",
     "storage",
+    "podcast-anything",
     "logs",
     "settings",
   ],

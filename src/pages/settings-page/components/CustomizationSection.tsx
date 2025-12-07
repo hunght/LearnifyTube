@@ -33,7 +33,7 @@ export function CustomizationSection(): React.JSX.Element {
   };
 
   const resetPreferences = async (): Promise<void> => {
-    if (confirm("Are you sure you want to reset all customization settings to defaults?")) {
+    if (window.confirm("Are you sure you want to reset all customization settings to defaults?")) {
       await trpcClient.preferences.resetCustomizationPreferences.mutate();
       queryClient.invalidateQueries({ queryKey: ["preferences.customization"] });
     }
@@ -87,7 +87,7 @@ export function CustomizationSection(): React.JSX.Element {
         </TabsContent>
 
         <TabsContent value="sidebar">
-          <SidebarTab preferences={preferences} updatePreferences={updatePreferences} />
+          <SidebarTab />
         </TabsContent>
 
         <TabsContent value="player">

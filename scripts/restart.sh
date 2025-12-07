@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Restart yt-dlp-gui project cleanly:
+# Restart book-manager project cleanly:
 # - Kills related Electron/Vite processes
 # - Clears Vite caches
 # - Optionally starts the dev app (with --start)
@@ -26,7 +26,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-APP_NAME="yt-dlp-gui"
+APP_NAME="book-manager"
 
 echo -e "${BLUE}🔍 Looking for running processes...${NC}"
 

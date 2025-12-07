@@ -11,6 +11,7 @@ import SubscriptionsPage from "@/pages/subscriptions/SubscriptionsPage";
 import HistoryPage from "@/pages/history/HistoryPage";
 import MyWordsPage from "@/pages/my-words/MyWordsPage";
 import StorageManagerPage from "@/pages/storage/StorageManagerPage";
+import PodcastAnythingPage from "@/pages/podcast-anything/PodcastAnythingPage";
 import LogPage from "@/pages/app-debug-logs/index";
 
 // Check if we're in development mode
@@ -120,6 +121,12 @@ const StorageRoute = createRoute({
   component: StorageManagerPage,
 });
 
+const PodcastAnythingRoute = createRoute({
+  getParentRoute: () => RootRoute,
+  path: "/podcast-anything",
+  component: PodcastAnythingPage,
+});
+
 const baseRoutes = [
   DashboardRoute,
   SettingsRoute,
@@ -132,6 +139,7 @@ const baseRoutes = [
   HistoryRoute,
   MyWordsRoute,
   StorageRoute,
+  PodcastAnythingRoute,
 ];
 
 // Add log route only in development mode

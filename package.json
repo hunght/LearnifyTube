@@ -126,6 +126,7 @@
   },
   "dependencies": {
     "@auth/core": "^0.36.0",
+    "@google/generative-ai": "^0.24.1",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^3.10.0",
     "@libsql/client": "^0.15.14",

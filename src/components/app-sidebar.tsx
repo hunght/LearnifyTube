@@ -9,12 +9,13 @@ import {
   HardDrive,
   ScrollText,
   Settings,
+  Mic,
 } from "lucide-react";
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
-import { trpcClient } from "@/utils/trpc";
+import { useAtomValue } from "jotai";
+import { sidebarPreferencesAtom } from "@/atoms/sidebar-atoms";
 import type { SidebarItem } from "@/lib/types/user-preferences";
 
 import {
@@ -33,25 +34,24 @@ import { MinimizedPlayer } from "@/components/MinimizedPlayer";
 // Check if we're in development mode
 // In Electron renderer, check window.location - if it's http(s)://, we're in dev mode
 const isDevelopment = (): boolean => {
-  return true;
-  // if (typeof window === "undefined") {
-  //   return false;
-  // }
+  if (typeof window === "undefined") {
+    return false;
+  }
 
-  // // If loading from http://localhost (dev server), we're in development
-  // const href = window.location.href;
-  // if (href.startsWith("http://") || href.startsWith("https://")) {
-  //   return true;
-  // }
+  // If loading from http://localhost (dev server), we're in development
+  const href = window.location.href;
+  if (href.startsWith("http://") || href.startsWith("https://")) {
+    return true;
+  }
 
-  // // Fallback: check for Electron Forge dev server URL global
-  // // @ts-ignore - MAIN_WINDOW_VITE_DEV_SERVER_URL is a global defined by Electron Forge
-  // if (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined" && MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-  //   return true;
-  // }
+  // Fallback: check for Electron Forge dev server URL global
+  // @ts-ignore - MAIN_WINDOW_VITE_DEV_SERVER_URL is a global defined by Electron Forge
+  if (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined" && MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    return true;
+  }
 
-  // // Last fallback: if NODE_ENV is not explicitly production, assume development
-  // return process.env.NODE_ENV !== "production";
+  // Last fallback: if NODE_ENV is not explicitly production, assume development
+  return process.env.NODE_ENV !== "production";
 };
 
 // All available sidebar items
@@ -86,6 +86,12 @@ const ALL_ITEMS: Array<{
     title: "Subscriptions",
     icon: Clapperboard,
     url: "/subscriptions",
+  },
+  {
+    id: "podcast-anything",
+    title: "Podcast Generator",
+    icon: Mic,
+    url: "/podcast-anything",
   },
   {
     id: "history",
@@ -127,29 +133,19 @@ export function AppSidebar({
   const matches = useMatches();
   const currentPath = useMemo(() => matches[matches.length - 1]?.pathname ?? "/", [matches]);
 
-  // Load user preferences
-  const { data: preferences } = useQuery({
-    queryKey: ["preferences.customization"],
-    queryFn: async () => {
-      return trpcClient.preferences.getCustomizationPreferences.query();
-    },
-  });
+  // Load user preferences from atom
+  const sidebarPreferences = useAtomValue(sidebarPreferencesAtom);
 
   // Filter items based on user preferences
   const items = useMemo(() => {
-    if (!preferences) {
-      // Show all items except logs if not in dev mode
-      return ALL_ITEMS.filter((item) => item.id !== "logs" || isDevelopment());
-    }
-
     return ALL_ITEMS.filter((item) => {
       // Always hide logs if not in dev mode
       if (item.id === "logs" && !isDevelopment()) {
         return false;
       }
-      return preferences.sidebar.visibleItems.includes(item.id);
+      return sidebarPreferences.visibleItems.includes(item.id);
     });
-  }, [preferences]);
+  }, [sidebarPreferences.visibleItems]);
 
   return (
     <Sidebar
@@ -162,7 +158,7 @@ export function AppSidebar({
     >
       <SidebarHeader className="px-3 py-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-primary dark:text-white">LearnifyTube</span>
+          <span className="text-sm font-semibold text-primary dark:text-white">Book Manager</span>
 
           <SidebarThemeToggle variant="icon" />
         </div>
