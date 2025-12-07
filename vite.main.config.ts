@@ -1,13 +1,19 @@
 import type { ConfigEnv, UserConfig } from "vite";
-import { defineConfig, mergeConfig } from "vite";
+import { defineConfig, mergeConfig, loadEnv } from "vite";
 import { getBuildConfig, getBuildDefine, external, pluginHotRestart } from "./vite.base.config";
 import path from "path";
 
 // https://vitejs.dev/config
 export default defineConfig((env) => {
-  const forgeEnv = env as ConfigEnv<"build">;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const forgeEnv = env as any;
   const { forgeConfigSelf } = forgeEnv;
   const define = getBuildDefine(forgeEnv);
+
+  // Load environment variables
+  const loadedEnv = loadEnv(forgeEnv.mode, process.cwd(), "");
+  define["process.env.GEMINI_API_KEY"] = JSON.stringify(loadedEnv.GEMINI_API_KEY);
+
   const config: UserConfig = {
     build: {
       lib: {
