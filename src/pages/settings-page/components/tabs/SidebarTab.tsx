@@ -1,6 +1,7 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import type { UserPreferences, SidebarItem } from "@/lib/types/user-preferences";
 
 const SIDEBAR_ITEMS: { id: SidebarItem; label: string; description: string }[] = [

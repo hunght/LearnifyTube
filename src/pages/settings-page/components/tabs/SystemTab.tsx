@@ -217,9 +217,7 @@ export function SystemTab(): React.JSX.Element {
             <Languages className="h-5 w-5" />
             Language Preferences
           </CardTitle>
-          <CardDescription>
-            Manage which languages appear in transcript selectors
-          </CardDescription>
+          <CardDescription>Manage which languages appear in transcript selectors</CardDescription>
         </CardHeader>
         <CardContent>
           <LanguagePreferencesSection />
@@ -228,4 +226,3 @@ export function SystemTab(): React.JSX.Element {
     </div>
   );
 }
-
