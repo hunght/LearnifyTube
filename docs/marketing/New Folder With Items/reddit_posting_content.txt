@@ -1,0 +1,40 @@
+# REDDIT POSTING CONTENT (Ready to Copy/Paste)
+
+=============================================================================
+PART 1: THE "FOUNDER STORY" (High Value Post)
+=============================================================================
+**Target Subreddit:** r/electronjs OR r/webdev
+**Title:** I spent 3 weeks fighting macOS permissions just to stream a video file (Electron + Drizzle)
+
+**Body:**
+
+I honestly thought building a local video player would be simple. "It's just `HTML5 <video>`, right?"
+
+I was wrong.
+
+I’m building an open-source app (LearnifyTube) to organize my 500+ "Watch Later" YouTube videos. The goal was simple: download them via `yt-dlp` and play them offline.
+
+**The "Ghost" Bug** 👻
+I started getting reports that after closing the video player, usage of the desktop underneath was blocked. It was like a transparent window was stuck there.
+Turns out, my "hidden" background worker (which I used to run the ffmpeg stream) wasn't fully detaching/closing in specific macOS versions. I had to manually implement a `myWindow.webContents.openDevTools({ mode: 'detach' })` hack just to SEE what was happening.
+
+**The Permissions Nightmare** 🔐
+Then came macOS Sandbox.
+If you try to stream a file from `Downloads` into a sandboxed Electron app, you get the dreaded `DEMUXER_ERROR_COULD_NOT_OPEN`.
+I didn't want to disable the sandbox (security risk).
+
+**The Solution:**
+I ended up implementing a "streaming server" inside the main process using Node streams, bypassing the renderer's file access limitations entirely.
+It’s messy, but it works.
+
+If anyone else is fighting Electron + Local File Permissions, I referenced my implementation here:
+https://github.com/hunght/LearnifyTube
+
+(Roast my code if you want, I'm primarily a React dev getting humbled by the Main Process).
+
+#electron #opensource #buildinpublic
+
+=============================================================================
+PART 2: PREVIOUS KARMA COMMENTS (If not posted)
+=============================================================================
+(See previous drafts for r/selfhosted and r/DataHoarder if needed)
