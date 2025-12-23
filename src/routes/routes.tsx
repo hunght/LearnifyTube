@@ -10,6 +10,7 @@ import PlaylistsPage from "@/pages/playlists/PlaylistsPage";
 import SubscriptionsPage from "@/pages/subscriptions/SubscriptionsPage";
 import HistoryPage from "@/pages/history/HistoryPage";
 import MyWordsPage from "@/pages/my-words/MyWordsPage";
+import FlashcardsPage from "@/pages/learn/FlashcardsPage";
 import StorageManagerPage from "@/pages/storage/StorageManagerPage";
 import PodcastAnythingPage from "@/pages/podcast-anything/PodcastAnythingPage";
 import LogPage from "@/pages/app-debug-logs/index";
@@ -17,25 +18,25 @@ import LogPage from "@/pages/app-debug-logs/index";
 // Check if we're in development mode
 // In Electron renderer, check window.location - if it's http(s)://, we're in dev mode
 const isDevelopment = (): boolean => {
-  // if (typeof window === "undefined") {
-  //   return false;
-  // }
+  if (typeof window === "undefined") {
+    return false;
+  }
 
-  // // If loading from http://localhost (dev server), we're in development
-  // const href = window.location.href;
-  // if (href.startsWith("http://") || href.startsWith("https://")) {
-  //   return true;
-  // }
+  // If loading from http://localhost (dev server), we're in development
+  const href = window.location.href;
+  if (href.startsWith("http://") || href.startsWith("https://")) {
+    return true;
+  }
 
-  // // Fallback: check for Electron Forge dev server URL global
-  // // @ts-ignore - MAIN_WINDOW_VITE_DEV_SERVER_URL is a global defined by Electron Forge
-  // if (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined" && MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-  //   return true;
-  // }
+  // Fallback: check for Electron Forge dev server URL global
+  // @ts-ignore - MAIN_WINDOW_VITE_DEV_SERVER_URL is a global defined by Electron Forge
+  if (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== "undefined" && MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    return true;
+  }
 
-  // // Last fallback: if NODE_ENV is not explicitly production, assume development
-  // return process.env.NODE_ENV !== "production";
-  return true;
+  // Last fallback: if NODE_ENV is not explicitly production, assume development
+  return process.env.NODE_ENV !== "production";
+
 };
 
 const DashboardRoute = createRoute({
@@ -115,6 +116,12 @@ const MyWordsRoute = createRoute({
   component: MyWordsPage,
 });
 
+const FlashcardsRoute = createRoute({
+  getParentRoute: () => RootRoute,
+  path: "/flashcards",
+  component: FlashcardsPage,
+});
+
 const StorageRoute = createRoute({
   getParentRoute: () => RootRoute,
   path: "/storage",
@@ -138,6 +145,7 @@ const baseRoutes = [
   SubscriptionsRoute,
   HistoryRoute,
   MyWordsRoute,
+  FlashcardsRoute,
   StorageRoute,
   PodcastAnythingRoute,
 ];
@@ -145,13 +153,13 @@ const baseRoutes = [
 // Add log route only in development mode
 const routes = isDevelopment()
   ? [
-      ...baseRoutes,
-      createRoute({
-        getParentRoute: () => RootRoute,
-        path: "/app-debug-logs",
-        component: LogPage,
-      }),
-    ]
+    ...baseRoutes,
+    createRoute({
+      getParentRoute: () => RootRoute,
+      path: "/app-debug-logs",
+      component: LogPage,
+    }),
+  ]
   : baseRoutes;
 
 export const rootTree = RootRoute.addChildren(routes);

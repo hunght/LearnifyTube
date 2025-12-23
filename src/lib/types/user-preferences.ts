@@ -13,6 +13,7 @@ export type SidebarItem =
   | "subscriptions"
   | "history"
   | "my-words"
+  | "flashcards"
   | "storage"
   | "podcast-anything"
   | "logs"
@@ -70,6 +71,7 @@ export const DEFAULT_SIDEBAR_PREFERENCES: SidebarPreferences = {
     "subscriptions",
     "history",
     "my-words",
+    "flashcards",
     "storage",
     "podcast-anything",
     "logs",

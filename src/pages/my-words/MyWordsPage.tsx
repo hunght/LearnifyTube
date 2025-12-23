@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,13 +18,16 @@ import {
   ChevronUp,
   Video,
   BookmarkCheck,
+  Brain,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { useNavigate } from "@tanstack/react-router";
 import Thumbnail from "@/components/Thumbnail";
 
 export default function MyWordsPage(): React.JSX.Element {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [expandedTranslations, setExpandedTranslations] = useState<Set<string>>(new Set());
@@ -74,6 +77,53 @@ export default function MyWordsPage(): React.JSX.Element {
       refetchSavedWords();
     } catch (error) {
       // Error handling via UI toast
+    }
+  };
+
+  const createFlashcardMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return await trpcClient.flashcards.create.mutate(data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Flashcard Created",
+        description: "Word added to your flashcard deck.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to create flashcard: " + error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAddToFlashcard = async (translation: any) => {
+    try {
+      // 1. Try to find context for this word
+      const contexts = await trpcClient.translation.getTranslationContexts.query({
+        translationId: translation.id,
+      });
+
+      const bestContext = contexts && contexts.length > 0 ? contexts[0] : null;
+
+      createFlashcardMutation.mutate({
+        front: translation.sourceText,
+        back: translation.translatedText,
+        // Optional context data
+        videoId: bestContext?.videoId,
+        context: bestContext?.contextText || undefined,
+        timestamp: bestContext?.timestampSeconds,
+        // Audio URL if we had it (translation structure might need update later for TTS)
+      });
+    } catch (error) {
+      console.error("Failed to prepare flashcard", error);
+      toast({
+        title: "Error",
+        description: "Could not prepare flashcard data.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -401,7 +451,7 @@ export default function MyWordsPage(): React.JSX.Element {
                               {formatDistanceToNow(
                                 new Date(
                                   "savedAt" in translation &&
-                                  typeof translation.savedAt === "number"
+                                    typeof translation.savedAt === "number"
                                     ? translation.savedAt
                                     : translation.createdAt
                                 ),
@@ -454,6 +504,18 @@ export default function MyWordsPage(): React.JSX.Element {
                         title="Remove from My Words (keeps in cache)"
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+
+                      {/* Add to Flashcard */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleAddToFlashcard(translation)}
+                        className="opacity-0 transition-opacity group-hover:opacity-100"
+                        title="Add to Flashcards"
+                        disabled={createFlashcardMutation.isPending}
+                      >
+                        <Brain className="h-4 w-4 text-primary" />
                       </Button>
                     </div>
                   </CardContent>

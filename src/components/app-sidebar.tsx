@@ -10,6 +10,7 @@ import {
   ScrollText,
   Settings,
   Mic,
+  Brain,
 } from "lucide-react";
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";
@@ -62,68 +63,74 @@ const ALL_ITEMS: Array<{
   url: string;
   isActive?: boolean;
 }> = [
-  {
-    id: "dashboard",
-    title: "Dashboard",
-    icon: Timer,
-    url: "/",
-    isActive: true,
-  },
-  {
-    id: "channels",
-    title: "Channels",
-    icon: Users,
-    url: "/channels",
-  },
-  {
-    id: "playlists",
-    title: "Playlists",
-    icon: List,
-    url: "/playlists",
-  },
-  {
-    id: "subscriptions",
-    title: "Subscriptions",
-    icon: Clapperboard,
-    url: "/subscriptions",
-  },
-  {
-    id: "podcast-anything",
-    title: "Podcast Generator",
-    icon: Mic,
-    url: "/podcast-anything",
-  },
-  {
-    id: "history",
-    title: "History",
-    icon: History,
-    url: "/history",
-  },
-  {
-    id: "my-words",
-    title: "My Words",
-    icon: Languages,
-    url: "/my-words",
-  },
-  {
-    id: "storage",
-    title: "Storage",
-    icon: HardDrive,
-    url: "/storage",
-  },
-  {
-    id: "settings",
-    title: "Settings",
-    icon: Settings,
-    url: "/settings",
-  },
-  {
-    id: "logs",
-    title: "Logs",
-    icon: ScrollText,
-    url: "/app-debug-logs",
-  },
-];
+    {
+      id: "dashboard",
+      title: "Dashboard",
+      icon: Timer,
+      url: "/",
+      isActive: true,
+    },
+    {
+      id: "channels",
+      title: "Channels",
+      icon: Users,
+      url: "/channels",
+    },
+    {
+      id: "playlists",
+      title: "Playlists",
+      icon: List,
+      url: "/playlists",
+    },
+    {
+      id: "subscriptions",
+      title: "Subscriptions",
+      icon: Clapperboard,
+      url: "/subscriptions",
+    },
+    {
+      id: "podcast-anything",
+      title: "Podcast Generator",
+      icon: Mic,
+      url: "/podcast-anything",
+    },
+    {
+      id: "history",
+      title: "History",
+      icon: History,
+      url: "/history",
+    },
+    {
+      id: "my-words",
+      title: "My Words",
+      icon: Languages,
+      url: "/my-words",
+    },
+    {
+      id: "flashcards",
+      title: "Flashcards",
+      icon: Brain,
+      url: "/flashcards",
+    },
+    {
+      id: "storage",
+      title: "Storage",
+      icon: HardDrive,
+      url: "/storage",
+    },
+    {
+      id: "settings",
+      title: "Settings",
+      icon: Settings,
+      url: "/settings",
+    },
+    {
+      id: "logs",
+      title: "Logs",
+      icon: ScrollText,
+      url: "/app-debug-logs",
+    },
+  ];
 
 export function AppSidebar({
   className,
@@ -142,6 +149,10 @@ export function AppSidebar({
       // Always hide logs if not in dev mode
       if (item.id === "logs" && !isDevelopment()) {
         return false;
+      }
+      // Special logic: Flashcards visibility is tied to "my-words" preference
+      if (item.id === "flashcards") {
+        return sidebarPreferences.visibleItems.includes("my-words");
       }
       return sidebarPreferences.visibleItems.includes(item.id);
     });
@@ -177,7 +188,7 @@ export function AppSidebar({
                   "hover:bg-accent/10 hover:text-primary",
                   "dark:hover:bg-accent/5 dark:hover:text-accent",
                   activeItem === item.title &&
-                    "bg-accent/10 text-primary dark:bg-accent/5 dark:text-white"
+                  "bg-accent/10 text-primary dark:bg-accent/5 dark:text-white"
                 )}
               >
                 <Link
