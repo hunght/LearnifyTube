@@ -32,7 +32,7 @@ export function AppRightSidebar({
     (content === "annotations" || content === "ai-summary" || content === "quiz");
 
   const sidebarContent = (
-    <div className="flex h-full flex-col p-4">
+    <div className="flex h-full flex-col p-4 pt-12">
       {showVideoSidebar ? (
         <>
           {/* Tab navigation for video-related sidebars */}

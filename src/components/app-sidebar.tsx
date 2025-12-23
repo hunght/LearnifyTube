@@ -161,15 +161,15 @@ export function AppSidebar({
       )}
       {...props}
     >
-      <SidebarHeader className="px-3 py-2">
+      <SidebarHeader className="px-3 py-2 pt-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-primary dark:text-white">Book Manager</span>
+          <span className="text-sm font-semibold text-primary dark:text-white">LearnifyTube</span>
 
           <SidebarThemeToggle variant="icon" />
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="pt-7">
+      <SidebarContent>
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
