@@ -4,7 +4,15 @@ import { trpcClient } from "@/utils/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Sparkles, RefreshCw, Clock, ChevronRight } from "lucide-react";
+import {
+  Loader2,
+  Sparkles,
+  RefreshCw,
+  Clock,
+  ChevronRight,
+  BookmarkPlus,
+  Check,
+} from "lucide-react";
 
 interface AISummarySidebarProps {
   videoId: string;
@@ -18,11 +26,16 @@ interface Section {
   startTime?: string;
 }
 
+interface VocabularyItem {
+  word: string;
+  definition: string;
+}
+
 interface DetailedSummary {
   overview: string;
   sections: Section[];
   keyTakeaways: string[];
-  vocabulary: string[];
+  vocabulary: string[] | VocabularyItem[]; // Support both old and new formats
 }
 
 type SummaryType = "quick" | "detailed" | "key_points";
@@ -62,8 +75,16 @@ export function AISummarySidebar({
 
   // Generate summary mutation
   const summarizeMutation = useMutation({
-    mutationFn: async (type: SummaryType) => {
-      return await trpcClient.ai.summarize.mutate({ videoId, type });
+    mutationFn: async ({
+      videoId,
+      type,
+      forceRegenerate,
+    }: {
+      videoId: string;
+      type: SummaryType;
+      forceRegenerate?: boolean;
+    }) => {
+      return await trpcClient.ai.summarize.mutate({ videoId, type, forceRegenerate });
     },
     onSuccess: (data) => {
       // Update the query cache with the new result
@@ -72,7 +93,9 @@ export function AISummarySidebar({
   });
 
   const handleGenerate = (): void => {
-    summarizeMutation.mutate(summaryType);
+    // If there's already a summary, this is a regenerate request
+    const forceRegenerate = summaryData?.success === true;
+    summarizeMutation.mutate({ videoId, type: summaryType, forceRegenerate });
   };
 
   const seekToTimestamp = (timestamp: string): void => {
@@ -173,6 +196,114 @@ export function AISummarySidebar({
   );
 }
 
+// Helper function to normalize vocabulary to new format
+function normalizeVocabulary(vocabulary: string[] | VocabularyItem[]): VocabularyItem[] {
+  if (!vocabulary || vocabulary.length === 0) return [];
+
+  // Check if it's the old format (array of strings)
+  const firstItem = vocabulary[0];
+  if (typeof firstItem === "string") {
+    return vocabulary
+      .map((word) => {
+        if (typeof word === "string") {
+          return {
+            word,
+            definition: "No definition available (regenerate summary for definitions)",
+          };
+        }
+        return null;
+      })
+      .filter((item): item is VocabularyItem => item !== null);
+  }
+
+  // Type guard: check if it's VocabularyItem[]
+  if (firstItem && typeof firstItem === "object" && "word" in firstItem) {
+    return vocabulary.filter((v): v is VocabularyItem => {
+      if (v === null || typeof v !== "object") {
+        return false;
+      }
+      if (!("word" in v)) {
+        return false;
+      }
+      // Use type narrowing with 'in' operator
+      const wordValue = "word" in v ? v.word : undefined;
+      return typeof wordValue === "string";
+    });
+  }
+
+  return [];
+}
+
+// Vocabulary Card Component
+function VocabularyCard({ item }: { item: VocabularyItem }): React.JSX.Element {
+  const [isSaved, setIsSaved] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const handleSaveToMyWords = async (): Promise<void> => {
+    setIsLoading(true);
+    try {
+      // First, translate the word to get it into the translation cache
+      // We'll use the user's preferred language from preferences
+      const translateResult = await trpcClient.utils.translateText.query({
+        videoId: "", // Vocabulary not tied to a specific video
+        text: item.word,
+        timestampSeconds: 0, // Not tied to a specific timestamp
+        targetLang: "auto",
+        sourceLang: "auto",
+      });
+
+      if (translateResult.success && translateResult.translationId) {
+        // Now save to My Words with the definition as notes
+        await trpcClient.translation.saveWord.mutate({
+          translationId: translateResult.translationId,
+          notes: item.definition, // Save the definition as notes
+        });
+
+        setIsSaved(true);
+      }
+    } catch (error) {
+      // Silently fail - error handling can be added via toast if needed
+      // Error is already handled by the mutation's onError if needed
+      void error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 space-y-1">
+          <h4 className="text-sm font-semibold">{item.word}</h4>
+          <p className="text-xs leading-relaxed text-muted-foreground">{item.definition}</p>
+        </div>
+        <Button
+          size="sm"
+          variant={isSaved ? "secondary" : "ghost"}
+          onClick={handleSaveToMyWords}
+          disabled={isLoading || isSaved}
+          className="flex-shrink-0"
+          title={isSaved ? "Saved to My Words" : "Add to My Words"}
+        >
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : isSaved ? (
+            <>
+              <Check className="mr-1 h-4 w-4" />
+              Saved
+            </>
+          ) : (
+            <>
+              <BookmarkPlus className="mr-1 h-4 w-4" />
+              Save
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // Detailed Summary View
 function DetailedSummaryView({
   summary,
@@ -246,14 +377,10 @@ function DetailedSummaryView({
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Key Vocabulary</CardTitle>
           </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex flex-wrap gap-2">
-              {summary.vocabulary.map((word, idx) => (
-                <span key={idx} className="rounded-full bg-secondary px-2 py-1 text-xs font-medium">
-                  {word}
-                </span>
-              ))}
-            </div>
+          <CardContent className="space-y-3 pt-0">
+            {normalizeVocabulary(summary.vocabulary).map((item, idx) => (
+              <VocabularyCard key={idx} item={item} />
+            ))}
           </CardContent>
         </Card>
       )}

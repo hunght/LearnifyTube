@@ -91,7 +91,12 @@ const summarySchema = z
       )
       .optional(),
     keyTakeaways: z.array(z.string()).optional(),
-    vocabulary: z.array(z.string()).optional(),
+    vocabulary: z
+      .union([
+        z.array(z.string()), // Old format (backward compatibility)
+        z.array(z.object({ word: z.string(), definition: z.string() })), // New format
+      ])
+      .optional(),
     keyPoints: z
       .array(
         z.object({
@@ -244,6 +249,7 @@ const summarizeInputSchema = z.object({
   videoId: z.string(),
   type: z.enum(["quick", "detailed", "key_points"]).default("detailed"),
   language: z.string().default("en"),
+  forceRegenerate: z.boolean().optional().default(false),
 });
 
 const explainInputSchema = z.object({
@@ -386,46 +392,60 @@ export const aiRouter = t.router({
    * Generate a summary of the video content
    */
   summarize: publicProcedure.input(summarizeInputSchema).mutation(async ({ input }) => {
-    const { videoId, type, language } = input;
+    const { videoId, type, language, forceRegenerate } = input;
 
-    // Check for cached summary
-    const cachedResults = await db
-      .select()
-      .from(videoSummaries)
-      .where(
-        and(
-          eq(videoSummaries.videoId, videoId),
-          eq(videoSummaries.summaryType, type),
-          eq(videoSummaries.language, language)
+    // If force regenerate, delete existing cache
+    if (forceRegenerate) {
+      await db
+        .delete(videoSummaries)
+        .where(
+          and(
+            eq(videoSummaries.videoId, videoId),
+            eq(videoSummaries.summaryType, type),
+            eq(videoSummaries.language, language)
+          )
+        );
+      logger.info("Deleted cached summary for regeneration", { videoId, type });
+    } else {
+      // Check for cached summary only if not forcing regeneration
+      const cachedResults = await db
+        .select()
+        .from(videoSummaries)
+        .where(
+          and(
+            eq(videoSummaries.videoId, videoId),
+            eq(videoSummaries.summaryType, type),
+            eq(videoSummaries.language, language)
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    const cached = cachedResults[0];
+      const cached = cachedResults[0];
 
-    if (cached) {
-      logger.info("Returning cached summary", { videoId, type });
-      const cachedSummary = summarySchema.safeParse(JSON.parse(cached.content));
+      if (cached) {
+        logger.info("Returning cached summary", { videoId, type });
+        const cachedSummary = summarySchema.safeParse(JSON.parse(cached.content));
 
-      if (cachedSummary.success) {
+        if (cachedSummary.success) {
+          return {
+            success: true,
+            summary: cachedSummary.data,
+            cached: true,
+          };
+        }
+
+        logger.warn("Failed to parse cached summary", {
+          videoId,
+          type,
+          language,
+          issues: cachedSummary.error.issues,
+        });
+
         return {
-          success: true,
-          summary: cachedSummary.data,
-          cached: true,
+          success: false,
+          error: "Cached summary was invalid. Please regenerate.",
         };
       }
-
-      logger.warn("Failed to parse cached summary", {
-        videoId,
-        type,
-        language,
-        issues: cachedSummary.error.issues,
-      });
-
-      return {
-        success: false,
-        error: "Cached summary was invalid. Please regenerate.",
-      };
     }
 
     // Get transcript
@@ -467,7 +487,7 @@ Respond with a JSON object:
     { "point": "...", "timestamp": "estimated timestamp if possible, e.g., '2:30'" }
   ],
   "mainTopics": ["topic1", "topic2", ...],
-  "vocabulary": ["important term 1", "important term 2", ...]
+  "vocabulary": [{"word": "term", "definition": "brief definition"}, ...]
 }`;
         break;
 
@@ -485,7 +505,7 @@ Respond with a JSON object:
     { "title": "Section title", "summary": "Section summary", "startTime": "estimated timestamp" }
   ],
   "keyTakeaways": ["takeaway 1", "takeaway 2", ...],
-  "vocabulary": ["important term 1", "important term 2", ...]
+  "vocabulary": [{"word": "term", "definition": "brief definition"}, ...]
 }`;
         break;
     }
