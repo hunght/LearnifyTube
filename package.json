@@ -34,7 +34,6 @@
     "test:database:watch": "jest --config jest.database.config.ts --watch",
     "test:e2e": "playwright test",
     "test:auto-update": "node scripts/test-auto-update.cjs",
-    "test:podcast": "npx tsx scripts/test-podcast-generation.ts",
     "test:all": "jest && playwright test",
     "screenshots": "./scripts/screenshots-scripts/generate-screenshots.sh",
     "screenshots:verbose": "./scripts/screenshots-scripts/generate-screenshots.sh --verbose",

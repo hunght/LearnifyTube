@@ -9,6 +9,8 @@ import {
   youtubeVideos,
   savedWords,
   translationCache,
+  quizResults,
+  generatedQuizzes,
 } from "@/api/db/schema";
 import { eq, and } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
@@ -63,12 +65,94 @@ interface ChatMessage {
   content: string;
 }
 
-interface ChatCompletionResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
+const chatCompletionResponseSchema = z.object({
+  choices: z.array(
+    z.object({
+      message: z.object({
+        content: z.string(),
+      }),
+    })
+  ),
+});
+
+const transcriptSegmentsSchema = z.array(z.object({ text: z.string() }));
+
+const summarySchema = z
+  .object({
+    summary: z.string().optional(),
+    overview: z.string().optional(),
+    sections: z
+      .array(
+        z.object({
+          title: z.string(),
+          summary: z.string(),
+          startTime: z.string().optional(),
+        })
+      )
+      .optional(),
+    keyTakeaways: z.array(z.string()).optional(),
+    vocabulary: z.array(z.string()).optional(),
+    keyPoints: z
+      .array(
+        z.object({
+          point: z.string(),
+          timestamp: z.string().optional(),
+        })
+      )
+      .optional(),
+    mainTopics: z.array(z.string()).optional(),
+  })
+  .passthrough();
+
+const explanationSchema = z
+  .object({
+    explanation: z.string(),
+    examples: z.array(z.string()).optional(),
+    relatedConcepts: z.array(z.string()).optional(),
+  })
+  .passthrough();
+
+const vocabularyExtractionSchema = z.array(
+  z.object({
+    word: z.string(),
+    definition: z.string(),
+    example: z.string().optional(),
+  })
+);
+
+const quizQuestionSchema = z.object({
+  id: z.union([z.string(), z.number()]),
+  question: z.string(),
+  options: z.array(z.string()).optional(),
+  correctAnswer: z.string(),
+  explanation: z.string().optional(),
+});
+
+const quizSchema = z
+  .object({
+    questions: z.array(quizQuestionSchema),
+  })
+  .passthrough();
+
+const grammarSchema = z
+  .object({
+    partOfSpeech: z.string().optional(),
+    baseForm: z.string().optional(),
+    conjugation: z.string().optional(),
+    usage: z.string().optional(),
+    examples: z.array(z.string()).optional(),
+  })
+  .passthrough();
+
+function parseWithSchema<T>(raw: string, schema: z.ZodType<T>): T {
+  const parsedJson: unknown = JSON.parse(raw);
+  const parsed = schema.safeParse(parsedJson);
+
+  if (!parsed.success) {
+    throw new Error(parsed.error.message);
+  }
+
+  return parsed.data;
 }
 
 /**
@@ -103,8 +187,12 @@ async function callAI(messages: ChatMessage[]): Promise<string> {
     });
 
     if (response.ok) {
-      const data = (await response.json()) as ChatCompletionResponse;
-      return data.choices[0]?.message?.content || "";
+      const rawData: unknown = await response.json();
+      const parsed = chatCompletionResponseSchema.safeParse(rawData);
+      if (parsed.success && parsed.data.choices.length > 0) {
+        return parsed.data.choices[0]?.message?.content || "";
+      }
+      return "";
     }
 
     // Handle specific error cases
@@ -212,8 +300,10 @@ async function getTranscriptText(videoId: string): Promise<string | null> {
   // Try to extract text from segments if available
   if (result.segmentsJson) {
     try {
-      const segments = JSON.parse(result.segmentsJson) as Array<{ text: string }>;
-      return segments.map((s) => s.text).join(" ");
+      const segments = transcriptSegmentsSchema.safeParse(JSON.parse(result.segmentsJson));
+      if (segments.success) {
+        return segments.data.map((s) => s.text).join(" ");
+      }
     } catch {
       // Fall back to plain text
     }
@@ -266,10 +356,26 @@ export const aiRouter = t.router({
     const cached = results[0];
 
     if (cached) {
+      const cachedSummary = summarySchema.safeParse(JSON.parse(cached.content));
+
+      if (cachedSummary.success) {
+        return {
+          success: true,
+          summary: cachedSummary.data,
+          cached: true,
+        };
+      }
+
+      logger.warn("Invalid cached summary content", {
+        videoId,
+        type,
+        language,
+        issues: cachedSummary.error.issues,
+      });
+
       return {
-        success: true,
-        summary: JSON.parse(cached.content),
-        cached: true,
+        success: false,
+        error: "Cached summary data was invalid. Please regenerate.",
       };
     }
 
@@ -299,10 +405,26 @@ export const aiRouter = t.router({
 
     if (cached) {
       logger.info("Returning cached summary", { videoId, type });
+      const cachedSummary = summarySchema.safeParse(JSON.parse(cached.content));
+
+      if (cachedSummary.success) {
+        return {
+          success: true,
+          summary: cachedSummary.data,
+          cached: true,
+        };
+      }
+
+      logger.warn("Failed to parse cached summary", {
+        videoId,
+        type,
+        language,
+        issues: cachedSummary.error.issues,
+      });
+
       return {
-        success: true,
-        summary: JSON.parse(cached.content),
-        cached: true,
+        success: false,
+        error: "Cached summary was invalid. Please regenerate.",
       };
     }
 
@@ -381,7 +503,7 @@ Respond with a JSON object:
         jsonStr = jsonMatch[1];
       }
 
-      const summary = JSON.parse(jsonStr.trim());
+      const summary = parseWithSchema(jsonStr.trim(), summarySchema);
 
       // Cache the result
       await db.insert(videoSummaries).values({
@@ -462,7 +584,7 @@ Respond with a JSON object:
         jsonStr = jsonMatch[1];
       }
 
-      const explanation = JSON.parse(jsonStr.trim());
+      const explanation = parseWithSchema(jsonStr.trim(), explanationSchema);
 
       return {
         success: true,
@@ -511,7 +633,10 @@ Rules:
 
     const messages: ChatMessage[] = [
       { role: "system", content: systemMessage },
-      ...history.map((h) => ({ role: h.role as "user" | "assistant", content: h.content })),
+      ...history.map((h) => {
+        const role = h.role === "user" || h.role === "assistant" ? h.role : "user";
+        return { role, content: h.content };
+      }),
       { role: "user", content: message },
     ];
 
@@ -587,11 +712,7 @@ Respond with a JSON array:
               jsonStr = jsonMatch[1];
             }
 
-            const extracted = JSON.parse(jsonStr.trim()) as Array<{
-              word: string;
-              definition: string;
-              example?: string;
-            }>;
+            const extracted = parseWithSchema(jsonStr.trim(), vocabularyExtractionSchema);
 
             for (const item of extracted) {
               vocabulary.push({
@@ -607,7 +728,7 @@ Respond with a JSON array:
       }
 
       // Save flashcards to database
-      const createdCards = [];
+      const createdCards: Array<{ id: string; front: string; back: string; context?: string }> = [];
       for (const item of vocabulary.slice(0, maxCards)) {
         const id = uuidv4();
         await db.insert(flashcards).values({
@@ -645,6 +766,40 @@ Respond with a JSON array:
         success: false,
         error: "No transcript available for this video",
       };
+    }
+
+    // Check query cache for quiz
+    const cachedQuizzes = await db
+      .select()
+      .from(generatedQuizzes)
+      .where(
+        and(
+          eq(generatedQuizzes.videoId, videoId),
+          eq(generatedQuizzes.quizType, type),
+          eq(generatedQuizzes.difficulty, difficulty),
+          eq(generatedQuizzes.numQuestions, numQuestions)
+        )
+      )
+      .limit(1);
+
+    if (cachedQuizzes.length > 0) {
+      logger.info("Returning cached quiz", { videoId, type, difficulty });
+      const cachedQuiz = quizSchema.safeParse(JSON.parse(cachedQuizzes[0].content));
+
+      if (cachedQuiz.success) {
+        return {
+          success: true,
+          quiz: cachedQuiz.data,
+          cached: true,
+        };
+      }
+
+      logger.warn("Invalid cached quiz content", {
+        videoId,
+        type,
+        difficulty,
+        issues: cachedQuiz.error.issues,
+      });
     }
 
     const metadata = await getVideoMetadata(videoId);
@@ -697,11 +852,23 @@ Respond with a JSON object:
         jsonStr = jsonMatch[1];
       }
 
-      const quiz = JSON.parse(jsonStr.trim());
+      const quiz = parseWithSchema(jsonStr.trim(), quizSchema);
+
+      // Cache the quiz
+      await db.insert(generatedQuizzes).values({
+        id: uuidv4(),
+        videoId,
+        quizType: type,
+        difficulty,
+        numQuestions,
+        content: JSON.stringify(quiz),
+        createdAt: new Date().toISOString(),
+      });
 
       return {
         success: true,
         quiz,
+        cached: false,
       };
     } catch (error) {
       logger.error("Failed to generate quiz", { error });
@@ -711,6 +878,36 @@ Respond with a JSON object:
       };
     }
   }),
+
+  /**
+   * Save quiz results
+   */
+  saveQuizResult: publicProcedure
+    .input(
+      z.object({
+        videoId: z.string(),
+        quizType: z.enum(["multiple_choice", "true_false", "fill_blank"]),
+        score: z.number(),
+        totalQuestions: z.number(),
+        answers: z.record(z.unknown()), // JSON object of answers
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { videoId, quizType, score, totalQuestions, answers } = input;
+
+      const id = uuidv4();
+      await db.insert(quizResults).values({
+        id,
+        videoId,
+        quizType,
+        score,
+        totalQuestions,
+        answers: JSON.stringify(answers),
+        completedAt: new Date().toISOString(),
+      });
+
+      return { success: true, id };
+    }),
 
   /**
    * Get grammar explanation for a word or phrase
@@ -748,7 +945,7 @@ Provide a JSON response:
           jsonStr = jsonMatch[1];
         }
 
-        const grammar = JSON.parse(jsonStr.trim());
+        const grammar = parseWithSchema(jsonStr.trim(), grammarSchema);
 
         return {
           success: true,

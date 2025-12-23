@@ -445,8 +445,8 @@ export const preferencesRouter = t.router({
                   "subscriptions",
                   "history",
                   "my-words",
+                  "flashcards",
                   "storage",
-                  "podcast-anything",
                   "logs",
                   "settings",
                 ])

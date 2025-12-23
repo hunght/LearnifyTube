@@ -321,7 +321,7 @@ export function TranscriptPanel({
       // But user said "only download if turn on dual language". We are inside that check.
       // User implied "only if not available". "Not available" locally = empty segments.
 
-      console.log(`[DualSubs] Auto-downloading secondary lang: ${secondaryLang}`);
+      // Auto-download secondary language subtitle
       attemptedDownloadRef.current.add(attemptKey);
       downloadTranscriptMutation.mutate(secondaryLang);
     }

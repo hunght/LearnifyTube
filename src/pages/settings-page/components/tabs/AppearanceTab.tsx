@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { z } from "zod";
 import { Type, Maximize2, Zap } from "lucide-react";
 import { setTheme, getCurrentTheme } from "@/helpers/theme_helpers";
 import { SunIcon, MoonIcon } from "@radix-ui/react-icons";
@@ -21,6 +22,12 @@ interface AppearanceTabProps {
     appearance?: Partial<UserPreferences["appearance"]>;
   }) => Promise<void>;
 }
+
+// Zod schemas for validation
+const fontScaleSchema = z.enum(["small", "normal", "large", "x-large"]);
+const fontFamilySchema = z.enum(["default", "sans", "mono", "dyslexic"]);
+const uiSizeSchema = z.enum(["compact", "comfortable", "spacious"]);
+const animationSpeedSchema = z.enum(["none", "reduced", "normal", "enhanced"]);
 
 export function AppearanceTab({
   preferences,
@@ -86,11 +93,16 @@ export function AppearanceTab({
             <Label>Font Size</Label>
             <Select
               value={preferences.appearance.fontScale}
-              onValueChange={(value) =>
-                updatePreferences({
-                  appearance: { fontScale: value as UserPreferences["appearance"]["fontScale"] },
-                })
-              }
+              onValueChange={(value) => {
+                const parsed = fontScaleSchema.safeParse(value);
+                if (parsed.success) {
+                  updatePreferences({
+                    appearance: {
+                      fontScale: parsed.data,
+                    },
+                  });
+                }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -108,13 +120,16 @@ export function AppearanceTab({
             <Label>Font Family</Label>
             <Select
               value={preferences.appearance.fontFamily || "default"}
-              onValueChange={(value) =>
-                updatePreferences({
-                  appearance: {
-                    fontFamily: value as UserPreferences["appearance"]["fontFamily"],
-                  },
-                })
-              }
+              onValueChange={(value) => {
+                const parsed = fontFamilySchema.safeParse(value);
+                if (parsed.success) {
+                  updatePreferences({
+                    appearance: {
+                      fontFamily: parsed.data,
+                    },
+                  });
+                }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -144,11 +159,14 @@ export function AppearanceTab({
             <Label>UI Size</Label>
             <Select
               value={preferences.appearance.uiSize}
-              onValueChange={(value) =>
-                updatePreferences({
-                  appearance: { uiSize: value as UserPreferences["appearance"]["uiSize"] },
-                })
-              }
+              onValueChange={(value) => {
+                const parsed = uiSizeSchema.safeParse(value);
+                if (parsed.success) {
+                  updatePreferences({
+                    appearance: { uiSize: parsed.data },
+                  });
+                }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -207,13 +225,16 @@ export function AppearanceTab({
             <Label>Animation Speed</Label>
             <Select
               value={preferences.appearance.showAnimations}
-              onValueChange={(value) =>
-                updatePreferences({
-                  appearance: {
-                    showAnimations: value as UserPreferences["appearance"]["showAnimations"],
-                  },
-                })
-              }
+              onValueChange={(value) => {
+                const parsed = animationSpeedSchema.safeParse(value);
+                if (parsed.success) {
+                  updatePreferences({
+                    appearance: {
+                      showAnimations: parsed.data,
+                    },
+                  });
+                }
+              }}
             >
               <SelectTrigger>
                 <SelectValue />

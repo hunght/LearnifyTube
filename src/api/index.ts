@@ -10,7 +10,6 @@ import { watchStatsRouter } from "@/api/routers/watch-stats";
 import { transcriptsRouter } from "@/api/routers/transcripts";
 import { playlistsRouter } from "@/api/routers/playlists";
 import { binaryRouter } from "@/api/routers/binary";
-import { podcastRouter } from "@/api/routers/podcast";
 import { aiRouter } from "@/api/routers/ai";
 import { flashcardsRouter } from "@/api/routers/flashcards";
 
@@ -27,7 +26,6 @@ export const router = t.router({
   transcripts: transcriptsRouter,
   playlists: playlistsRouter,
   binary: binaryRouter,
-  podcast: podcastRouter,
   ai: aiRouter,
   flashcards: flashcardsRouter,
 });

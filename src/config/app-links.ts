@@ -1,7 +1,6 @@
 // Configuration file for application download links and version information
 
 // Function to build download URLs based on a version
-// eslint-disable-next-line import/no-unused-modules -- Used dynamically in update checker
 export const buildAppLinks = (
   version: string
 ): {

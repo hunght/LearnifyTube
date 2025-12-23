@@ -11,11 +11,6 @@ const SIDEBAR_ITEMS: { id: SidebarItem; label: string; description: string }[] =
   { id: "channels", label: "Channels", description: "Browse YouTube channels" },
   { id: "playlists", label: "Playlists", description: "Manage playlists" },
   { id: "subscriptions", label: "Subscriptions", description: "Your subscribed channels" },
-  {
-    id: "podcast-anything",
-    label: "Podcast Generator",
-    description: "Generate podcasts from content",
-  },
   { id: "history", label: "History", description: "Watch history" },
   { id: "my-words", label: "My Words", description: "Saved vocabulary" },
   { id: "storage", label: "Storage", description: "Manage downloaded videos" },

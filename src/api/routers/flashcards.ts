@@ -1,7 +1,6 @@
-
 import { z } from "zod";
 import { publicProcedure, t } from "@/api/trpc";
-import { eq, desc, asc, and, lte, sql } from "drizzle-orm";
+import { eq, desc, asc, lte } from "drizzle-orm";
 import { flashcards } from "@/api/db/schema";
 import defaultDb from "@/api/db";
 import { TRPCError } from "@trpc/server";
@@ -16,152 +15,146 @@ import { TRPCError } from "@trpc/server";
 // Easy -> 5 (Pass, easy)
 
 const calculateNextReview = (
-    previousInterval: number,
-    previousEaseFactor: number,
-    grade: number
-) => {
-    let newInterval = 0;
-    let newEaseFactor = previousEaseFactor;
+  previousInterval: number,
+  previousEaseFactor: number,
+  grade: number
+): { newInterval: number; newEaseFactor: number } => {
+  let newInterval = 0;
+  let newEaseFactor = previousEaseFactor;
 
-    if (grade >= 3) {
-        if (previousInterval === 0) {
-            newInterval = 1;
-        } else if (previousInterval === 1) {
-            newInterval = 6;
-        } else {
-            newInterval = Math.round(previousInterval * previousEaseFactor);
-        }
-
-        newEaseFactor = previousEaseFactor + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02));
-        if (newEaseFactor < 1.3) newEaseFactor = 1.3;
+  if (grade >= 3) {
+    if (previousInterval === 0) {
+      newInterval = 1;
+    } else if (previousInterval === 1) {
+      newInterval = 6;
     } else {
-        newInterval = 1;
-        // Ease factor doesn't change on fail in some variants, or drops. 
-        // SM-2: EF doesn't change on fail? Actually original SM-2 says "If the quality response was lower than 3 then start repetitions for the item from the beginning... without changing the E-Factor".
-        // We'll keep EF same on fail.
+      newInterval = Math.round(previousInterval * previousEaseFactor);
     }
 
-    return { newInterval, newEaseFactor };
+    newEaseFactor = previousEaseFactor + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02));
+    if (newEaseFactor < 1.3) newEaseFactor = 1.3;
+  } else {
+    newInterval = 1;
+    // Ease factor doesn't change on fail in some variants, or drops.
+    // SM-2: EF doesn't change on fail? Actually original SM-2 says "If the quality response was lower than 3 then start repetitions for the item from the beginning... without changing the E-Factor".
+    // We'll keep EF same on fail.
+  }
+
+  return { newInterval, newEaseFactor };
 };
 
 export const flashcardsRouter = t.router({
-    // Create a flashcard
-    create: publicProcedure
-        .input(
-            z.object({
-                front: z.string().min(1),
-                back: z.string().min(1),
-                videoId: z.string().optional(),
-                context: z.string().optional(),
-                audioUrl: z.string().optional(),
-                timestamp: z.number().optional(),
-            })
-        )
-        .mutation(async ({ input, ctx }) => {
-            const db = ctx.db ?? defaultDb;
-            const now = new Date().toISOString();
-            const id = crypto.randomUUID();
+  // Create a flashcard
+  create: publicProcedure
+    .input(
+      z.object({
+        front: z.string().min(1),
+        back: z.string().min(1),
+        videoId: z.string().optional(),
+        context: z.string().optional(),
+        audioUrl: z.string().optional(),
+        timestamp: z.number().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = ctx.db ?? defaultDb;
+      const now = new Date().toISOString();
+      const id = crypto.randomUUID();
 
-            await db.insert(flashcards).values({
-                id,
-                videoId: input.videoId,
-                frontContent: input.front,
-                backContent: input.back,
-                contextText: input.context,
-                audioUrl: input.audioUrl,
-                timestampSeconds: input.timestamp,
-                // Initial state
-                difficulty: 0,
-                reviewCount: 0,
-                interval: 0,
-                easeFactor: 250, // x100
-                nextReviewAt: now, // Due immediately
-                createdAt: now,
-                updatedAt: now,
-            });
+      await db.insert(flashcards).values({
+        id,
+        videoId: input.videoId,
+        frontContent: input.front,
+        backContent: input.back,
+        contextText: input.context,
+        audioUrl: input.audioUrl,
+        timestampSeconds: input.timestamp,
+        // Initial state
+        difficulty: 0,
+        reviewCount: 0,
+        interval: 0,
+        easeFactor: 250, // x100
+        nextReviewAt: now, // Due immediately
+        createdAt: now,
+        updatedAt: now,
+      });
 
-            return { success: true, id };
-        }),
-
-    // List all flashcards (for management)
-    list: publicProcedure.query(async ({ ctx }) => {
-        const db = ctx.db ?? defaultDb;
-        return await db.select().from(flashcards).orderBy(desc(flashcards.createdAt));
+      return { success: true, id };
     }),
 
-    // Get due flashcards for study
-    getDue: publicProcedure.query(async ({ ctx }) => {
-        const db = ctx.db ?? defaultDb;
-        const now = new Date().toISOString();
+  // List all flashcards (for management)
+  list: publicProcedure.query(async ({ ctx }) => {
+    const db = ctx.db ?? defaultDb;
+    return await db.select().from(flashcards).orderBy(desc(flashcards.createdAt));
+  }),
 
-        return await db
-            .select()
-            .from(flashcards)
-            .where(lte(flashcards.nextReviewAt, now))
-            .orderBy(asc(flashcards.nextReviewAt)); // Oldest due first
+  // Get due flashcards for study
+  getDue: publicProcedure.query(async ({ ctx }) => {
+    const db = ctx.db ?? defaultDb;
+    const now = new Date().toISOString();
+
+    return await db
+      .select()
+      .from(flashcards)
+      .where(lte(flashcards.nextReviewAt, now))
+      .orderBy(asc(flashcards.nextReviewAt)); // Oldest due first
+  }),
+
+  // Delete a flashcard
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input, ctx }) => {
+    const db = ctx.db ?? defaultDb;
+    await db.delete(flashcards).where(eq(flashcards.id, input.id));
+    return { success: true };
+  }),
+
+  // Review a flashcard (Apply SRS)
+  review: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        grade: z.number().min(0).max(5), // 0-5
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = ctx.db ?? defaultDb;
+
+      const card = await db.select().from(flashcards).where(eq(flashcards.id, input.id)).get();
+
+      if (!card) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Flashcard not found" });
+      }
+
+      const currentEase = (card.easeFactor ?? 250) / 100;
+      const currentInterval = card.interval ?? 0;
+
+      const { newInterval, newEaseFactor } = calculateNextReview(
+        currentInterval,
+        currentEase,
+        input.grade
+      );
+
+      // Calculate next date
+      const nextDate = new Date();
+      nextDate.setDate(nextDate.getDate() + newInterval);
+
+      await db
+        .update(flashcards)
+        .set({
+          interval: newInterval,
+          easeFactor: Math.round(newEaseFactor * 100),
+          nextReviewAt: nextDate.toISOString(),
+          reviewCount: (card.reviewCount ?? 0) + 1,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(flashcards.id, input.id));
+
+      return { success: true, nextReview: nextDate.toISOString() };
     }),
 
-    // Delete a flashcard
-    delete: publicProcedure
-        .input(z.object({ id: z.string() }))
-        .mutation(async ({ input, ctx }) => {
-            const db = ctx.db ?? defaultDb;
-            await db.delete(flashcards).where(eq(flashcards.id, input.id));
-            return { success: true };
-        }),
-
-    // Review a flashcard (Apply SRS)
-    review: publicProcedure
-        .input(
-            z.object({
-                id: z.string(),
-                grade: z.number().min(0).max(5), // 0-5
-            })
-        )
-        .mutation(async ({ input, ctx }) => {
-            const db = ctx.db ?? defaultDb;
-
-            const card = await db
-                .select()
-                .from(flashcards)
-                .where(eq(flashcards.id, input.id))
-                .get();
-
-            if (!card) {
-                throw new TRPCError({ code: "NOT_FOUND", message: "Flashcard not found" });
-            }
-
-            const currentEase = (card.easeFactor ?? 250) / 100;
-            const currentInterval = card.interval ?? 0;
-
-            const { newInterval, newEaseFactor } = calculateNextReview(
-                currentInterval,
-                currentEase,
-                input.grade
-            );
-
-            // Calculate next date
-            const nextDate = new Date();
-            nextDate.setDate(nextDate.getDate() + newInterval);
-
-            await db
-                .update(flashcards)
-                .set({
-                    interval: newInterval,
-                    easeFactor: Math.round(newEaseFactor * 100),
-                    nextReviewAt: nextDate.toISOString(),
-                    reviewCount: (card.reviewCount ?? 0) + 1,
-                    updatedAt: new Date().toISOString(),
-                })
-                .where(eq(flashcards.id, input.id));
-
-            return { success: true, nextReview: nextDate.toISOString() };
-        }),
-
-    // Auto-create from Saved Words (Bulk import utility)
-    // This could be useful if user wants to existing words to flashcards
-    importSavedWords: publicProcedure.mutation(async ({ ctx }) => {
-        // Implementation deferred - can be done in UI via create loop or bulk insert
-        return { success: true, message: "Use create mutation loop for now" };
-    })
+  // Auto-create from Saved Words (Bulk import utility)
+  // This could be useful if user wants to existing words to flashcards
+  importSavedWords: publicProcedure.mutation(async () => {
+    // Implementation deferred - can be done in UI via create loop or bulk insert
+    return { success: true, message: "Use create mutation loop for now" };
+  }),
 });

@@ -12,7 +12,6 @@ import HistoryPage from "@/pages/history/HistoryPage";
 import MyWordsPage from "@/pages/my-words/MyWordsPage";
 import FlashcardsPage from "@/pages/learn/FlashcardsPage";
 import StorageManagerPage from "@/pages/storage/StorageManagerPage";
-import PodcastAnythingPage from "@/pages/podcast-anything/PodcastAnythingPage";
 import LogPage from "@/pages/app-debug-logs/index";
 
 // Check if we're in development mode
@@ -36,7 +35,6 @@ const isDevelopment = (): boolean => {
 
   // Last fallback: if NODE_ENV is not explicitly production, assume development
   return process.env.NODE_ENV !== "production";
-
 };
 
 const DashboardRoute = createRoute({
@@ -128,12 +126,6 @@ const StorageRoute = createRoute({
   component: StorageManagerPage,
 });
 
-const PodcastAnythingRoute = createRoute({
-  getParentRoute: () => RootRoute,
-  path: "/podcast-anything",
-  component: PodcastAnythingPage,
-});
-
 const baseRoutes = [
   DashboardRoute,
   SettingsRoute,
@@ -147,19 +139,18 @@ const baseRoutes = [
   MyWordsRoute,
   FlashcardsRoute,
   StorageRoute,
-  PodcastAnythingRoute,
 ];
 
 // Add log route only in development mode
 const routes = isDevelopment()
   ? [
-    ...baseRoutes,
-    createRoute({
-      getParentRoute: () => RootRoute,
-      path: "/app-debug-logs",
-      component: LogPage,
-    }),
-  ]
+      ...baseRoutes,
+      createRoute({
+        getParentRoute: () => RootRoute,
+        path: "/app-debug-logs",
+        component: LogPage,
+      }),
+    ]
   : baseRoutes;
 
 export const rootTree = RootRoute.addChildren(routes);

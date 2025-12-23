@@ -80,8 +80,32 @@ export default function MyWordsPage(): React.JSX.Element {
     }
   };
 
+  interface FlashcardInput {
+    front: string;
+    back: string;
+    videoId?: string;
+    context?: string;
+    timestamp?: number;
+  }
+
+  interface TranslationItem {
+    id: string;
+    sourceText: string;
+    translatedText: string;
+    sourceLang: string;
+    targetLang: string;
+    queryCount: number;
+    createdAt: string | number;
+    detectedLang?: string | null;
+    notes?: string;
+    savedAt?: number;
+    reviewCount?: number;
+    lastReviewedAt?: string | null;
+    savedWordId?: string;
+  }
+
   const createFlashcardMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: FlashcardInput) => {
       return await trpcClient.flashcards.create.mutate(data);
     },
     onSuccess: () => {
@@ -99,7 +123,7 @@ export default function MyWordsPage(): React.JSX.Element {
     },
   });
 
-  const handleAddToFlashcard = async (translation: any) => {
+  const handleAddToFlashcard = async (translation: TranslationItem): Promise<void> => {
     try {
       // 1. Try to find context for this word
       const contexts = await trpcClient.translation.getTranslationContexts.query({
@@ -118,10 +142,10 @@ export default function MyWordsPage(): React.JSX.Element {
         // Audio URL if we had it (translation structure might need update later for TTS)
       });
     } catch (error) {
-      console.error("Failed to prepare flashcard", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
       toast({
         title: "Error",
-        description: "Could not prepare flashcard data.",
+        description: `Could not prepare flashcard data: ${errorMessage}`,
         variant: "destructive",
       });
     }
@@ -451,7 +475,7 @@ export default function MyWordsPage(): React.JSX.Element {
                               {formatDistanceToNow(
                                 new Date(
                                   "savedAt" in translation &&
-                                    typeof translation.savedAt === "number"
+                                  typeof translation.savedAt === "number"
                                     ? translation.savedAt
                                     : translation.createdAt
                                 ),

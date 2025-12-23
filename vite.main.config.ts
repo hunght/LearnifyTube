@@ -12,7 +12,7 @@ export default defineConfig((env) => {
 
   // Load environment variables
   const loadedEnv = loadEnv(forgeEnv.mode, process.cwd(), "");
-  define["process.env.GEMINI_API_KEY"] = JSON.stringify(loadedEnv.GEMINI_API_KEY);
+
 
   const config: UserConfig = {
     build: {

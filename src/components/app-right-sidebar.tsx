@@ -12,7 +12,8 @@ import {
 import { DownloadQueueSidebar } from "@/components/DownloadQueueSidebar";
 import { AnnotationsSidebar } from "@/components/AnnotationsSidebar";
 import { AISummarySidebar } from "@/components/AISummarySidebar";
-import { Sparkles, StickyNote } from "lucide-react";
+import { QuizSidebar } from "@/components/QuizSidebar";
+import { Sparkles, StickyNote, Brain } from "lucide-react";
 
 export function AppRightSidebar({
   className,
@@ -27,7 +28,8 @@ export function AppRightSidebar({
 
   // When we have video data (annotations mode or ai-summary), show tabbed interface
   const showVideoSidebar =
-    annotationsData && (content === "annotations" || content === "ai-summary");
+    annotationsData &&
+    (content === "annotations" || content === "ai-summary" || content === "quiz");
 
   const sidebarContent = (
     <div className="flex h-full flex-col p-4">
@@ -59,6 +61,18 @@ export function AppRightSidebar({
               <Sparkles className="h-4 w-4" />
               AI Summary
             </button>
+            <button
+              onClick={() => setContent("quiz")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                content === "quiz"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+              )}
+            >
+              <Brain className="h-4 w-4" />
+              Quiz
+            </button>
           </div>
 
           {/* Content based on active tab */}
@@ -72,6 +86,12 @@ export function AppRightSidebar({
             />
           ) : content === "ai-summary" ? (
             <AISummarySidebar
+              videoId={annotationsData.videoId}
+              videoRef={annotationsData.videoRef}
+              videoTitle={annotationsData.videoTitle}
+            />
+          ) : content === "quiz" ? (
+            <QuizSidebar
               videoId={annotationsData.videoId}
               videoRef={annotationsData.videoRef}
               videoTitle={annotationsData.videoTitle}

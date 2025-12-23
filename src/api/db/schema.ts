@@ -432,6 +432,32 @@ export const quizResults = sqliteTable(
 export type QuizResult = typeof quizResults.$inferSelect;
 export type NewQuizResult = typeof quizResults.$inferInsert;
 
+// Cached generated quizzes
+export const generatedQuizzes = sqliteTable(
+  "generated_quizzes",
+  {
+    id: text("id").primaryKey(),
+    videoId: text("video_id").notNull(),
+    quizType: text("quiz_type").notNull(), // 'multiple_choice', 'true_false', 'fill_blank'
+    difficulty: text("difficulty").notNull(), // 'easy', 'medium', 'hard'
+    numQuestions: integer("num_questions").notNull(),
+    content: text("content").notNull(), // JSON string,
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("generated_quizzes_video_id_idx").on(table.videoId),
+    index("generated_quizzes_lookup_idx").on(
+      table.videoId,
+      table.quizType,
+      table.difficulty,
+      table.numQuestions
+    ),
+  ]
+);
+
+export type GeneratedQuiz = typeof generatedQuizzes.$inferSelect;
+export type NewGeneratedQuiz = typeof generatedQuizzes.$inferInsert;
+
 // Saved words relation to include translation
 export const savedWordsRelations = relations(savedWords, ({ one }) => ({
   translation: one(translationCache, {
