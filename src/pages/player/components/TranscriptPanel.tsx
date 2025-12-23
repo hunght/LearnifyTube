@@ -10,6 +10,9 @@ import {
   fontFamilyAtom,
   fontSizeAtom,
   transcriptCollapsedAtom,
+  showDualSubtitlesAtom,
+  secondarySubtitleLangAtom,
+  sentenceModeAtom,
 } from "@/context/transcriptSettings";
 import { openAnnotationFormAtom } from "@/context/annotations";
 import { PlaybackData } from "@/context/playerStore";
@@ -72,6 +75,12 @@ export function TranscriptPanel({
   const [, setCurrentTranscriptLang] = useAtom(currentTranscriptLangAtom);
   const [, setOpenAnnotationForm] = useAtom(openAnnotationFormAtom);
   const [userCollapsed, setUserCollapsed] = useAtom(transcriptCollapsedAtom);
+
+  // Dual Subtitles State
+  const [showDualSubtitles] = useAtom(showDualSubtitlesAtom);
+  const [secondaryLang] = useAtom(secondarySubtitleLangAtom);
+  const [sentenceMode, setSentenceMode] = useAtom(sentenceModeAtom);
+  const pausedForSegmentRef = useRef<number | null>(null);
 
   // Local state
   const [showTranscriptSettings, setShowTranscriptSettings] = useState(false);
@@ -218,35 +227,60 @@ export function TranscriptPanel({
 
   const segments = transcriptSegmentsQuery.data?.segments ?? [];
 
+  // Secondary Transcript segments query (for Dual Subtitles)
+  const secondarySegmentsQuery = useQuery({
+    queryKey: ["transcript-segments", videoId, secondaryLang],
+    queryFn: async () => {
+      if (!videoId || !showDualSubtitles || !secondaryLang) return { segments: [] };
+      // Prevent fetching same language twice
+      if (secondaryLang === effectiveLang) return { segments: [] };
+
+      return await trpcClient.transcripts.getSegments.query({
+        videoId,
+        lang: secondaryLang,
+      });
+    },
+    enabled: !!videoId && showDualSubtitles && !!secondaryLang && secondaryLang !== effectiveLang,
+    staleTime: Infinity,
+  });
+
+  const secondarySegments = secondarySegmentsQuery.data?.segments ?? undefined;
+
   // Derived collapsed state: force collapsed if no segments, otherwise use user preference
   const isCollapsed = segments.length === 0 ? true : userCollapsed;
 
   // Download transcript mutation
   const downloadTranscriptMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (lang?: string) => {
       if (!videoId) throw new Error("Missing videoId");
       return await trpcClient.transcripts.download.mutate({
         videoId,
-        lang: selectedLang ?? undefined,
+        lang: lang ?? selectedLang ?? undefined,
       });
     },
-    onSuccess: (response) => {
-      // tRPC provides full type safety - no Zod validation needed!
-      // TypeScript knows the exact shape from backend's DownloadTranscriptResult type
+    onSuccess: (response, lang) => {
+      const targetLang = lang ?? selectedLang;
+
       if (!videoId) return;
 
       if (response.success) {
         queryClient.invalidateQueries({
-          queryKey: ["transcript", videoId, selectedLang ?? "__default__"],
+          queryKey: ["transcript", videoId, targetLang ?? "__default__"],
         });
-        queryClient.invalidateQueries({ queryKey: ["transcript-segments", videoId] });
-        clearCooldown(videoId, selectedLang);
+        queryClient.invalidateQueries({
+          queryKey: ["transcript-segments", videoId, targetLang ?? "__default__"],
+        });
+        // Also invalidate generic if downloading default
+        if (!targetLang) {
+          queryClient.invalidateQueries({ queryKey: ["transcript-segments", videoId] });
+        }
+
+        clearCooldown(videoId, targetLang);
         return;
       }
 
-      // Handle rate limit (TypeScript knows this field exists when success is false)
       if ("code" in response && response.code === "RATE_LIMITED") {
-        setCooldown(videoId, selectedLang, response.retryAfterMs);
+        setCooldown(videoId, targetLang, response.retryAfterMs);
         toastHook({
           title: "Rate limited by YouTube",
           description: `Too many requests. Try again in about ${Math.ceil(response.retryAfterMs / 60000)} min`,
@@ -262,6 +296,42 @@ export function TranscriptPanel({
       });
     },
   });
+
+  // Auto-download secondary subtitle if enabled and missing
+  useEffect(() => {
+    if (!videoId || !showDualSubtitles || !secondaryLang) return;
+
+    // Check if we have segments
+    const hasSegments =
+      secondarySegmentsQuery.data?.segments && secondarySegmentsQuery.data.segments.length > 0;
+    const isLoaded = secondarySegmentsQuery.isSuccess;
+
+    // If loaded, empty, and not attempted yet
+    const attemptKey = `${videoId}|${secondaryLang}`;
+
+    if (
+      isLoaded &&
+      !hasSegments &&
+      !attemptedDownloadRef.current.has(attemptKey) &&
+      !downloadTranscriptMutation.isPending
+    ) {
+      // Check availability strictly if possible, but for now we try download
+      // We only try if standard "availableSubs" showed it?
+      // Actually, let's just try downloading. ytdlp helper will handle finding it or auto-translating if backend supports it.
+      // But user said "only download if turn on dual language". We are inside that check.
+      // User implied "only if not available". "Not available" locally = empty segments.
+
+      console.log(`[DualSubs] Auto-downloading secondary lang: ${secondaryLang}`);
+      attemptedDownloadRef.current.add(attemptKey);
+      downloadTranscriptMutation.mutate(secondaryLang);
+    }
+  }, [
+    videoId,
+    showDualSubtitles,
+    secondaryLang,
+    secondarySegmentsQuery.data,
+    secondarySegmentsQuery.isSuccess,
+  ]);
 
   const [activeSegIndex, setActiveSegIndex] = useState<number | null>(null);
   const [followPlayback, setFollowPlayback] = useState<boolean>(true);
@@ -674,6 +744,37 @@ export function TranscriptPanel({
     setActiveSegIndex(idx >= 0 ? idx : null);
   }, [currentTime, segments, isSelecting, isHovering, isHoveringTooltip]);
 
+  // Sentence Mode logic: Auto-pause at end of sentences
+  useEffect(() => {
+    if (!sentenceMode || !videoRef?.current || activeSegIndex === null) return;
+
+    const segment = segments[activeSegIndex];
+    if (!segment) return;
+
+    const timeRemaining = segment.end - currentTime;
+
+    // Reset pause ref if we went back in time significantly (replaying the sentence)
+    if (pausedForSegmentRef.current === activeSegIndex && timeRemaining > 1.0) {
+      pausedForSegmentRef.current = null;
+    }
+
+    // Check pause condition
+    // We check for punctuation OR just auto-pause at every segment if strict mode?
+    // User requested "Sentence-by-Sentence". If segments are sentences, always pause.
+    // If segments are short fragments, pausing every time is bad.
+    // Heuristic: Ends with punctuation OR length > 50 chars?
+    // Let's stick to punctuation for quality.
+    const isSentenceEnd = /[.!?。！？"']$/.test(segment.text.trim());
+
+    if (isSentenceEnd && pausedForSegmentRef.current !== activeSegIndex) {
+      if (timeRemaining < 0.3) {
+        videoRef.current.pause();
+        pausedForSegmentRef.current = activeSegIndex;
+        // Optional: visual feedback
+      }
+    }
+  }, [currentTime, sentenceMode, activeSegIndex, segments, videoRef]);
+
   // Scroll active segment into view (freeze when selecting or hovering)
   useEffect(() => {
     if (activeSegIndex === null || !followPlayback) return;
@@ -749,6 +850,7 @@ export function TranscriptPanel({
           <div className="relative">
             <TranscriptContent
               segments={segments}
+              secondarySegments={secondarySegments}
               activeSegIndex={activeSegIndex}
               fontFamily={fontFamily}
               fontSize={fontSize}
@@ -806,7 +908,7 @@ export function TranscriptPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => downloadTranscriptMutation.mutate()}
+                      onClick={() => downloadTranscriptMutation.mutate(undefined)}
                       disabled={downloadTranscriptMutation.isPending}
                       className="h-6 text-xs"
                     >
@@ -897,6 +999,20 @@ export function TranscriptPanel({
                 </>
               )}
             </Button>
+
+            {/* Sentence Mode Toggle */}
+            {!isCollapsed && (
+              <Button
+                size="sm"
+                variant={sentenceMode ? "default" : "outline"}
+                onClick={() => setSentenceMode(!sentenceMode)}
+                className="mr-2 h-7"
+                title="Auto-pause after each sentence"
+              >
+                <span className="mr-1.5 text-xs">{sentenceMode ? "⏸" : "▶️|"}</span>
+                <span className="text-xs">Sentence Mode</span>
+              </Button>
+            )}
 
             {/* Transcript Settings Button */}
             {!isCollapsed && (

@@ -11,6 +11,7 @@ import { transcriptsRouter } from "@/api/routers/transcripts";
 import { playlistsRouter } from "@/api/routers/playlists";
 import { binaryRouter } from "@/api/routers/binary";
 import { podcastRouter } from "@/api/routers/podcast";
+import { aiRouter } from "@/api/routers/ai";
 
 // Create the root router
 export const router = t.router({
@@ -26,6 +27,7 @@ export const router = t.router({
   playlists: playlistsRouter,
   binary: binaryRouter,
   podcast: podcastRouter,
+  ai: aiRouter,
 });
 
 // Export type router type signature

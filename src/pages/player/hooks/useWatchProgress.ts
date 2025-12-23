@@ -27,7 +27,6 @@ export function useWatchProgress(
     (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
       const el = e.currentTarget;
       const current = el.currentTime;
-      logger.debug("[useWatchProgress] handleTimeUpdate", { current });
       setCurrentTime(current);
       onCurrentTimeChange?.(current);
       const prev = lastTimeRef.current;
@@ -65,21 +64,11 @@ export function useWatchProgress(
     const restorePosition = (): void => {
       if (positionRestoredRef.current) return;
       try {
-        logger.debug("[useWatchProgress] Restoring position", {
-          videoId,
-          lastPositionSeconds,
-          readyState: video.readyState,
-          currentTime: video.currentTime,
-        });
         video.currentTime = lastPositionSeconds;
         setCurrentTime(lastPositionSeconds);
         onCurrentTimeChange?.(lastPositionSeconds);
         lastTimeRef.current = lastPositionSeconds;
         positionRestoredRef.current = true;
-        logger.debug("[useWatchProgress] Position restored", {
-          videoId,
-          restoredTime: lastPositionSeconds,
-        });
       } catch (err) {
         logger.error("[useWatchProgress] Failed to restore position", err);
       }

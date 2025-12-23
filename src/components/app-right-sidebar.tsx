@@ -11,28 +11,73 @@ import {
 } from "@/context/rightSidebar";
 import { DownloadQueueSidebar } from "@/components/DownloadQueueSidebar";
 import { AnnotationsSidebar } from "@/components/AnnotationsSidebar";
+import { AISummarySidebar } from "@/components/AISummarySidebar";
+import { Sparkles, StickyNote } from "lucide-react";
 
 export function AppRightSidebar({
   className,
   ...props
 }: React.ComponentProps<"div">): React.JSX.Element | null {
   const [open, setOpen] = useAtom(rightSidebarOpenAtom);
-  const content = useAtomValue(rightSidebarContentAtom);
+  const [content, setContent] = useAtom(rightSidebarContentAtom);
   const annotationsData = useAtomValue(annotationsSidebarDataAtom);
   const isMobile = useIsMobile();
 
   if (!open) return null;
 
+  // When we have video data (annotations mode or ai-summary), show tabbed interface
+  const showVideoSidebar =
+    annotationsData && (content === "annotations" || content === "ai-summary");
+
   const sidebarContent = (
     <div className="flex h-full flex-col p-4">
-      {content === "annotations" && annotationsData ? (
-        <AnnotationsSidebar
-          videoId={annotationsData.videoId}
-          videoRef={annotationsData.videoRef}
-          videoTitle={annotationsData.videoTitle}
-          videoDescription={annotationsData.videoDescription}
-          currentTime={annotationsData.currentTime}
-        />
+      {showVideoSidebar ? (
+        <>
+          {/* Tab navigation for video-related sidebars */}
+          <div className="mb-4 flex gap-1 rounded-lg bg-muted p-1">
+            <button
+              onClick={() => setContent("annotations")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                content === "annotations"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+              )}
+            >
+              <StickyNote className="h-4 w-4" />
+              Notes
+            </button>
+            <button
+              onClick={() => setContent("ai-summary")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                content === "ai-summary"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+              )}
+            >
+              <Sparkles className="h-4 w-4" />
+              AI Summary
+            </button>
+          </div>
+
+          {/* Content based on active tab */}
+          {content === "annotations" ? (
+            <AnnotationsSidebar
+              videoId={annotationsData.videoId}
+              videoRef={annotationsData.videoRef}
+              videoTitle={annotationsData.videoTitle}
+              videoDescription={annotationsData.videoDescription}
+              currentTime={annotationsData.currentTime}
+            />
+          ) : content === "ai-summary" ? (
+            <AISummarySidebar
+              videoId={annotationsData.videoId}
+              videoRef={annotationsData.videoRef}
+              videoTitle={annotationsData.videoTitle}
+            />
+          ) : null}
+        </>
       ) : (
         <DownloadQueueSidebar />
       )}

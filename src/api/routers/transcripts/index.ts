@@ -411,6 +411,7 @@ export const transcriptsRouter = t.router({
       const url = `https://www.youtube.com/watch?v=${input.videoId}`;
 
       const args = [
+        "--force-ipv4",
         "--skip-download",
         "--write-subs",
         "--write-auto-subs",

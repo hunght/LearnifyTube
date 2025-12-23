@@ -18,6 +18,8 @@ import {
   translationTargetLangAtom,
   includeTranslationInNoteAtom,
   showInlineTranslationsAtom,
+  showDualSubtitlesAtom,
+  secondarySubtitleLangAtom,
 } from "@/context/transcriptSettings";
 import { logger } from "@/helpers/logger";
 
@@ -46,6 +48,8 @@ export function TranscriptSettingsDialog({
     includeTranslationInNoteAtom
   );
   const [showInlineTranslations, setShowInlineTranslations] = useAtom(showInlineTranslationsAtom);
+  const [showDualSubtitles, setShowDualSubtitles] = useAtom(showDualSubtitlesAtom);
+  const [secondaryLang, setSecondaryLang] = useAtom(secondarySubtitleLangAtom);
 
   // Zod schema for font family validation
   const fontFamilySchema = z.enum(["system", "serif", "mono"]);
@@ -184,8 +188,45 @@ export function TranscriptSettingsDialog({
               onCheckedChange={(checked) => setShowInlineTranslations(checked === true)}
             />
             <Label htmlFor="show-inline-translations" className="cursor-pointer text-xs">
-              Show inline translations in transcript
+              Show saved word translations inline
             </Label>
+          </div>
+
+          <div className="my-2 h-px bg-border" />
+
+          {/* Dual Subtitles Settings */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="show-dual-subtitles"
+                checked={showDualSubtitles}
+                onCheckedChange={(checked) => setShowDualSubtitles(checked === true)}
+              />
+              <Label htmlFor="show-dual-subtitles" className="cursor-pointer text-xs font-semibold">
+                Show Dual Subtitles (Enhanced Learning)
+              </Label>
+            </div>
+
+            {showDualSubtitles && (
+              <div className="space-y-2 pl-6">
+                <Label className="text-xs">Secondary Language</Label>
+                <Select value={secondaryLang} onValueChange={setSecondaryLang}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {translationLanguages.map((lang) => (
+                      <SelectItem key={lang.code} value={lang.code}>
+                        {lang.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Will use YouTube subtitles if available, otherwise auto-translate.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end">

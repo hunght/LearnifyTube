@@ -361,3 +361,81 @@ export const savedWords = sqliteTable(
 
 export type SavedWord = typeof savedWords.$inferSelect;
 export type NewSavedWord = typeof savedWords.$inferInsert;
+
+// AI-generated video summaries (cached)
+export const videoSummaries = sqliteTable(
+  "video_summaries",
+  {
+    id: text("id").primaryKey(),
+    videoId: text("video_id").notNull(),
+    summaryType: text("summary_type").notNull(), // 'quick', 'detailed', 'key_points'
+    content: text("content").notNull(), // JSON string containing the summary
+    language: text("language").notNull().default("en"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("video_summaries_video_id_idx").on(table.videoId),
+    unique().on(table.videoId, table.summaryType, table.language),
+  ]
+);
+
+export type VideoSummary = typeof videoSummaries.$inferSelect;
+export type NewVideoSummary = typeof videoSummaries.$inferInsert;
+
+// Flashcards for vocabulary learning
+export const flashcards = sqliteTable(
+  "flashcards",
+  {
+    id: text("id").primaryKey(),
+    videoId: text("video_id"), // Optional - can be null for manually created cards
+    frontContent: text("front_content").notNull(),
+    backContent: text("back_content").notNull(),
+    contextText: text("context_text"), // Context from video where word appeared
+    audioUrl: text("audio_url"), // Optional pronunciation audio
+    timestampSeconds: integer("timestamp_seconds"), // Optional timestamp in video
+    // Spaced repetition fields
+    difficulty: integer("difficulty").default(0), // 0=new, 1=easy, 2=medium, 3=hard
+    nextReviewAt: text("next_review_at"),
+    reviewCount: integer("review_count").default(0),
+    easeFactor: integer("ease_factor").default(250), // SM-2 algorithm factor (x100)
+    interval: integer("interval").default(0), // Days until next review
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at"),
+  },
+  (table) => [
+    index("flashcards_video_id_idx").on(table.videoId),
+    index("flashcards_next_review_idx").on(table.nextReviewAt),
+  ]
+);
+
+export type Flashcard = typeof flashcards.$inferSelect;
+export type NewFlashcard = typeof flashcards.$inferInsert;
+
+// Quiz results for tracking learning progress
+export const quizResults = sqliteTable(
+  "quiz_results",
+  {
+    id: text("id").primaryKey(),
+    videoId: text("video_id").notNull(),
+    quizType: text("quiz_type").notNull(), // 'multiple_choice', 'true_false', 'fill_blank'
+    score: integer("score").notNull(),
+    totalQuestions: integer("total_questions").notNull(),
+    answers: text("answers"), // JSON string of user answers
+    completedAt: text("completed_at").notNull(),
+  },
+  (table) => [
+    index("quiz_results_video_id_idx").on(table.videoId),
+    index("quiz_results_completed_at_idx").on(table.completedAt),
+  ]
+);
+
+export type QuizResult = typeof quizResults.$inferSelect;
+export type NewQuizResult = typeof quizResults.$inferInsert;
+
+// Saved words relation to include translation
+export const savedWordsRelations = relations(savedWords, ({ one }) => ({
+  translation: one(translationCache, {
+    fields: [savedWords.translationId],
+    references: [translationCache.id],
+  }),
+}));

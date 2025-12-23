@@ -23,6 +23,7 @@ interface TranscriptContentProps {
   isSelecting: boolean;
   containerRef?: React.RefObject<HTMLDivElement>;
   segRefs?: React.MutableRefObject<Array<HTMLParagraphElement | null>>;
+  secondarySegments?: TranscriptSegment[];
 }
 
 export function TranscriptContent({
@@ -41,6 +42,7 @@ export function TranscriptContent({
   isSelecting,
   containerRef,
   segRefs,
+  secondarySegments,
 }: TranscriptContentProps): React.JSX.Element {
   const internalContainerRef = useRef<HTMLDivElement>(null);
   const internalSegRefs = useRef<Array<HTMLParagraphElement | null>>([]);
@@ -179,6 +181,25 @@ export function TranscriptContent({
                 data-end={segments[activeSegIndex].end}
               >
                 {renderTextWithWords(segments[activeSegIndex].text)}
+
+                {/* Secondary Subtitle */}
+                {secondarySegments && secondarySegments.length > 0 && (
+                  <div
+                    className="mt-2 font-normal text-muted-foreground"
+                    style={{ fontSize: `${Math.max(12, fontSize - 2)}px` }}
+                  >
+                    {(() => {
+                      const currentStart = segments[activeSegIndex].start;
+                      const currentEnd = segments[activeSegIndex].end;
+                      const match = secondarySegments.find(
+                        (s) =>
+                          (s.start <= currentEnd && s.end >= currentStart) || // Overlap
+                          (s.start >= currentStart && s.start < currentEnd) // Starts within
+                      );
+                      return match ? match.text : null;
+                    })()}
+                  </div>
+                )}
               </div>
             )}
           </div>

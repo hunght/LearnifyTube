@@ -339,10 +339,20 @@ export default function PlayerPage(): React.JSX.Element {
   }, [filePath]);
 
   // Set sidebar to show annotations when on PlayerPage
+  // Set sidebar to show annotations when entering PlayerPage
   useEffect(() => {
-    setRightSidebarContent("annotations");
+    // Only switch to annotations if we're not already viewing AI summary
+    setRightSidebarContent((prev) => (prev === "ai-summary" ? "ai-summary" : "annotations"));
 
-    // Only set data when we have videoId
+    // Reset to queue when leaving PlayerPage (unmounting)
+    return () => {
+      setRightSidebarContent("queue");
+      setAnnotationsSidebarData(null);
+    };
+  }, [videoId, setRightSidebarContent, setAnnotationsSidebarData]);
+
+  // Update sidebar data constantly as video plays
+  useEffect(() => {
     if (videoId) {
       setAnnotationsSidebarData({
         videoId,
@@ -352,13 +362,7 @@ export default function PlayerPage(): React.JSX.Element {
         currentTime,
       });
     }
-
-    // Reset to queue when leaving PlayerPage
-    return () => {
-      setRightSidebarContent("queue");
-      setAnnotationsSidebarData(null);
-    };
-  }, [videoId, playback?.title, playback?.description, currentTime]);
+  }, [videoId, playback?.title, playback?.description, currentTime, setAnnotationsSidebarData]);
 
   return (
     <div className="container relative mx-auto space-y-6 p-6">
