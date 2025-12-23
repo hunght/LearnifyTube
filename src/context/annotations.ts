@@ -1,8 +1,8 @@
 import { atom } from "jotai";
 
-// Atom for triggering annotation form from other components
-export const openAnnotationFormAtom = atom<{
-  trigger: number; // Increment to trigger form
-  selectedText?: string; // Optional pre-filled text
-  currentTime?: number; // Optional pre-filled timestamp
+// Atom for tracking text selection in the transcript (for Sidebar UI)
+export const transcriptSelectionAtom = atom<{
+  trigger: number; // Timestamp to force updates
+  selectedText?: string;
+  currentTime?: number;
 } | null>(null);

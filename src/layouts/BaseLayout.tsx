@@ -7,12 +7,20 @@ import { AppRightSidebar } from "@/components/app-right-sidebar";
 import DragWindowRegion from "@/components/DragWindowRegion";
 import { HeaderNav } from "@/components/HeaderNav";
 
+type CSSPropertiesWithVars = React.CSSProperties & Record<`--${string}`, string>;
+
 export default function BaseLayout({ children }: { children: React.ReactNode }): React.JSX.Element {
+  const sidebarStyle: CSSPropertiesWithVars = {
+    "--header-height": "2.5rem",
+  };
+
   return (
-    <SidebarProvider>
+    <SidebarProvider style={sidebarStyle}>
       <div className="flex h-screen flex-col">
         {/* Drag region for frameless window */}
-        <DragWindowRegion title="LearnifyTube" />
+        <div className="h-[--header-height] shrink-0">
+          <DragWindowRegion title="LearnifyTube" />
+        </div>
 
         <div className="flex flex-1 overflow-hidden">
           <AppSidebar />

@@ -11,7 +11,6 @@ import { useWatchProgress } from "./hooks/useWatchProgress";
 import { VideoPlayer } from "./components/VideoPlayer";
 import { DownloadStatus } from "./components/DownloadStatus";
 import { TranscriptPanel } from "./components/TranscriptPanel";
-import { AnnotationForm } from "./components/AnnotationForm";
 import { PlaylistNavigation } from "./components/PlaylistNavigation";
 import { rightSidebarContentAtom, annotationsSidebarDataAtom } from "@/context/rightSidebar";
 import {
@@ -460,9 +459,6 @@ export default function PlayerPage(): React.JSX.Element {
                   onPrevious={goToPreviousVideo}
                 />
               )}
-
-              {/* Annotation Form Dialog - Self-contained, owns all its state */}
-              <AnnotationForm videoId={videoId} videoRef={videoRef} currentTime={currentTime} />
             </div>
           )}
         </CardContent>

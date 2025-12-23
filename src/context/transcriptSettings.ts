@@ -24,7 +24,7 @@ export const showInlineTranslationsAtom = atomWithStorage<boolean>(
   false
 );
 
-// Current transcript language (shared with AnnotationForm)
+// Current transcript language (shared with AnnotationsSidebar)
 // This is the effective language of the currently displayed transcript
 export const currentTranscriptLangAtom = atom<string | undefined>(undefined);
 

@@ -14,7 +14,7 @@ import {
   secondarySubtitleLangAtom,
   sentenceModeAtom,
 } from "@/context/transcriptSettings";
-import { openAnnotationFormAtom } from "@/context/annotations";
+import { transcriptSelectionAtom } from "@/context/annotations";
 import { PlaybackData } from "@/context/playerStore";
 import { toast } from "sonner";
 import { TranscriptContent } from "./TranscriptContent";
@@ -73,7 +73,7 @@ export function TranscriptPanel({
   const [fontFamily] = useAtom(fontFamilyAtom);
   const [fontSize] = useAtom(fontSizeAtom);
   const [, setCurrentTranscriptLang] = useAtom(currentTranscriptLangAtom);
-  const [, setOpenAnnotationForm] = useAtom(openAnnotationFormAtom);
+  const [, setTranscriptSelection] = useAtom(transcriptSelectionAtom);
   const [userCollapsed, setUserCollapsed] = useAtom(transcriptCollapsedAtom);
 
   // Dual Subtitles State
@@ -198,7 +198,7 @@ export function TranscriptPanel({
   const transcriptData = transcriptQuery.data;
   const effectiveLang = selectedLang ?? transcriptData?.language;
 
-  // Update shared atom when language changes (for AnnotationForm)
+  // Update shared atom when language changes (for Sidebar)
   useEffect(() => {
     setCurrentTranscriptLang(effectiveLang ?? undefined);
   }, [effectiveLang, setCurrentTranscriptLang]);
@@ -353,13 +353,13 @@ export function TranscriptPanel({
   const translateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isSeekingRef = useRef<boolean>(false);
 
-  // Handle text selection - trigger annotation form via atom
+  // Handle text selection - update sidebar state via atom
   const handleTranscriptSelect = (): void => {
     const selection = window.getSelection()?.toString() || "";
     if (selection.length > 0) {
       const cleaned = selection.trim();
       if (cleaned.length > 0) {
-        setOpenAnnotationForm({
+        setTranscriptSelection({
           trigger: Date.now(),
           selectedText: cleaned,
           currentTime,
@@ -368,9 +368,9 @@ export function TranscriptPanel({
     }
   };
 
-  // Handle Enter key - trigger annotation form at current time
+  // Handle Enter key - trigger annotation focus at current time
   const handleEnterKey = (): void => {
-    setOpenAnnotationForm({
+    setTranscriptSelection({
       trigger: Date.now(),
       currentTime,
     });
