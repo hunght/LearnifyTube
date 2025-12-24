@@ -450,15 +450,18 @@ export const aiRouter = t.router({
 
     // Get transcript
     const transcript = await getTranscriptText(videoId);
-    if (!transcript) {
-      return {
-        success: false,
-        error: "No transcript available for this video",
-      };
-    }
-
     const metadata = await getVideoMetadata(videoId);
     const videoTitle = metadata?.title || "Unknown Video";
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+    // Build context based on available data
+    let contextInfo = "";
+    if (transcript) {
+      contextInfo = `Transcript:\n${transcript.slice(0, 20000)}`;
+    } else {
+      // No transcript available, provide video URL for AI to analyze
+      contextInfo = `Video URL: ${videoUrl}\n\nNote: This video does not have a transcript available. Please analyze the video directly from the URL above.`;
+    }
 
     // Build prompt based on summary type
     let prompt = "";
@@ -469,8 +472,7 @@ export const aiRouter = t.router({
       case "quick":
         prompt = `Provide a 2-3 sentence summary of this video titled "${videoTitle}".
 
-Transcript:
-${transcript.slice(0, 10000)}
+${contextInfo}
 
 Respond with a JSON object: { "summary": "..." }`;
         break;
@@ -478,8 +480,7 @@ Respond with a JSON object: { "summary": "..." }`;
       case "key_points":
         prompt = `Extract the key points from this video titled "${videoTitle}".
 
-Transcript:
-${transcript.slice(0, 15000)}
+${contextInfo}
 
 Respond with a JSON object:
 {
@@ -495,8 +496,7 @@ Respond with a JSON object:
       default:
         prompt = `Create a detailed summary of this video titled "${videoTitle}".
 
-Transcript:
-${transcript.slice(0, 20000)}
+${contextInfo}
 
 Respond with a JSON object:
 {
@@ -628,22 +628,25 @@ Respond with a JSON object:
     // Get transcript and metadata
     const transcript = await getTranscriptText(videoId);
     const metadata = await getVideoMetadata(videoId);
-
-    if (!transcript) {
-      return {
-        success: false,
-        error: "No transcript available for this video",
-      };
-    }
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
     // Build conversation context
+    let videoContext = "";
+    if (transcript) {
+      videoContext = `Video Transcript (for reference):
+${transcript.slice(0, 15000)}`;
+    } else {
+      videoContext = `Video URL: ${videoUrl}
+
+Note: This video does not have a transcript available. Please analyze the video directly from the URL above to answer questions.`;
+    }
+
     const systemMessage = `You are a helpful AI assistant that answers questions about a specific YouTube video.
 
 Video Title: ${metadata?.title || "Unknown"}
 Video Description: ${metadata?.description?.slice(0, 500) || "No description"}
 
-Video Transcript (for reference):
-${transcript.slice(0, 15000)}
+${videoContext}
 
 Rules:
 - Answer questions based on the video content
@@ -699,11 +702,19 @@ Rules:
           .leftJoin(translationCache, eq(savedWords.translationId, translationCache.id))
           .limit(maxCards);
 
-        vocabulary = savedWordsResult.map((sw) => ({
-          word: sw.sourceText || "",
-          translation: sw.translatedText || "",
-          context: sw.notes || undefined,
-        }));
+        vocabulary = savedWordsResult.map((sw) => {
+          // Combine translation with notes for richer back content
+          let backContent = sw.translatedText || "";
+          if (sw.notes && sw.notes.trim()) {
+            backContent += `\n\n${sw.notes}`;
+          }
+
+          return {
+            word: sw.sourceText || "",
+            translation: backContent,
+            context: undefined,
+          };
+        });
       }
 
       // If not enough saved words, generate from transcript
@@ -781,11 +792,18 @@ Respond with a JSON array:
     const { videoId, type, numQuestions, difficulty } = input;
 
     const transcript = await getTranscriptText(videoId);
-    if (!transcript) {
-      return {
-        success: false,
-        error: "No transcript available for this video",
-      };
+    const metadata = await getVideoMetadata(videoId);
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+    // Build context based on available data
+    let videoContext = "";
+    if (transcript) {
+      videoContext = `Transcript:
+${transcript.slice(0, 15000)}`;
+    } else {
+      videoContext = `Video URL: ${videoUrl}
+
+Note: This video does not have a transcript available. Please analyze the video directly from the URL above to create the quiz.`;
     }
 
     // Check query cache for quiz
@@ -822,8 +840,6 @@ Respond with a JSON array:
       });
     }
 
-    const metadata = await getVideoMetadata(videoId);
-
     const typeInstructions = {
       multiple_choice:
         "Multiple choice questions with 4 options (A, B, C, D). Include the correct answer.",
@@ -839,8 +855,7 @@ Respond with a JSON array:
 
     const prompt = `Create a quiz based on this video titled "${metadata?.title || "Unknown"}".
 
-Transcript:
-${transcript.slice(0, 15000)}
+${videoContext}
 
 Requirements:
 - Quiz type: ${typeInstructions[type]}

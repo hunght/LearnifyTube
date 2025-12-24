@@ -32,7 +32,7 @@ export function AppRightSidebar({
     (content === "annotations" || content === "ai-summary" || content === "quiz");
 
   const sidebarContent = (
-    <div className="flex h-full flex-col p-4 pt-12">
+    <div className="flex h-full flex-col p-2">
       {showVideoSidebar ? (
         <>
           {/* Tab navigation for video-related sidebars */}
@@ -81,7 +81,6 @@ export function AppRightSidebar({
               videoId={annotationsData.videoId}
               videoRef={annotationsData.videoRef}
               videoTitle={annotationsData.videoTitle}
-              videoDescription={annotationsData.videoDescription}
               currentTime={annotationsData.currentTime}
             />
           ) : content === "ai-summary" ? (
@@ -89,6 +88,7 @@ export function AppRightSidebar({
               videoId={annotationsData.videoId}
               videoRef={annotationsData.videoRef}
               videoTitle={annotationsData.videoTitle}
+              videoDescription={annotationsData.videoDescription}
             />
           ) : content === "quiz" ? (
             <QuizSidebar

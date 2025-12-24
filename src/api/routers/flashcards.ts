@@ -44,16 +44,11 @@ const calculateNextReview = (
 };
 
 export const flashcardsRouter = t.router({
-  // Create a flashcard
+  // Create a flashcard from a saved word
   create: publicProcedure
     .input(
       z.object({
-        front: z.string().min(1),
-        back: z.string().min(1),
-        videoId: z.string().optional(),
-        context: z.string().optional(),
-        audioUrl: z.string().optional(),
-        timestamp: z.number().optional(),
+        translationId: z.string(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -61,14 +56,69 @@ export const flashcardsRouter = t.router({
       const now = new Date().toISOString();
       const id = crypto.randomUUID();
 
+      // Import necessary schemas
+      const { translationCache, translationContexts, savedWords } = await import("@/api/db/schema");
+
+      // 1. Fetch the translation
+      const translation = await db
+        .select()
+        .from(translationCache)
+        .where(eq(translationCache.id, input.translationId))
+        .limit(1)
+        .get();
+
+      if (!translation) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Translation not found" });
+      }
+
+      const frontContent = translation.sourceText;
+
+      // 2. Fetch saved word notes (if this translation is saved)
+      const savedWord = await db
+        .select()
+        .from(savedWords)
+        .where(eq(savedWords.translationId, input.translationId))
+        .limit(1)
+        .get();
+
+      // 3. Build back content: notes (if any) + translation in brackets
+      let backContent = "";
+      if (savedWord?.notes && savedWord.notes.trim()) {
+        backContent = savedWord.notes.trim();
+      }
+
+      // Add translation in brackets
+      if (backContent) {
+        backContent += `\n\n[${translation.translatedText}]`;
+      } else {
+        backContent = `[${translation.translatedText}]`;
+      }
+
+      // 4. Fetch best context (most recent)
+      const contexts = await db
+        .select({
+          videoId: translationContexts.videoId,
+          timestampSeconds: translationContexts.timestampSeconds,
+          contextText: translationContexts.contextText,
+        })
+        .from(translationContexts)
+        .where(eq(translationContexts.translationId, input.translationId))
+        .orderBy(desc(translationContexts.createdAt))
+        .limit(1);
+
+      const bestContext = contexts[0];
+      const videoId = bestContext?.videoId;
+      const contextText = bestContext?.contextText ?? undefined;
+      const timestampSeconds = bestContext?.timestampSeconds;
+
       await db.insert(flashcards).values({
         id,
-        videoId: input.videoId,
-        frontContent: input.front,
-        backContent: input.back,
-        contextText: input.context,
-        audioUrl: input.audioUrl,
-        timestampSeconds: input.timestamp,
+        videoId,
+        frontContent,
+        backContent,
+        contextText,
+        audioUrl: undefined,
+        timestampSeconds,
         // Initial state
         difficulty: 0,
         reviewCount: 0,

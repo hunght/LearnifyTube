@@ -80,33 +80,9 @@ export default function MyWordsPage(): React.JSX.Element {
     }
   };
 
-  interface FlashcardInput {
-    front: string;
-    back: string;
-    videoId?: string;
-    context?: string;
-    timestamp?: number;
-  }
-
-  interface TranslationItem {
-    id: string;
-    sourceText: string;
-    translatedText: string;
-    sourceLang: string;
-    targetLang: string;
-    queryCount: number;
-    createdAt: string | number;
-    detectedLang?: string | null;
-    notes?: string;
-    savedAt?: number;
-    reviewCount?: number;
-    lastReviewedAt?: string | null;
-    savedWordId?: string;
-  }
-
   const createFlashcardMutation = useMutation({
-    mutationFn: async (data: FlashcardInput) => {
-      return await trpcClient.flashcards.create.mutate(data);
+    mutationFn: async (translationId: string) => {
+      return await trpcClient.flashcards.create.mutate({ translationId });
     },
     onSuccess: () => {
       toast({
@@ -123,32 +99,8 @@ export default function MyWordsPage(): React.JSX.Element {
     },
   });
 
-  const handleAddToFlashcard = async (translation: TranslationItem): Promise<void> => {
-    try {
-      // 1. Try to find context for this word
-      const contexts = await trpcClient.translation.getTranslationContexts.query({
-        translationId: translation.id,
-      });
-
-      const bestContext = contexts && contexts.length > 0 ? contexts[0] : null;
-
-      createFlashcardMutation.mutate({
-        front: translation.sourceText,
-        back: translation.translatedText,
-        // Optional context data
-        videoId: bestContext?.videoId,
-        context: bestContext?.contextText || undefined,
-        timestamp: bestContext?.timestampSeconds,
-        // Audio URL if we had it (translation structure might need update later for TTS)
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      toast({
-        title: "Error",
-        description: `Could not prepare flashcard data: ${errorMessage}`,
-        variant: "destructive",
-      });
-    }
+  const handleAddToFlashcard = (translationId: string): void => {
+    createFlashcardMutation.mutate(translationId);
   };
 
   const toggleExpanded = (translationId: string): void => {
@@ -534,7 +486,7 @@ export default function MyWordsPage(): React.JSX.Element {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleAddToFlashcard(translation)}
+                        onClick={() => handleAddToFlashcard(translation.id)}
                         className="opacity-0 transition-opacity group-hover:opacity-100"
                         title="Add to Flashcards"
                         disabled={createFlashcardMutation.isPending}
