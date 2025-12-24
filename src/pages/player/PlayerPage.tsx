@@ -11,7 +11,9 @@ import { useWatchProgress } from "./hooks/useWatchProgress";
 import { VideoPlayer } from "./components/VideoPlayer";
 import { DownloadStatus } from "./components/DownloadStatus";
 import { TranscriptPanel } from "./components/TranscriptPanel";
+import { VideoDescription } from "./components/VideoDescription";
 import { PlaylistNavigation } from "./components/PlaylistNavigation";
+import { ExternalLink } from "@/components/ExternalLink";
 import { rightSidebarContentAtom, annotationsSidebarDataAtom } from "@/context/rightSidebar";
 import {
   beginVideoPlayback,
@@ -293,6 +295,13 @@ export default function PlayerPage(): React.JSX.Element {
     setVideoLoadError(true);
   }, [videoId, filePath]);
 
+  const handleSeek = useCallback((seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = seconds;
+      videoRef.current.play();
+    }
+  }, []);
+
   useEffect(() => {
     if (!videoId) return;
     if (!filePath && playbackStatus === "completed") {
@@ -392,7 +401,15 @@ export default function PlayerPage(): React.JSX.Element {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{videoTitle}</CardTitle>
+          <CardTitle className="text-base font-semibold">
+            <ExternalLink
+              href={`https://www.youtube.com/watch?v=${videoId}`}
+              className="transition-colors hover:text-primary"
+              iconClassName="h-3.5 w-3.5 opacity-50 group-hover:opacity-100"
+            >
+              {videoTitle}
+            </ExternalLink>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {playbackIsLoading ? (
@@ -447,6 +464,9 @@ export default function PlayerPage(): React.JSX.Element {
                 onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
               />
 
+              {playback?.description && (
+                <VideoDescription description={playback.description} onSeek={handleSeek} />
+              )}
               {/* Playlist Navigation - Show when playing from a playlist */}
               {isPlaylist && (
                 <PlaylistNavigation

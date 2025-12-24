@@ -88,7 +88,6 @@ export function AppRightSidebar({
               videoId={annotationsData.videoId}
               videoRef={annotationsData.videoRef}
               videoTitle={annotationsData.videoTitle}
-              videoDescription={annotationsData.videoDescription}
             />
           ) : content === "quiz" ? (
             <QuizSidebar

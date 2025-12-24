@@ -12,9 +12,8 @@ import {
   ChevronRight,
   BookmarkPlus,
   Check,
-  ChevronDown,
 } from "lucide-react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
 import { useAtom } from "jotai";
 import { translationTargetLangAtom } from "@/context/transcriptSettings";
 
@@ -22,7 +21,6 @@ interface AISummarySidebarProps {
   videoId: string;
   videoRef: React.RefObject<HTMLVideoElement>;
   videoTitle?: string;
-  videoDescription?: string;
 }
 
 interface Section {
@@ -59,72 +57,10 @@ const isDetailedSummary = (summary: unknown): summary is DetailedSummary => {
   return hasOverview && hasSections && hasKeyTakeaways && hasVocabulary;
 };
 
-// Helper function to parse timestamp strings to seconds
-function parseTimestampToSeconds(timestamp: string): number {
-  const parts = timestamp.split(":").map(Number);
-  if (parts.length === 3) {
-    // HH:MM:SS
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  } else if (parts.length === 2) {
-    // MM:SS
-    return parts[0] * 60 + parts[1];
-  }
-  return 0;
-}
-
-// Helper function to render description with clickable timestamps
-function renderDescriptionWithTimestamps(
-  description: string,
-  onSeek: (seconds: number) => void
-): React.ReactNode {
-  // Regex to match timestamps like 00:00, 03:44, 01:14:43
-  const timestampRegex = /\b(\d{1,2}:\d{2}(?::\d{2})?)\b/g;
-
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = timestampRegex.exec(description)) !== null) {
-    const timestamp = match[1];
-    const matchIndex = match.index;
-
-    // Add text before timestamp
-    if (matchIndex > lastIndex) {
-      parts.push(description.substring(lastIndex, matchIndex));
-    }
-
-    // Add clickable timestamp
-    const seconds = parseTimestampToSeconds(timestamp);
-    parts.push(
-      <button
-        key={`timestamp-${matchIndex}`}
-        onClick={(e): void => {
-          e.preventDefault();
-          onSeek(seconds);
-        }}
-        className="inline-flex cursor-pointer items-center gap-0.5 font-medium text-primary hover:text-primary/80 hover:underline"
-      >
-        <Clock className="inline h-3 w-3" />
-        {timestamp}
-      </button>
-    );
-
-    lastIndex = matchIndex + timestamp.length;
-  }
-
-  // Add remaining text
-  if (lastIndex < description.length) {
-    parts.push(description.substring(lastIndex));
-  }
-
-  return parts.length > 0 ? parts : description;
-}
-
 export function AISummarySidebar({
   videoId,
   videoRef,
   videoTitle,
-  videoDescription,
 }: AISummarySidebarProps): React.JSX.Element {
   // Always use detailed summary
   const summaryType: SummaryType = "detailed";
@@ -200,35 +136,6 @@ export function AISummarySidebar({
 
       {videoTitle && (
         <p className="mb-4 line-clamp-2 text-sm text-muted-foreground">{videoTitle}</p>
-      )}
-
-      {/* Video Description - Collapsible */}
-      {videoDescription && (
-        <Collapsible className="mb-4">
-          <Card className="border-none bg-transparent shadow-none">
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="group mb-1 flex h-auto w-full items-center justify-between p-0 hover:bg-transparent hover:text-primary"
-              >
-                <span className="text-xs font-semibold text-muted-foreground transition-colors group-hover:text-primary">
-                  Video Info
-                </span>
-                <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-                <div className="max-h-[150px] overflow-y-auto pr-1">
-                  <div className="whitespace-pre-wrap break-words leading-relaxed">
-                    {renderDescriptionWithTimestamps(videoDescription, seekToTimestamp)}
-                  </div>
-                </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
       )}
 
       <ScrollArea className="flex-1 px-1">
