@@ -65,8 +65,6 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ channelId, isActive }) =
       );
     },
     enabled: !!channelId && isActive,
-    refetchInterval: isActive ? 3000 : false,
-    staleTime: 0, // Library always refetches to show current download status
   });
 
   return (
@@ -83,7 +81,6 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ channelId, isActive }) =
               <>Last updated: {new Date(query.dataUpdatedAt).toLocaleString()}</>
             )}
           </span>
-          <span className="text-xs">Auto-refreshes every 3s</span>
         </div>
       )}
 

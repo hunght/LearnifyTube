@@ -37,6 +37,69 @@ const extractPlaylistId = (url: string): string | null => {
   }
 };
 
+const isChannelUrl = (url: string): boolean => {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.includes("youtube.com")) return false;
+    const pathname = u.pathname;
+    // Match patterns: /@channelname, /channel/ID, /c/channelname, /user/username
+    return (
+      /^\/@[^/]+/.test(pathname) ||
+      /^\/channel\/[^/]+/.test(pathname) ||
+      /^\/c\/[^/]+/.test(pathname) ||
+      /^\/user\/[^/]+/.test(pathname)
+    );
+  } catch {
+    return false;
+  }
+};
+
+const normalizeChannelUrl = (url: string): string => {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.includes("youtube.com")) return url;
+
+    const pathname = u.pathname;
+
+    // Extract base channel path (remove /playlists, /videos, /about, etc.)
+    let basePath = pathname;
+
+    // Match /@channelname/playlists or /@channelname/videos etc.
+    const atMatch = pathname.match(/^\/@([^/]+)/);
+    if (atMatch) {
+      basePath = `/@${atMatch[1]}`;
+    }
+    // Match /channel/ID/playlists or /channel/ID/videos etc.
+    else if (/^\/channel\/[^/]+/.test(pathname)) {
+      const channelMatch = pathname.match(/^\/channel\/([^/]+)/);
+      if (channelMatch) {
+        basePath = `/channel/${channelMatch[1]}`;
+      }
+    }
+    // Match /c/channelname/playlists or /c/channelname/videos etc.
+    else if (/^\/c\/[^/]+/.test(pathname)) {
+      const cMatch = pathname.match(/^\/c\/([^/]+)/);
+      if (cMatch) {
+        basePath = `/c/${cMatch[1]}`;
+      }
+    }
+    // Match /user/username/playlists or /user/username/videos etc.
+    else if (/^\/user\/[^/]+/.test(pathname)) {
+      const userMatch = pathname.match(/^\/user\/([^/]+)/);
+      if (userMatch) {
+        basePath = `/user/${userMatch[1]}`;
+      }
+    }
+
+    // Reconstruct URL with normalized path
+    u.pathname = basePath;
+    u.search = ""; // Remove query params
+    return u.toString();
+  } catch {
+    return url;
+  }
+};
+
 const formatDuration = (seconds: number | null): string => {
   if (!seconds) return "Unknown";
   const h = Math.floor(seconds / 3600);
@@ -44,6 +107,28 @@ const formatDuration = (seconds: number | null): string => {
   const s = seconds % 60;
   if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   return `${m}:${s.toString().padStart(2, "0")}`;
+};
+
+// Type matching the backend FetchChannelInfoResult
+type ChannelInfoResponse = {
+  success: true;
+  channel: {
+    id: string;
+    channelId: string;
+    channelTitle: string;
+    channelDescription: string | null;
+    channelUrl: string | null;
+    thumbnailUrl: string | null;
+    thumbnailPath: string | null;
+    bannerUrl: string | null;
+    subscriberCount: number | null;
+    videoCount: number | null;
+    viewCount: number | null;
+    customUrl: string | null;
+    raw: string | null;
+    createdAt: number;
+    updatedAt: number | null;
+  } | null;
 };
 
 export default function DashboardPage(): React.JSX.Element {
@@ -73,6 +158,15 @@ export default function DashboardPage(): React.JSX.Element {
     thumbnailUrl: string | null;
     itemCount: number | null;
   } | null>(null);
+  // Channel preview state
+  const [channelPreviewInfo, setChannelPreviewInfo] = useState<{
+    channelId: string;
+    channelTitle: string;
+    channelDescription: string | null;
+    thumbnailUrl: string | null;
+    subscriberCount: number | null;
+    customUrl: string | null;
+  } | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [thumbnailError, setThumbnailError] = useState(false);
@@ -86,6 +180,7 @@ export default function DashboardPage(): React.JSX.Element {
         logger.debug("Dashboard preview loaded", { info: res.info });
         setPreviewInfo(res.info);
         setPlaylistPreviewInfo(null);
+        setChannelPreviewInfo(null);
         setThumbnailError(false);
         // Set initial thumbnail URL
         setThumbnailUrl(res.info.thumbnailUrl);
@@ -93,6 +188,7 @@ export default function DashboardPage(): React.JSX.Element {
         toast.error(res.message ?? "Failed to fetch video info");
         setPreviewInfo(null);
         setPlaylistPreviewInfo(null);
+        setChannelPreviewInfo(null);
         setThumbnailUrl(null);
       }
     },
@@ -101,6 +197,7 @@ export default function DashboardPage(): React.JSX.Element {
       toast.error(e?.message ?? "Failed to fetch video info");
       setPreviewInfo(null);
       setPlaylistPreviewInfo(null);
+      setChannelPreviewInfo(null);
       setThumbnailUrl(null);
     },
   });
@@ -120,12 +217,14 @@ export default function DashboardPage(): React.JSX.Element {
           itemCount: res.itemCount,
         });
         setPreviewInfo(null);
+        setChannelPreviewInfo(null);
         setThumbnailError(false);
         setThumbnailUrl(res.thumbnailUrl);
       } else {
         toast.error("Failed to fetch playlist info");
         setPlaylistPreviewInfo(null);
         setPreviewInfo(null);
+        setChannelPreviewInfo(null);
         setThumbnailUrl(null);
       }
     },
@@ -134,6 +233,40 @@ export default function DashboardPage(): React.JSX.Element {
       toast.error(e?.message ?? "Failed to fetch playlist info");
       setPlaylistPreviewInfo(null);
       setPreviewInfo(null);
+      setChannelPreviewInfo(null);
+      setThumbnailUrl(null);
+    },
+  });
+
+  // Fetch channel preview mutation
+  const channelPreviewMutation = useMutation({
+    mutationFn: (channelUrl: string) =>
+      trpcClient.ytdlp.fetchChannelInfo.mutate({ url: channelUrl }),
+    onSuccess: (res: ChannelInfoResponse): void => {
+      setIsLoadingPreview(false);
+      if (res.channel) {
+        const channel = res.channel;
+        logger.debug("Dashboard channel preview loaded", { channelId: channel.channelId });
+        setChannelPreviewInfo({
+          channelId: channel.channelId,
+          channelTitle: channel.channelTitle,
+          channelDescription: channel.channelDescription ?? null,
+          thumbnailUrl: channel.thumbnailUrl ?? null,
+          subscriberCount: channel.subscriberCount ?? null,
+          customUrl: channel.customUrl ?? null,
+        });
+        setPreviewInfo(null);
+        setPlaylistPreviewInfo(null);
+        setThumbnailError(false);
+        setThumbnailUrl(channel.thumbnailUrl ?? null);
+      }
+    },
+    onError: (e) => {
+      setIsLoadingPreview(false);
+      toast.error(e?.message ?? "Failed to fetch channel info");
+      setChannelPreviewInfo(null);
+      setPreviewInfo(null);
+      setPlaylistPreviewInfo(null);
       setThumbnailUrl(null);
     },
   });
@@ -143,6 +276,7 @@ export default function DashboardPage(): React.JSX.Element {
     if (!isValidUrl(url)) {
       setPreviewInfo(null);
       setPlaylistPreviewInfo(null);
+      setChannelPreviewInfo(null);
       setIsLoadingPreview(false);
       setThumbnailUrl(null);
       setThumbnailError(false);
@@ -150,14 +284,21 @@ export default function DashboardPage(): React.JSX.Element {
     }
     setIsLoadingPreview(true);
     const timer = setTimeout(() => {
-      // Check if URL contains a playlist
-      const playlistId = extractPlaylistId(url);
-      if (playlistId) {
-        logger.debug("Dashboard fetching playlist preview", { url, playlistId });
-        playlistPreviewMutation.mutate(playlistId);
+      // Check if URL is a channel URL
+      if (isChannelUrl(url)) {
+        const normalizedUrl = normalizeChannelUrl(url);
+        logger.debug("Dashboard fetching channel preview", { url, normalizedUrl });
+        channelPreviewMutation.mutate(normalizedUrl);
       } else {
-        logger.debug("Dashboard fetching video preview", { url });
-        previewMutation.mutate(url);
+        // Check if URL contains a playlist
+        const playlistId = extractPlaylistId(url);
+        if (playlistId) {
+          logger.debug("Dashboard fetching playlist preview", { url, playlistId });
+          playlistPreviewMutation.mutate(playlistId);
+        } else {
+          logger.debug("Dashboard fetching video preview", { url });
+          previewMutation.mutate(url);
+        }
       }
     }, 600);
     return () => clearTimeout(timer);
@@ -177,19 +318,46 @@ export default function DashboardPage(): React.JSX.Element {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to add to queue"),
   });
 
+  // Add channel to database mutation
+  const addChannelMutation = useMutation({
+    mutationFn: (channelUrl: string) =>
+      trpcClient.ytdlp.fetchChannelInfo.mutate({ url: channelUrl }),
+    onSuccess: (res: ChannelInfoResponse) => {
+      if (res.channel) {
+        queryClient.invalidateQueries({ queryKey: ["ytdlp", "channels"] });
+        toast.success(`Channel "${res.channel.channelTitle}" added successfully`);
+        setUrl(""); // Clear the input
+        setChannelPreviewInfo(null);
+      }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to add channel"),
+  });
+
   const canStart = useMemo(
-    () => isValidUrl(url) && !startMutation.isPending,
-    [url, startMutation.isPending]
+    () => isValidUrl(url) && !startMutation.isPending && !addChannelMutation.isPending,
+    [url, startMutation.isPending, addChannelMutation.isPending]
   );
 
   const isPlaylistUrl = useMemo(() => {
     return isValidUrl(url) && extractPlaylistId(url) !== null;
   }, [url]);
 
+  const isChannelUrlMemo = useMemo(() => {
+    return isValidUrl(url) && isChannelUrl(url);
+  }, [url]);
+
   const onSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
     if (!isValidUrl(url)) {
       toast.error("Please enter a valid URL");
+      return;
+    }
+
+    // Check if URL is a channel URL
+    if (isChannelUrl(url)) {
+      const normalizedUrl = normalizeChannelUrl(url);
+      logger.debug("Dashboard adding channel", { url, normalizedUrl });
+      addChannelMutation.mutate(normalizedUrl);
       return;
     }
 
@@ -237,7 +405,7 @@ export default function DashboardPage(): React.JSX.Element {
             <CardTitle className="text-lg sm:text-xl">Start a Download</CardTitle>
           </div>
           <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
-            Paste any YouTube video or playlist URL
+            Paste any YouTube video, playlist, or channel URL
           </p>
         </CardHeader>
         <CardContent>
@@ -260,10 +428,15 @@ export default function DashboardPage(): React.JSX.Element {
               className="h-11 gap-2 sm:h-10 sm:min-w-[120px]"
               size="lg"
             >
-              {startMutation.isPending ? (
+              {startMutation.isPending || addChannelMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Starting...</span>
+                </>
+              ) : isChannelUrlMemo ? (
+                <>
+                  <Users className="h-4 w-4" />
+                  <span>Add Channel</span>
                 </>
               ) : isPlaylistUrl ? (
                 <>
@@ -429,6 +602,68 @@ export default function DashboardPage(): React.JSX.Element {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Channel Preview Info */}
+      {!isLoadingPreview && channelPreviewInfo && (
+        <Card className="overflow-hidden border-l-4 border-l-orange-500 shadow-md transition-all hover:shadow-lg">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-orange-500" />
+              <CardTitle className="text-base sm:text-lg">Channel Preview</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4 sm:flex-row sm:gap-4">
+              {/* Thumbnail */}
+              {thumbnailUrl && !thumbnailError ? (
+                <div className="relative overflow-hidden rounded-full sm:h-32 sm:w-32 sm:flex-shrink-0">
+                  <img
+                    src={thumbnailUrl}
+                    alt="Channel Avatar"
+                    className="h-full w-full object-cover"
+                    onError={() => {
+                      logger.warn("Dashboard channel thumbnail failed to load", {
+                        original: thumbnailUrl,
+                      });
+                      setThumbnailError(true);
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="flex h-32 w-32 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm text-muted-foreground">
+                  <Users className="h-8 w-8 opacity-50" />
+                </div>
+              )}
+
+              {/* Channel Info */}
+              <div className="min-w-0 flex-1 space-y-2">
+                <h3 className="line-clamp-2 text-base font-semibold leading-tight sm:text-lg">
+                  {channelPreviewInfo.channelTitle}
+                </h3>
+                {channelPreviewInfo.customUrl && (
+                  <p className="text-sm text-muted-foreground">@{channelPreviewInfo.customUrl}</p>
+                )}
+                {channelPreviewInfo.channelDescription && (
+                  <p className="line-clamp-2 text-sm text-muted-foreground">
+                    {channelPreviewInfo.channelDescription}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground sm:text-sm">
+                  {channelPreviewInfo.subscriberCount !== null && (
+                    <div className="flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5" />
+                      <span>{channelPreviewInfo.subscriberCount.toLocaleString()} subscribers</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground sm:text-sm">
+                  Click &quot;Add Channel&quot; to add this channel to your database
+                </p>
               </div>
             </div>
           </CardContent>

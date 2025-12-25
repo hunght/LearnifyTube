@@ -21,6 +21,7 @@ import {
   videoWatchStats,
   type YoutubeVideo,
   type ChannelPlaylist,
+  type Channel,
 } from "@/api/db/schema";
 import defaultDb, { type Database } from "@/api/db";
 import { getYtDlpAssetName } from "@/api/utils/ytdlp-utils/ytdlp-utils";
@@ -231,6 +232,11 @@ const playlistDetailSchema = z
       .catch([]),
   })
   .passthrough();
+type FetchChannelInfoResult = {
+  success: true;
+  channel: Channel | null;
+};
+
 async function upsertVideoSearchFts(
   db: Database,
   videoId: string,
@@ -945,6 +951,87 @@ export const ytdlpRouter = t.router({
         logger.error("[fts] search failed", e);
         return [];
       }
+    }),
+
+  // Fetch channel information from a channel URL (for adding channels)
+  fetchChannelInfo: publicProcedure
+    .input(z.object({ url: z.string().url() }))
+    .mutation(async ({ input, ctx }): Promise<FetchChannelInfoResult> => {
+      const db = ctx.db ?? defaultDb;
+      const binPath = getBinaryFilePath();
+      if (!fs.existsSync(binPath)) {
+        throw new Error("yt-dlp binary not installed");
+      }
+
+      logger.info("[ytdlp] Fetching channel info from URL", { url: input.url });
+
+      // For channel URLs, use --flat-playlist with limit to avoid fetching all videos
+      // This gets channel metadata quickly without processing every video
+      let meta: unknown;
+      try {
+        // Use --flat-playlist --playlist-end 1 to get channel info + first video entry only
+        // This is much faster than fetching all videos
+        const metaJson = await new Promise<string>((resolve, reject) => {
+          const proc = spawnYtDlpWithLogging(
+            binPath,
+            ["-J", "--flat-playlist", "--playlist-end", "1", input.url],
+            { stdio: ["ignore", "pipe", "pipe"] },
+            {
+              operation: "fetch_channel_info",
+              url: input.url,
+            }
+          );
+          let out = "";
+          let err = "";
+          proc.stdout?.on("data", (d: Buffer | string) => {
+            out += d.toString();
+          });
+          proc.stderr?.on("data", (d: Buffer | string) => {
+            err += d.toString();
+          });
+          proc.on("error", reject);
+          proc.on("close", (code) => {
+            if (code === 0) resolve(out);
+            else reject(new Error(err || `yt-dlp -J exited with code ${code}`));
+          });
+        });
+
+        meta = JSON.parse(metaJson);
+      } catch (error) {
+        logger.error("[ytdlp] Failed to fetch channel info", {
+          url: input.url,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+
+      // Extract channel data from the response
+      const channelData = extractChannelData(meta);
+
+      if (!channelData || !channelData.channelId) {
+        throw new Error("Failed to extract channel data from YouTube response");
+      }
+
+      // Upsert channel in database
+      await upsertChannelData(db, channelData);
+
+      logger.info("[ytdlp] Successfully fetched channel info", {
+        channelId: channelData.channelId,
+        channelTitle: channelData.channelTitle,
+        hasThumbnail: !!channelData.thumbnailUrl,
+      });
+
+      // Fetch and return channel from DB
+      const updatedChannel = await db
+        .select()
+        .from(channels)
+        .where(eq(channels.channelId, channelData.channelId))
+        .limit(1);
+
+      return {
+        success: true as const,
+        channel: updatedChannel[0] || null,
+      };
     }),
 
   // Refresh channel information from YouTube (fetches fresh data including logo)

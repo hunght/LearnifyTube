@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,21 @@ interface PlaylistsTabProps {
 
 export const PlaylistsTab: React.FC<PlaylistsTabProps> = ({ channelId, isActive: _isActive }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const query = useQuery({
     queryKey: ["channel-playlists", channelId],
-    queryFn: () => trpcClient.ytdlp.listChannelPlaylists.query({ channelId }),
+    queryFn: () => {
+      // Check if query has cached data (has run before)
+      const cachedData = queryClient.getQueryData(["channel-playlists", channelId]);
+      const hasCachedData = cachedData !== undefined;
+
+      // Only force refresh on first run (no cached data)
+      return trpcClient.ytdlp.listChannelPlaylists.query({
+        channelId,
+        forceRefresh: !hasCachedData,
+      });
+    },
     enabled: !!channelId,
     staleTime: Infinity,
     gcTime: Infinity,

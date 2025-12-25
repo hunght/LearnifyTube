@@ -117,6 +117,8 @@ export function spawnYtDlpWithLogging(
 }
 
 export const runYtDlpJson = async (binPath: string, url: string): Promise<unknown> => {
+  const startTime = Date.now();
+
   const metaJson = await new Promise<string>((resolve, reject) => {
     const proc = spawnYtDlpWithLogging(
       binPath,
@@ -130,17 +132,67 @@ export const runYtDlpJson = async (binPath: string, url: string): Promise<unknow
     );
     let out = "";
     let err = "";
+
     proc.stdout?.on("data", (d: Buffer | string) => {
       out += d.toString();
     });
+
     proc.stderr?.on("data", (d: Buffer | string) => {
       err += d.toString();
     });
-    proc.on("error", reject);
-    proc.on("close", (code) => {
-      if (code === 0) resolve(out);
-      else reject(new Error(err || `yt-dlp -J exited with code ${code}`));
+
+    proc.on("error", (error) => {
+      const duration = Date.now() - startTime;
+      logger.error("[yt-dlp] runYtDlpJson process error", {
+        url,
+        durationMs: duration,
+        error: String(error),
+      });
+      reject(error);
+    });
+
+    // Add timeout to detect hanging processes
+    const timeout = setTimeout(() => {
+      const duration = Date.now() - startTime;
+      logger.error("[yt-dlp] runYtDlpJson timeout", {
+        url,
+        durationMs: duration,
+        timeoutMs: 120000,
+        pid: proc.pid,
+      });
+      proc.kill("SIGTERM");
+      reject(new Error(`yt-dlp timeout after ${duration}ms for URL: ${url}`));
+    }, 120000); // 2 minute timeout
+
+    proc.on("close", (code, signal) => {
+      clearTimeout(timeout);
+
+      if (code === 0) {
+        if (out.length === 0) {
+          logger.warn("[yt-dlp] runYtDlpJson got empty stdout", { url });
+          reject(new Error("yt-dlp returned empty output"));
+        } else {
+          resolve(out);
+        }
+      } else {
+        logger.error("[yt-dlp] runYtDlpJson process failed", {
+          url,
+          exitCode: code,
+          signal,
+          stderr: err.substring(0, 1000),
+        });
+        reject(new Error(err || `yt-dlp -J exited with code ${code}`));
+      }
     });
   });
-  return JSON.parse(metaJson);
+
+  try {
+    return JSON.parse(metaJson);
+  } catch (parseError) {
+    logger.error("[yt-dlp] runYtDlpJson JSON parse failed", {
+      url,
+      error: parseError instanceof Error ? parseError.message : String(parseError),
+    });
+    throw parseError;
+  }
 };
