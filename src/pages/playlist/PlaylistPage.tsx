@@ -319,26 +319,39 @@ export default function PlaylistPage(): React.JSX.Element {
                   const isCurrentVideo = index === (data?.currentVideoIndex || 0);
                   const isDownloaded = v.downloadStatus === "completed" && v.downloadFilePath;
                   const isSelected = selectedVideoIds.has(v.videoId);
+                  const hideNoThumb =
+                    typeof v.thumbnailUrl === "string" && v.thumbnailUrl.includes("no_thumbnail");
                   return (
                     <div
                       key={v.videoId}
-                      className={`space-y-2 rounded-lg border p-3 ${
+                      className={`group cursor-pointer space-y-2 rounded-lg border p-3 transition-colors hover:bg-muted/50 ${
                         isCurrentVideo
                           ? "border-primary bg-primary/5"
                           : isSelected
                             ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
                             : ""
                       }`}
+                      onClick={() => handlePlayVideo(index)}
                     >
                       <div className="relative">
-                        <Thumbnail
-                          thumbnailPath={v.thumbnailPath}
-                          thumbnailUrl={v.thumbnailUrl}
-                          alt={v.title}
-                          className="aspect-video w-full rounded object-cover"
-                        />
+                        {hideNoThumb ? (
+                          <div className="aspect-video w-full rounded bg-muted" />
+                        ) : (
+                          <Thumbnail
+                            thumbnailPath={v.thumbnailPath}
+                            thumbnailUrl={v.thumbnailUrl}
+                            alt={v.title}
+                            className="aspect-video w-full rounded object-cover"
+                          />
+                        )}
                         {!isDownloaded && (
-                          <div className="absolute left-2 top-2">
+                          <div
+                            className="absolute left-2 top-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleVideo(v.videoId);
+                            }}
+                          >
                             <Checkbox
                               checked={isSelected}
                               onCheckedChange={() => handleToggleVideo(v.videoId)}
@@ -346,6 +359,9 @@ export default function PlaylistPage(): React.JSX.Element {
                             />
                           </div>
                         )}
+                        <div className="absolute bottom-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white">
+                          #{index + 1}
+                        </div>
                         {isCurrentVideo && (
                           <div className="absolute right-2 top-2">
                             <Badge variant="default" className="flex items-center gap-1">
@@ -354,7 +370,7 @@ export default function PlaylistPage(): React.JSX.Element {
                             </Badge>
                           </div>
                         )}
-                        {isDownloaded && (
+                        {isDownloaded && !isCurrentVideo && (
                           <div className="absolute right-2 top-2">
                             <Badge
                               variant="default"
@@ -365,32 +381,30 @@ export default function PlaylistPage(): React.JSX.Element {
                             </Badge>
                           </div>
                         )}
-                        <div className="absolute bottom-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white">
-                          #{index + 1}
-                        </div>
                       </div>
                       <div className="space-y-1">
                         <div className="line-clamp-2 text-sm font-medium">{v.title}</div>
-                        <div className="flex gap-3 text-xs text-muted-foreground">
-                          {typeof v.durationSeconds === "number" && (
-                            <span>{Math.round(v.durationSeconds / 60)} min</span>
-                          )}
-                          {typeof v.viewCount === "number" && (
-                            <span>{v.viewCount.toLocaleString()} views</span>
-                          )}
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <div className="flex gap-3">
+                            {typeof v.durationSeconds === "number" && (
+                              <span>{Math.round(v.durationSeconds / 60)} min</span>
+                            )}
+                            {typeof v.viewCount === "number" && (
+                              <span>{v.viewCount.toLocaleString()} views</span>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0 opacity-0 transition-opacity group-hover:opacity-100"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void trpcClient.utils.openExternalUrl.mutate({ url: v.url });
+                            }}
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" className="flex-1" onClick={() => handlePlayVideo(index)}>
-                          Play
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => trpcClient.utils.openExternalUrl.mutate({ url: v.url })}
-                        >
-                          YouTube
-                        </Button>
                       </div>
                     </div>
                   );

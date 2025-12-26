@@ -155,17 +155,24 @@ export const watchStatsRouter = t.router({
         .filter((v): v is WatchedVideoWithStats => v !== null);
     }),
 
-  // List videos by most recently added, balanced across channels
+  // List videos by most recently added, balanced across channels (round-robin)
   listRecentVideos: publicProcedure
-    .input(z.object({ limit: z.number().min(1).max(200).optional() }).optional())
+    .input(
+      z
+        .object({
+          limit: z.number().min(1).max(200).optional(),
+          offset: z.number().min(0).optional(),
+        })
+        .optional()
+    )
     .query(async ({ input, ctx }): Promise<ListRecentVideosResult> => {
       const db = ctx.db ?? defaultDb;
-      const limit = input?.limit ?? 30;
+      const limit = input?.limit ?? 200;
+      const offset = input?.offset ?? 0;
 
-      // Use window function to rank videos within each channel by createdAt
-      // Then take top N per channel to ensure balanced representation
-      const videosPerChannel = 3; // Show up to 3 most recent videos per channel
-
+      // Round-robin approach: order by rank first, then by created_at within each rank
+      // This gives us: 1st video from each channel, then 2nd from each, then 3rd, etc.
+      // until we hit the limit - ensuring fair distribution across all channels
       const rows = await db.all<{
         id: string;
         videoId: string;
@@ -197,9 +204,8 @@ export const watchStatsRouter = t.router({
           published_at as publishedAt, download_status as downloadStatus,
           download_progress as downloadProgress, download_file_path as downloadFilePath
         FROM ranked_videos
-        WHERE rn <= ${videosPerChannel}
-        ORDER BY created_at DESC
-        LIMIT ${limit}
+        ORDER BY rn ASC, created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
       `);
 
       return rows;

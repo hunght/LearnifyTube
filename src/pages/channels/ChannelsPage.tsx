@@ -33,43 +33,35 @@ export default function ChannelsPage(): React.JSX.Element {
 
   return (
     <div className="container mx-auto space-y-6 p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <h1 className="text-3xl font-bold">Channels</h1>
-        <Button
-          onClick={handleRefresh}
-          disabled={channelsQuery.isRefetching}
-          size="sm"
-          variant="outline"
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${channelsQuery.isRefetching ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Search Channels</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by channel name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            {searchQuery && (
-              <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")}>
-                Clear
-              </Button>
-            )}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search channels..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-64 pl-9"
+            />
           </div>
-        </CardContent>
-      </Card>
+          {searchQuery && (
+            <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")}>
+              Clear
+            </Button>
+          )}
+          <Button
+            onClick={handleRefresh}
+            disabled={channelsQuery.isRefetching}
+            size="sm"
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${channelsQuery.isRefetching ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
+      </div>
 
       <Card>
         <CardHeader>
