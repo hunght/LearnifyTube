@@ -1293,6 +1293,19 @@ export const ytdlpRouter = t.router({
         .where(inArray(youtubeVideos.videoId, videoIds))
         .orderBy(desc(youtubeVideos.publishedAt));
 
+      // Update channel's lastLatestFetchedAt timestamp
+      try {
+        await db
+          .update(channels)
+          .set({ lastLatestFetchedAt: now, updatedAt: now })
+          .where(eq(channels.channelId, input.channelId));
+      } catch (e) {
+        logger.error("[ytdlp] Failed to update lastLatestFetchedAt", {
+          channelId: input.channelId,
+          error: String(e),
+        });
+      }
+
       return videos.map(toVideoResponse);
     }),
 
