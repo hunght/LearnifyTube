@@ -1,44 +1,293 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Search,
   Trash2,
   TrendingUp,
   Clock,
-  Languages,
   Loader2,
-  Play,
-  ChevronDown,
-  ChevronUp,
-  Video,
   BookmarkCheck,
   Brain,
   RefreshCw,
+  Play,
+  Video,
+  X,
+  GraduationCap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { useNavigate } from "@tanstack/react-router";
 import Thumbnail from "@/components/Thumbnail";
+import { StudyMode } from "@/pages/learn/StudyMode";
+
+// Type for video context from API
+interface VideoContext {
+  id: string;
+  videoId: string;
+  videoTitle: string | null;
+  videoThumbnailPath: string | null;
+  videoThumbnailUrl: string | null;
+  timestampSeconds: number;
+  contextText: string | null;
+}
+
+// Video Player Modal Component
+function VideoPlayerModal({
+  context,
+  isOpen,
+  onClose,
+}: {
+  context: VideoContext | null;
+  isOpen: boolean;
+  onClose: () => void;
+}): React.JSX.Element | null {
+  const navigate = useNavigate();
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  // Fetch video playback info
+  const { data: videoData, isLoading } = useQuery({
+    queryKey: ["video-playback", context?.videoId],
+    queryFn: async () => {
+      if (!context?.videoId) return null;
+      return trpcClient.ytdlp.getVideoPlayback.query({ videoId: context.videoId });
+    },
+    enabled: isOpen && !!context?.videoId,
+  });
+
+  // Set video time when loaded
+  useEffect(() => {
+    if (videoRef.current && context?.timestampSeconds && videoData?.mediaUrl) {
+      videoRef.current.currentTime = context.timestampSeconds;
+      // Try to autoplay
+      videoRef.current.play().catch((): void => {
+        // Autoplay blocked - user will need to click play
+      });
+    }
+  }, [videoData?.mediaUrl, context?.timestampSeconds]);
+
+  const handleTitleClick = (): void => {
+    if (!context) return;
+    onClose();
+    navigate({
+      to: "/player",
+      search: {
+        videoId: context.videoId,
+        playlistId: undefined,
+        playlistIndex: undefined,
+      },
+    });
+  };
+
+  if (!context) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-4xl overflow-hidden p-0" onClick={(e) => e.stopPropagation()}>
+        <div className="relative">
+          {/* Close button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 top-2 z-10 h-8 w-8 rounded-full bg-black/50 text-white hover:bg-black/70"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+
+          {/* Video Player */}
+          {isLoading ? (
+            <div className="flex aspect-video items-center justify-center bg-black">
+              <Loader2 className="h-8 w-8 animate-spin text-white" />
+            </div>
+          ) : !videoData?.mediaUrl ? (
+            <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-black text-white">
+              <Video className="h-12 w-12 opacity-50" />
+              <p className="text-sm opacity-70">Video not downloaded yet</p>
+            </div>
+          ) : (
+            <video
+              ref={videoRef}
+              src={videoData.mediaUrl}
+              className="aspect-video w-full bg-black"
+              controls
+              autoPlay
+            />
+          )}
+        </div>
+
+        {/* Video Info */}
+        <div className="p-4">
+          <h3
+            className="line-clamp-2 cursor-pointer font-semibold hover:text-primary hover:underline"
+            onClick={handleTitleClick}
+            title="Open in full player"
+          >
+            {context.videoTitle || context.videoId}
+          </h3>
+          <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+            <Clock className="h-4 w-4" />
+            <span>
+              Timestamp: {Math.floor(context.timestampSeconds / 60)}:
+              {String(context.timestampSeconds % 60).padStart(2, "0")}
+            </span>
+          </div>
+          {context.contextText && (
+            <p className="mt-2 text-sm italic text-muted-foreground">"{context.contextText}"</p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Component to show video play button with modal
+function VideoPlayButton({
+  translationId,
+  sourceText,
+}: {
+  translationId: string;
+  sourceText: string;
+}): React.JSX.Element | null {
+  const [isListOpen, setIsListOpen] = useState(false);
+  const [selectedContext, setSelectedContext] = useState<VideoContext | null>(null);
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false);
+
+  const { data: contexts, isLoading } = useQuery({
+    queryKey: ["translation-contexts", translationId],
+    queryFn: async () => trpcClient.translation.getTranslationContexts.query({ translationId }),
+  });
+
+  if (isLoading) {
+    return (
+      <Button variant="outline" size="sm" disabled className="h-7 gap-1 px-2">
+        <Loader2 className="h-3 w-3 animate-spin" />
+      </Button>
+    );
+  }
+
+  if (!contexts || contexts.length === 0) {
+    return null;
+  }
+
+  const handleVideoSelect = (context: VideoContext): void => {
+    setSelectedContext(context);
+    setIsListOpen(false);
+    setIsPlayerOpen(true);
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 gap-1 px-2"
+        onClick={(e) => {
+          e.stopPropagation();
+          // If only one video, play directly
+          if (contexts.length === 1) {
+            handleVideoSelect(contexts[0]);
+          } else {
+            setIsListOpen(true);
+          }
+        }}
+        title={`Found in ${contexts.length} video(s)`}
+      >
+        <Video className="h-3 w-3" />
+        <span className="text-xs">{contexts.length}</span>
+      </Button>
+
+      {/* Video List Modal (for multiple videos) */}
+      <Dialog open={isListOpen} onOpenChange={setIsListOpen}>
+        <DialogContent className="max-w-lg" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Video className="h-5 w-5" />
+              Videos for "{sourceText}"
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[400px] space-y-3 overflow-y-auto">
+            {contexts.map((context) => (
+              <div
+                key={context.id}
+                className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
+                onClick={() => handleVideoSelect(context)}
+              >
+                {/* Video Thumbnail */}
+                <div className="w-28 flex-shrink-0">
+                  <Thumbnail
+                    thumbnailPath={context.videoThumbnailPath}
+                    thumbnailUrl={context.videoThumbnailUrl}
+                    alt={context.videoTitle || "Video"}
+                    className="aspect-video w-full rounded object-cover"
+                  />
+                </div>
+
+                {/* Video Info */}
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-sm font-medium">
+                    {context.videoTitle || context.videoId}
+                  </p>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    <span>
+                      {Math.floor(context.timestampSeconds / 60)}:
+                      {String(context.timestampSeconds % 60).padStart(2, "0")}
+                    </span>
+                  </div>
+                  {context.contextText && (
+                    <p className="mt-1 line-clamp-1 text-xs italic text-muted-foreground">
+                      "{context.contextText}"
+                    </p>
+                  )}
+                </div>
+
+                {/* Play Icon */}
+                <Play className="h-5 w-5 flex-shrink-0 text-primary" />
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Video Player Modal */}
+      <VideoPlayerModal
+        context={selectedContext}
+        isOpen={isPlayerOpen}
+        onClose={() => setIsPlayerOpen(false)}
+      />
+    </>
+  );
+}
 
 export default function MyWordsPage(): React.JSX.Element {
-  const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [expandedTranslations, setExpandedTranslations] = useState<Set<string>>(new Set());
+  const [isStudyMode, setIsStudyMode] = useState(false);
 
   // Debounce search input
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timer = setTimeout((): void => {
       setDebouncedSearch(searchQuery);
     }, 300);
-    return () => clearTimeout(timer);
+    return (): void => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Fetch due flashcards for study
+  const { data: dueCards } = useQuery({
+    queryKey: ["flashcards", "due"],
+    queryFn: async () => await trpcClient.flashcards.getDue.query(),
+  });
+
+  const dueCount = dueCards?.length || 0;
 
   // Fetch saved words (not all translations - only user-saved ones)
   const {
@@ -110,17 +359,6 @@ export default function MyWordsPage(): React.JSX.Element {
     });
   };
 
-  const handlePlayFromContext = (videoId: string, _timestampSeconds: number): void => {
-    navigate({
-      to: "/player",
-      search: {
-        videoId,
-        playlistId: undefined,
-        playlistIndex: undefined,
-      },
-    });
-  };
-
   const handleRefresh = (): void => {
     refetchSavedWords();
   };
@@ -139,96 +377,6 @@ export default function MyWordsPage(): React.JSX.Element {
   const displayTranslations = debouncedSearch ? searchResults || [] : savedWords;
 
   const isLoading = debouncedSearch ? searchLoading : savedWordsLoading;
-
-  // Helper component to show video contexts for a translation
-  const VideoContexts = ({
-    translationId,
-  }: {
-    translationId: string;
-  }): React.JSX.Element | null => {
-    const { data: contexts, isLoading: contextsLoading } = useQuery({
-      queryKey: ["translation-contexts", translationId],
-      queryFn: async () => trpcClient.translation.getTranslationContexts.query({ translationId }),
-      enabled: expandedTranslations.has(translationId),
-    });
-
-    if (!expandedTranslations.has(translationId)) return null;
-
-    if (contextsLoading) {
-      return (
-        <div className="mt-3 flex items-center justify-center border-t py-4">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      );
-    }
-
-    if (!contexts || contexts.length === 0) {
-      return (
-        <div className="mt-3 border-t pt-3">
-          <p className="py-2 text-center text-sm text-muted-foreground">
-            No video contexts found. This word will be linked to videos when you translate it while
-            watching.
-          </p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="mt-3 space-y-2 border-t pt-3">
-        <div className="mb-2 flex items-center gap-2">
-          <Video className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">
-            Found in {contexts.length} video{contexts.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-
-        <div className="space-y-2">
-          {contexts.map((context) => (
-            <div
-              key={context.id}
-              className="flex items-center gap-3 rounded-md border p-2 transition-colors hover:bg-accent"
-            >
-              {/* Video Thumbnail */}
-              <div className="w-24 flex-shrink-0">
-                <Thumbnail
-                  thumbnailPath={context.videoThumbnailPath}
-                  thumbnailUrl={context.videoThumbnailUrl}
-                  alt={context.videoTitle || "Video"}
-                  className="aspect-video w-full rounded object-cover"
-                />
-              </div>
-
-              {/* Video Info */}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">
-                  {context.videoTitle || context.videoId}
-                </p>
-                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  <span>
-                    {Math.floor(context.timestampSeconds / 60)}:
-                    {String(context.timestampSeconds % 60).padStart(2, "0")}
-                  </span>
-                  {context.contextText && <span className="truncate">• {context.contextText}</span>}
-                </div>
-              </div>
-
-              {/* Play Button */}
-              <Button
-                size="sm"
-                variant="default"
-                className="flex-shrink-0"
-                onClick={() => handlePlayFromContext(context.videoId, context.timestampSeconds)}
-              >
-                <Play className="mr-1 h-3 w-3" />
-                Play
-              </Button>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="container mx-auto space-y-6 p-6">
@@ -260,8 +408,49 @@ export default function MyWordsPage(): React.JSX.Element {
             <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
             Refresh
           </Button>
+          <Button
+            onClick={() => setIsStudyMode(true)}
+            disabled={dueCount === 0}
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <GraduationCap className="h-4 w-4" />
+            Study Now {dueCount > 0 && `(${dueCount})`}
+          </Button>
         </div>
       </div>
+
+      {/* Study Mode Dialog */}
+      <Dialog open={isStudyMode} onOpenChange={setIsStudyMode}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GraduationCap className="h-5 w-5" />
+              Flashcard Study
+            </DialogTitle>
+          </DialogHeader>
+          {dueCards && dueCards.length > 0 ? (
+            <StudyMode
+              cards={dueCards}
+              onComplete={() => {
+                setIsStudyMode(false);
+                queryClient.invalidateQueries({ queryKey: ["flashcards"] });
+              }}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center space-y-4 py-12 text-center text-muted-foreground">
+              <Brain className="h-12 w-12 opacity-50" />
+              <div className="space-y-2">
+                <h3 className="text-xl font-semibold">No cards due for review</h3>
+                <p className="text-sm">
+                  You're all caught up! Add words to flashcards by clicking the brain icon on word
+                  cards.
+                </p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Words List Card */}
       <Card>
@@ -272,160 +461,156 @@ export default function MyWordsPage(): React.JSX.Element {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Translations List */}
-          <div className="space-y-2">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : displayTranslations.length === 0 ? (
-              <div className="py-8 text-center text-muted-foreground">
-                {debouncedSearch ? (
-                  <p>No saved words found for "{debouncedSearch}"</p>
-                ) : (
-                  <div className="space-y-2">
-                    <p>No saved words yet.</p>
-                    <p className="text-sm">
-                      Hover over words in video transcripts for 800ms and click "Save to My Words"
-                      to build your vocabulary!
-                    </p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              displayTranslations.map((translation) => (
-                <Card key={translation.id} className="group transition-shadow hover:shadow-md">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 space-y-2">
-                        {/* Source and Target Text */}
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : displayTranslations.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">
+              {debouncedSearch ? (
+                <p>No saved words found for "{debouncedSearch}"</p>
+              ) : (
+                <div className="space-y-2">
+                  <p>No saved words yet.</p>
+                  <p className="text-sm">
+                    Hover over words in video transcripts for 800ms and click "Save to My Words" to
+                    build your vocabulary!
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {displayTranslations.map((translation) => {
+                const isFlipped = expandedTranslations.has(translation.id);
+                const hasNotes =
+                  "notes" in translation &&
+                  typeof translation.notes === "string" &&
+                  translation.notes;
+
+                return (
+                  <div
+                    key={translation.id}
+                    className="perspective-1000 group h-48 cursor-pointer"
+                    onClick={() => toggleExpanded(translation.id)}
+                  >
+                    <div
+                      className={`transform-style-3d relative h-full w-full transition-transform duration-500 ${
+                        isFlipped ? "rotate-y-180" : ""
+                      }`}
+                      style={{
+                        transformStyle: "preserve-3d",
+                        transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+                      }}
+                    >
+                      {/* Front of card - Source word */}
+                      <div
+                        className="backface-hidden absolute inset-0 rounded-lg border bg-card p-4"
+                        style={{ backfaceVisibility: "hidden" }}
+                      >
+                        <div className="flex h-full flex-col justify-between">
                           <div>
-                            <div className="mb-1 flex items-center gap-2">
+                            <div className="mb-2 flex items-center gap-2">
                               <Badge variant="outline" className="text-xs">
                                 {translation.sourceLang.toUpperCase()}
                               </Badge>
-                              <span className="text-xs text-muted-foreground">Source</span>
+                              <BookmarkCheck className="h-4 w-4 text-blue-500" />
                             </div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium">{translation.sourceText}</p>
-                              <BookmarkCheck className="h-4 w-4 flex-shrink-0 text-blue-500" />
-                            </div>
+                            <p className="text-xl font-bold">{translation.sourceText}</p>
                           </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <TrendingUp className="h-3 w-3" />
+                              <span>{translation.queryCount}x</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">Click to flip</span>
+                          </div>
+                        </div>
+                      </div>
 
+                      {/* Back of card - Translation */}
+                      <div
+                        className="backface-hidden absolute inset-0 rounded-lg border bg-primary/5 p-4"
+                        style={{
+                          backfaceVisibility: "hidden",
+                          transform: "rotateY(180deg)",
+                        }}
+                      >
+                        <div className="flex h-full flex-col justify-between">
                           <div>
-                            <div className="mb-1 flex items-center gap-2">
+                            <div className="mb-2 flex items-center gap-2">
                               <Badge variant="outline" className="text-xs">
                                 {translation.targetLang.toUpperCase()}
                               </Badge>
-                              <span className="text-xs text-muted-foreground">Translation</span>
                             </div>
-                            <p className="font-medium text-primary">{translation.translatedText}</p>
+                            <p className="text-xl font-bold text-primary">
+                              {translation.translatedText}
+                            </p>
+                            {hasNotes && (
+                              <p className="mt-2 line-clamp-2 text-sm italic text-muted-foreground">
+                                {String(translation.notes)}
+                              </p>
+                            )}
                           </div>
-                        </div>
-
-                        {/* Notes (if any) */}
-                        {"notes" in translation &&
-                          typeof translation.notes === "string" &&
-                          translation.notes && (
-                            <div className="border-t pt-2">
-                              <p className="mb-1 text-xs text-muted-foreground">Notes:</p>
-                              <p className="text-sm italic">{translation.notes}</p>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              <span>
+                                {formatDistanceToNow(
+                                  new Date(
+                                    "savedAt" in translation &&
+                                    typeof translation.savedAt === "number"
+                                      ? translation.savedAt
+                                      : translation.createdAt
+                                  ),
+                                  { addSuffix: true }
+                                )}
+                              </span>
                             </div>
-                          )}
-
-                        {/* Metadata */}
-                        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <TrendingUp className="h-3 w-3" />
-                            <span>
-                              {translation.queryCount}{" "}
-                              {translation.queryCount === 1 ? "query" : "queries"}
-                            </span>
+                            <div className="flex gap-1">
+                              <VideoPlayButton
+                                translationId={translation.id}
+                                sourceText={translation.sourceText}
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddToFlashcard(translation.id);
+                                }}
+                                title="Add to Flashcards"
+                                disabled={createFlashcardMutation.isPending}
+                              >
+                                <Brain className="h-4 w-4 text-primary" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(translation.id);
+                                }}
+                                title="Remove from My Words"
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
                           </div>
-
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            <span>
-                              Saved{" "}
-                              {formatDistanceToNow(
-                                new Date(
-                                  "savedAt" in translation &&
-                                  typeof translation.savedAt === "number"
-                                    ? translation.savedAt
-                                    : translation.createdAt
-                                ),
-                                { addSuffix: true }
-                              )}
-                            </span>
-                          </div>
-
-                          {translation.detectedLang &&
-                            translation.detectedLang !== translation.sourceLang && (
-                              <div className="flex items-center gap-1">
-                                <Languages className="h-3 w-3" />
-                                <span>Detected as {translation.detectedLang}</span>
-                              </div>
-                            )}
                         </div>
-
-                        {/* Show in Videos Button */}
-                        <div className="pt-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleExpanded(translation.id)}
-                            className="gap-1"
-                          >
-                            {expandedTranslations.has(translation.id) ? (
-                              <>
-                                <ChevronUp className="h-4 w-4" />
-                                Hide Videos
-                              </>
-                            ) : (
-                              <>
-                                <ChevronDown className="h-4 w-4" />
-                                Show in Videos
-                              </>
-                            )}
-                          </Button>
-                        </div>
-
-                        {/* Video Contexts */}
-                        <VideoContexts translationId={translation.id} />
                       </div>
-
-                      {/* Actions */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(translation.id)}
-                        className="opacity-0 transition-opacity group-hover:opacity-100"
-                        title="Remove from My Words (keeps in cache)"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-
-                      {/* Add to Flashcard */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleAddToFlashcard(translation.id)}
-                        className="opacity-0 transition-opacity group-hover:opacity-100"
-                        title="Add to Flashcards"
-                        disabled={createFlashcardMutation.isPending}
-                      >
-                        <Brain className="h-4 w-4 text-primary" />
-                      </Button>
                     </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Load More */}
           {!debouncedSearch && savedWordsData?.hasMore && (
-            <div className="pt-4 text-center">
+            <div className="flex justify-center pt-4">
               <Button variant="outline">Load More</Button>
             </div>
           )}

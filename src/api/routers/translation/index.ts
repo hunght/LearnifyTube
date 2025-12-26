@@ -363,12 +363,17 @@ export const translationRouter = t.router({
   /**
    * Save a word to the user's learning list
    * Creates a saved_words entry for the translation
+   * Also automatically creates a flashcard for the word
    */
   saveWord: publicProcedure
     .input(
       z.object({
         translationId: z.string(),
         notes: z.string().optional(),
+        // Optional video context for flashcard
+        videoId: z.string().optional(),
+        timestampSeconds: z.number().optional(),
+        contextText: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }): Promise<SaveWordSuccess> => {
@@ -407,6 +412,101 @@ export const translationRouter = t.router({
           createdAt: now,
           updatedAt: now,
         });
+
+        // Auto-create flashcard for this word
+        try {
+          // Get translation for flashcard content
+          const translation = await db
+            .select()
+            .from(translationCache)
+            .where(eq(translationCache.id, input.translationId))
+            .limit(1);
+
+          if (translation.length > 0) {
+            const { flashcards } = await import("@/api/db/schema");
+
+            const frontContent = translation[0].sourceText;
+
+            // Check if flashcard with this front content already exists
+            const existingFlashcard = await db
+              .select()
+              .from(flashcards)
+              .where(eq(flashcards.frontContent, frontContent))
+              .limit(1);
+
+            if (existingFlashcard.length > 0) {
+              logger.info("[translation] Flashcard already exists for word", {
+                word: frontContent,
+                flashcardId: existingFlashcard[0].id,
+              });
+              // Skip creation
+            } else {
+              // Build back content: notes (if any) + translation in brackets
+              let backContent = "";
+              if (input.notes && input.notes.trim()) {
+                backContent = input.notes.trim();
+              }
+              if (backContent) {
+                backContent += `\n\n[${translation[0].translatedText}]`;
+              } else {
+                backContent = `[${translation[0].translatedText}]`;
+              }
+
+              // Get video context if not provided
+              let videoId = input.videoId;
+              let timestampSeconds = input.timestampSeconds;
+              let contextText = input.contextText;
+
+              if (!videoId) {
+                // Try to get from translation contexts
+                const contexts = await db
+                  .select({
+                    videoId: translationContexts.videoId,
+                    timestampSeconds: translationContexts.timestampSeconds,
+                    contextText: translationContexts.contextText,
+                  })
+                  .from(translationContexts)
+                  .where(eq(translationContexts.translationId, input.translationId))
+                  .orderBy(desc(translationContexts.createdAt))
+                  .limit(1);
+
+                if (contexts.length > 0) {
+                  videoId = contexts[0].videoId;
+                  timestampSeconds = contexts[0].timestampSeconds;
+                  contextText = contexts[0].contextText ?? undefined;
+                }
+              }
+
+              const flashcardId = crypto.randomUUID();
+              const nowIso = new Date().toISOString();
+
+              await db.insert(flashcards).values({
+                id: flashcardId,
+                videoId: videoId ?? null,
+                frontContent,
+                backContent,
+                contextText: contextText ?? null,
+                audioUrl: null,
+                timestampSeconds: timestampSeconds ?? null,
+                difficulty: 0,
+                reviewCount: 0,
+                interval: 0,
+                easeFactor: 250,
+                nextReviewAt: nowIso,
+                createdAt: nowIso,
+                updatedAt: nowIso,
+              });
+
+              logger.info("[translation] Auto-created flashcard for saved word", {
+                translationId: input.translationId,
+                flashcardId,
+              });
+            }
+          }
+        } catch (flashcardError) {
+          // Don't fail the save if flashcard creation fails
+          logger.warn("[translation] Failed to auto-create flashcard", flashcardError);
+        }
 
         logger.info("[translation] Word saved", { translationId: input.translationId });
         return { success: true, alreadySaved: false, id };

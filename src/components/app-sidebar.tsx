@@ -9,7 +9,6 @@ import {
   HardDrive,
   ScrollText,
   Settings,
-  Brain,
 } from "lucide-react";
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";
@@ -99,12 +98,6 @@ const ALL_ITEMS: Array<{
     title: "My Words",
     icon: Languages,
     url: "/my-words",
-  },
-  {
-    id: "flashcards",
-    title: "Flashcards",
-    icon: Brain,
-    url: "/flashcards",
   },
   {
     id: "storage",

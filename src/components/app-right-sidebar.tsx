@@ -59,7 +59,7 @@ export function AppRightSidebar({
               )}
             >
               <Sparkles className="h-4 w-4" />
-              AI Summary
+              Summary
             </button>
             <button
               onClick={() => setContent("quiz")}

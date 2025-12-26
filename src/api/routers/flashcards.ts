@@ -73,6 +73,18 @@ export const flashcardsRouter = t.router({
 
       const frontContent = translation.sourceText;
 
+      // Check if flashcard with this front content already exists
+      const existingFlashcard = await db
+        .select()
+        .from(flashcards)
+        .where(eq(flashcards.frontContent, frontContent))
+        .limit(1)
+        .get();
+
+      if (existingFlashcard) {
+        return { success: true, id: existingFlashcard.id };
+      }
+
       // 2. Fetch saved word notes (if this translation is saved)
       const savedWord = await db
         .select()

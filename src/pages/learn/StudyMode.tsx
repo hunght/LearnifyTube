@@ -98,8 +98,8 @@ export function StudyMode({ cards, onComplete }: StudyModeProps): React.JSX.Elem
         <span>{cards.length - currentIndex - 1} remaining</span>
       </div>
 
-      <div className="perspective-1000 relative min-h-[400px] w-full">
-        <Card className="flex min-h-[400px] w-full flex-col items-center justify-center p-8 text-center transition-all duration-300">
+      <div className="perspective-1000 relative h-[500px] w-full">
+        <Card className="flex h-[500px] w-full flex-col items-center justify-center overflow-y-auto p-8 text-center transition-all duration-300">
           {/* Front Side */}
           {!isFlipped ? (
             <div className="space-y-6 duration-200 animate-in fade-in zoom-in-95">
