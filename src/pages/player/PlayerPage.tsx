@@ -373,10 +373,14 @@ export default function PlayerPage(): React.JSX.Element {
   }, [videoId, playback?.title, playback?.description, currentTime, setAnnotationsSidebarData]);
 
   return (
-    <div className="container relative mx-auto space-y-6 p-6">
-      {/* Global Seek Indicator Overlay */}
-      {seekIndicator && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+    <>
+      {/* Global Seek Indicator Overlay - Always rendered to prevent layout shifts */}
+      <div
+        className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center"
+        style={{ contain: "layout style paint" }}
+        aria-hidden={!seekIndicator}
+      >
+        {seekIndicator && (
           <div className="flex items-center gap-3 rounded-lg bg-black/80 px-6 py-4 shadow-lg backdrop-blur-sm duration-200 animate-in fade-in zoom-in-95">
             {seekIndicator.direction === "backward" ? (
               <>
@@ -396,96 +400,98 @@ export default function PlayerPage(): React.JSX.Element {
               </>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold">
-            <ExternalLink
-              href={`https://www.youtube.com/watch?v=${videoId}`}
-              className="transition-colors hover:text-primary"
-              iconClassName="h-3.5 w-3.5 opacity-50 group-hover:opacity-100"
-            >
-              {videoTitle}
-            </ExternalLink>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {playbackIsLoading ? (
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          ) : !videoId ? (
-            <Alert>
-              <AlertTitle>Missing video</AlertTitle>
-              <AlertDescription>No video id provided.</AlertDescription>
-            </Alert>
-          ) : !playback ? (
-            <Alert>
-              <AlertTitle>Not found</AlertTitle>
-              <AlertDescription>Could not find that video.</AlertDescription>
-            </Alert>
-          ) : !filePath ? (
-            <DownloadStatus
-              videoId={videoId}
-              status={typeof playback?.status === "string" ? playback.status : undefined}
-              progress={playback?.progress ?? null}
-              onStartDownload={() => startDownloadMutation.mutate()}
-              isStarting={startDownloadMutation.isPending}
-              thumbnailPath={playback?.thumbnailPath}
-              thumbnailUrl={playback?.thumbnailUrl}
-              title={playback?.title}
-            />
-          ) : videoLoadError ? (
-            <Alert variant="destructive">
-              <AlertTitle>Video file not found</AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p>The video file could not be loaded. It may have been deleted or moved.</p>
-                <Button
-                  onClick={() => startDownloadMutation.mutate()}
-                  disabled={startDownloadMutation.isPending}
-                >
-                  {startDownloadMutation.isPending ? "Starting download..." : "Re-download video"}
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="space-y-4">
-              <VideoPlayer
-                videoRef={videoRef}
-                videoSrc={mediaUrl} // Use HTTP streaming URL
-                onTimeUpdate={handleTimeUpdate}
-                onError={handleVideoLoadError}
-                onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
-              />
-
-              {/* Transcript - Self-contained, owns all its state */}
-              <TranscriptPanel
+      <div className="container relative mx-auto space-y-6 p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold">
+              <ExternalLink
+                href={`https://www.youtube.com/watch?v=${videoId}`}
+                className="transition-colors hover:text-primary"
+                iconClassName="h-3.5 w-3.5 opacity-50 group-hover:opacity-100"
+              >
+                {videoTitle}
+              </ExternalLink>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {playbackIsLoading ? (
+              <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : !videoId ? (
+              <Alert>
+                <AlertTitle>Missing video</AlertTitle>
+                <AlertDescription>No video id provided.</AlertDescription>
+              </Alert>
+            ) : !playback ? (
+              <Alert>
+                <AlertTitle>Not found</AlertTitle>
+                <AlertDescription>Could not find that video.</AlertDescription>
+              </Alert>
+            ) : !filePath ? (
+              <DownloadStatus
                 videoId={videoId}
-                videoRef={videoRef}
-                currentTime={currentTime}
-                playbackData={playback || null}
-                onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
+                status={typeof playback?.status === "string" ? playback.status : undefined}
+                progress={playback?.progress ?? null}
+                onStartDownload={() => startDownloadMutation.mutate()}
+                isStarting={startDownloadMutation.isPending}
+                thumbnailPath={playback?.thumbnailPath}
+                thumbnailUrl={playback?.thumbnailUrl}
+                title={playback?.title}
               />
-
-              {playback?.description && (
-                <VideoDescription description={playback.description} onSeek={handleSeek} />
-              )}
-              {/* Playlist Navigation - Show when playing from a playlist */}
-              {isPlaylist && (
-                <PlaylistNavigation
-                  playlistTitle={playlistTitle}
-                  currentIndex={playlistCurrentIndex}
-                  totalVideos={playlistTotalVideos}
-                  hasNext={playlistHasNext}
-                  hasPrevious={playlistHasPrevious}
-                  onNext={goToNextVideo}
-                  onPrevious={goToPreviousVideo}
+            ) : videoLoadError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Video file not found</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>The video file could not be loaded. It may have been deleted or moved.</p>
+                  <Button
+                    onClick={() => startDownloadMutation.mutate()}
+                    disabled={startDownloadMutation.isPending}
+                  >
+                    {startDownloadMutation.isPending ? "Starting download..." : "Re-download video"}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="space-y-4">
+                <VideoPlayer
+                  videoRef={videoRef}
+                  videoSrc={mediaUrl} // Use HTTP streaming URL
+                  onTimeUpdate={handleTimeUpdate}
+                  onError={handleVideoLoadError}
+                  onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
                 />
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+
+                {/* Transcript - Self-contained, owns all its state */}
+                <TranscriptPanel
+                  videoId={videoId}
+                  videoRef={videoRef}
+                  currentTime={currentTime}
+                  playbackData={playback || null}
+                  onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
+                />
+
+                {playback?.description && (
+                  <VideoDescription description={playback.description} onSeek={handleSeek} />
+                )}
+                {/* Playlist Navigation - Show when playing from a playlist */}
+                {isPlaylist && (
+                  <PlaylistNavigation
+                    playlistTitle={playlistTitle}
+                    currentIndex={playlistCurrentIndex}
+                    totalVideos={playlistTotalVideos}
+                    hasNext={playlistHasNext}
+                    hasPrevious={playlistHasPrevious}
+                    onNext={goToNextVideo}
+                    onPrevious={goToPreviousVideo}
+                  />
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 }
