@@ -55,6 +55,8 @@ temp/
 
 # Complexity reports
 complexity-report.html
+sonarjs-quality-report.html
+eslint.complexity-report.config.js
 
 # Storybook
 storybook-static/

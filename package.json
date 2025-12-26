@@ -44,6 +44,7 @@
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "db:analyze": "npx tsx scripts/db-analyze.ts",
+    "analyze:complexity": "npx tsx scripts/sonarjs-complexity-report.ts",
     "icons:generate": "node scripts/svg-to-icons.js",
     "postinstall": "lefthook install || true"
   },

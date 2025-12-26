@@ -15,6 +15,7 @@ import {
 import defaultDb from "@/api/db";
 import { spawnYtDlpWithLogging } from "../../utils/ytdlp-utils/ytdlp";
 import { downloadImageToCache } from "../../utils/ytdlp-utils/cache";
+import { getBinaryFilePath } from "../binary";
 
 // Zod schemas for yt-dlp JSON responses (fault-tolerant)
 const ytDlpThumbnailSchema = z
@@ -47,11 +48,6 @@ const ytDlpPlaylistDataSchema = z.object({
   entries: z.array(ytDlpPlaylistEntrySchema).optional().catch([]),
 });
 
-// Infer types from Zod schemas (prefixed with _ as they're primarily for documentation)
-type _YtDlpThumbnail = z.infer<typeof ytDlpThumbnailSchema>;
-type _YtDlpPlaylistEntry = z.infer<typeof ytDlpPlaylistEntrySchema>;
-type _YtDlpPlaylistData = z.infer<typeof ytDlpPlaylistDataSchema>;
-
 export const playlistsRouter = t.router({
   // Get detailed playlist information with videos
   getDetails: publicProcedure
@@ -66,7 +62,6 @@ export const playlistsRouter = t.router({
       const db = ctx.db ?? defaultDb;
       const limit = input.limit ?? 200;
 
-      const { getBinaryFilePath } = await import("../binary");
       const binPath = getBinaryFilePath();
 
       // Try to read basic playlist metadata from DB first
