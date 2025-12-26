@@ -291,12 +291,23 @@ export const playlistsRouter = t.router({
           const thumb = e?.thumbnails?.[0]?.url || e?.thumbnail || null;
           const thumbPath = thumb ? await downloadImageToCache(thumb, `video_${vid}`) : null;
 
+          // Get channel title from metadata or look up from channels table
+          let channelTitle = e.channel ?? e.uploader ?? null;
+          if (!channelTitle && playlistMeta?.channelId) {
+            const channelRow = await db
+              .select({ channelTitle: channels.channelTitle })
+              .from(channels)
+              .where(eq(channels.channelId, playlistMeta.channelId))
+              .limit(1);
+            channelTitle = channelRow[0]?.channelTitle ?? null;
+          }
+
           const videoData: Omit<NewYoutubeVideo, "id" | "createdAt"> = {
             videoId: vid,
             title: e.title ?? "Untitled",
             description: null,
             channelId: playlistMeta?.channelId ?? null,
-            channelTitle: e.channel ?? e.uploader ?? null,
+            channelTitle: channelTitle ?? "Unknown Channel",
             durationSeconds: e.duration ?? null,
             viewCount: e.view_count ?? null,
             likeCount: null,

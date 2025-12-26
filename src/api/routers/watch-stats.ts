@@ -22,7 +22,7 @@ type WatchedVideoWithStats = {
   title: string;
   description: string | null;
   channelId: string | null;
-  channelTitle: string | null;
+  channelTitle: string;
   thumbnailUrl: string | null;
   thumbnailPath: string | null;
   durationSeconds: number | null;
@@ -41,7 +41,7 @@ type RecentVideoInfo = {
   title: string;
   description: string | null;
   channelId: string | null;
-  channelTitle: string | null;
+  channelTitle: string;
   thumbnailUrl: string | null;
   thumbnailPath: string | null;
   durationSeconds: number | null;

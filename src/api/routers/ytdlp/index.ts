@@ -39,7 +39,7 @@ type VideoUpdateFields = {
   title: string;
   description: string | null;
   channelId: string | null;
-  channelTitle: string | null;
+  channelTitle: string;
   durationSeconds: number | null;
   viewCount: number | null;
   likeCount: number | null;
@@ -401,12 +401,25 @@ export const ytdlpRouter = t.router({
             .where(eq(youtubeVideos.videoId, mapped.videoId))
             .limit(1);
 
+          // Look up channel title from DB if mapped returns "Unknown Channel"
+          let channelTitle = mapped.channelTitle;
+          if (channelTitle === "Unknown Channel" && mapped.channelId) {
+            const channelRow = await db
+              .select({ channelTitle: channels.channelTitle })
+              .from(channels)
+              .where(eq(channels.channelId, mapped.channelId))
+              .limit(1);
+            if (channelRow[0]?.channelTitle) {
+              channelTitle = channelRow[0].channelTitle;
+            }
+          }
+
           // Common fields for both insert and update
           const commonFields: VideoUpdateFields = {
             title: mapped.title,
             description: mapped.description,
             channelId: mapped.channelId,
-            channelTitle: mapped.channelTitle,
+            channelTitle,
             durationSeconds: mapped.durationSeconds,
             viewCount: mapped.viewCount,
             likeCount: mapped.likeCount,
@@ -1220,12 +1233,24 @@ export const ytdlpRouter = t.router({
           const thumbPath = thumbUrl
             ? await downloadImageToCache(thumbUrl, `video_${entry.id}`)
             : null;
+
+          // Get channel title from metadata or look up from channels table
+          let channelTitle = entry.channel ?? entry.uploader ?? null;
+          if (!channelTitle && input.channelId) {
+            const channelRow = await db
+              .select({ channelTitle: channels.channelTitle })
+              .from(channels)
+              .where(eq(channels.channelId, input.channelId))
+              .limit(1);
+            channelTitle = channelRow[0]?.channelTitle ?? null;
+          }
+
           const videoData = {
             videoId: entry.id,
             title: entry.title ?? "Untitled",
             description: null,
             channelId: input.channelId,
-            channelTitle: entry.channel ?? entry.uploader ?? null,
+            channelTitle: channelTitle ?? "Unknown Channel",
             durationSeconds: entry.duration ?? null,
             viewCount: entry.view_count ?? null,
             likeCount: null,
@@ -1402,12 +1427,24 @@ export const ytdlpRouter = t.router({
           const thumbPath = thumbUrl
             ? await downloadImageToCache(thumbUrl, `video_${entry.id}`)
             : null;
+
+          // Get channel title from metadata or look up from channels table
+          let channelTitle = entry.channel ?? entry.uploader ?? null;
+          if (!channelTitle && input.channelId) {
+            const channelRow = await db
+              .select({ channelTitle: channels.channelTitle })
+              .from(channels)
+              .where(eq(channels.channelId, input.channelId))
+              .limit(1);
+            channelTitle = channelRow[0]?.channelTitle ?? null;
+          }
+
           const videoData = {
             videoId: entry.id,
             title: entry.title ?? "Untitled",
             description: null,
             channelId: input.channelId,
-            channelTitle: entry.channel ?? entry.uploader ?? null,
+            channelTitle: channelTitle ?? "Unknown Channel",
             durationSeconds: entry.duration ?? null,
             viewCount: entry.view_count ?? null,
             likeCount: null,

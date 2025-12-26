@@ -33,7 +33,7 @@ type MappedMetadata = {
   readonly title: string;
   readonly description: string | null;
   readonly channelId: string | null;
-  readonly channelTitle: string | null;
+  readonly channelTitle: string;
   readonly durationSeconds: number | null;
   readonly viewCount: number | null;
   readonly likeCount: number | null;
@@ -51,7 +51,8 @@ export const mapYtDlpMetadata = (meta: unknown): MappedMetadata => {
     title: validated.fulltitle ?? validated.title ?? "Untitled",
     description: validated.description ?? null,
     channelId: validated.channel_id ?? validated.channelId ?? null,
-    channelTitle: validated.channel ?? validated.uploader ?? validated.channel_title ?? null,
+    channelTitle:
+      validated.channel ?? validated.uploader ?? validated.channel_title ?? "Unknown Channel",
     durationSeconds: validated.duration ? Math.round(validated.duration) : null,
     viewCount: validated.view_count ?? null,
     likeCount: validated.like_count ?? null,

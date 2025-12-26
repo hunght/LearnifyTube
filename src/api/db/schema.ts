@@ -40,7 +40,7 @@ export const youtubeVideos = sqliteTable(
     title: text("title").notNull(),
     description: text("description"),
     channelId: text("channel_id").references(() => channels.channelId), // Reference to channels table
-    channelTitle: text("channel_title"), // Denormalized for backward compatibility
+    channelTitle: text("channel_title").notNull(), // Denormalized for backward compatibility
     durationSeconds: integer("duration_seconds"),
     viewCount: integer("view_count"),
     likeCount: integer("like_count"),

@@ -1,16 +1,14 @@
 import React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { trpcClient } from "@/utils/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ExternalLink as ExternalLinkIcon, Download, Play, Loader2 } from "lucide-react";
+import { ExternalLink as ExternalLinkIcon, Loader2 } from "lucide-react";
 import Thumbnail from "@/components/Thumbnail";
-import { toast } from "sonner";
 
 export default function SubscriptionsPage(): React.JSX.Element {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ["subscriptions", { limit: 60 }],
@@ -21,22 +19,6 @@ export default function SubscriptionsPage(): React.JSX.Element {
   });
 
   const videos = query.data ?? [];
-
-  const addToQueueMutation = useMutation({
-    mutationFn: (url: string) => trpcClient.queue.addToQueue.mutate({ urls: [url], priority: 0 }),
-    onSuccess: (result) => {
-      if (result.success) {
-        toast.success("Added to queue");
-        // Refresh recent list to reflect status changes
-        queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
-        // Invalidate queue status to resume polling and update sidebar
-        queryClient.invalidateQueries({ queryKey: ["queue", "status"] });
-      } else {
-        toast.error(result.message ?? "Failed to add to queue");
-      }
-    },
-    onError: () => toast.error("Failed to add video to queue"),
-  });
 
   return (
     <div className="container mx-auto space-y-6 p-6">
@@ -64,91 +46,91 @@ export default function SubscriptionsPage(): React.JSX.Element {
               {videos.map((v) => {
                 const hideNoThumb =
                   typeof v.thumbnailUrl === "string" && v.thumbnailUrl.includes("no_thumbnail");
+                const isDownloading =
+                  v.downloadStatus === "downloading" || v.downloadStatus === "queued";
                 return (
-                  <div key={v.videoId} className="space-y-2 rounded-lg border p-3">
-                    {hideNoThumb ? (
-                      <div className="aspect-video w-full rounded bg-muted" />
-                    ) : (
-                      <Thumbnail
-                        thumbnailPath={v.thumbnailPath}
-                        thumbnailUrl={v.thumbnailUrl}
-                        alt={v.title}
-                        className="aspect-video w-full rounded object-cover"
-                      />
-                    )}
-                    <div className="space-y-1">
-                      <div className="line-clamp-2 text-sm font-medium">{v.title}</div>
-                      <div className="line-clamp-1 text-xs text-muted-foreground">
-                        {v.channelTitle || v.channelId}
-                      </div>
-                      <div className="flex gap-3 text-xs text-muted-foreground">
-                        {typeof v.durationSeconds === "number" && (
-                          <span>{Math.round(v.durationSeconds / 60)} min</span>
-                        )}
-                        {typeof v.viewCount === "number" && (
-                          <span>{v.viewCount.toLocaleString()} views</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      {v.downloadStatus === "completed" && v.downloadFilePath ? (
-                        <Button
-                          size="sm"
-                          className="flex-1"
-                          onClick={() =>
-                            navigate({
-                              to: "/player",
-                              search: {
-                                videoId: v.videoId,
-                                playlistId: undefined,
-                                playlistIndex: undefined,
-                              },
-                            })
-                          }
-                        >
-                          <Play className="mr-1 h-3 w-3" />
-                          Play
-                        </Button>
+                  <div
+                    key={v.videoId}
+                    className="group cursor-pointer space-y-2 rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                    onClick={() =>
+                      navigate({
+                        to: "/player",
+                        search: {
+                          videoId: v.videoId,
+                          playlistId: undefined,
+                          playlistIndex: undefined,
+                        },
+                      })
+                    }
+                  >
+                    <div className="relative">
+                      {hideNoThumb ? (
+                        <div className="aspect-video w-full rounded bg-muted" />
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() =>
-                            addToQueueMutation.mutate(
-                              `https://www.youtube.com/watch?v=${v.videoId}`
-                            )
-                          }
-                          disabled={
-                            v.downloadStatus === "downloading" || v.downloadStatus === "queued"
-                          }
-                        >
-                          {v.downloadStatus === "downloading" || v.downloadStatus === "queued" ? (
-                            <>
-                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        <Thumbnail
+                          thumbnailPath={v.thumbnailPath}
+                          thumbnailUrl={v.thumbnailUrl}
+                          alt={v.title}
+                          className="aspect-video w-full rounded object-cover"
+                        />
+                      )}
+                      {/* Downloading overlay */}
+                      {isDownloading && (
+                        <div className="absolute inset-0 flex items-center justify-center rounded bg-black/50">
+                          <div className="flex items-center gap-2 text-white">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <span className="text-sm font-medium">
                               {v.downloadStatus === "queued"
                                 ? "Queued"
-                                : `Downloading ${v.downloadProgress || 0}%`}
-                            </>
-                          ) : (
-                            <>
-                              <Download className="mr-1 h-3 w-3" />
-                              Download
-                            </>
-                          )}
-                        </Button>
+                                : `${v.downloadProgress || 0}%`}
+                            </span>
+                          </div>
+                        </div>
                       )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          void trpcClient.utils.openExternalUrl.mutate({
-                            url: `https://www.youtube.com/watch?v=${v.videoId}`,
-                          });
-                        }}
-                      >
-                        <ExternalLinkIcon className="mr-1 h-3 w-3" />
-                      </Button>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="line-clamp-2 text-sm font-medium">{v.title}</div>
+                      {v.channelId ? (
+                        <button
+                          className="line-clamp-1 text-left text-xs text-muted-foreground hover:text-foreground hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate({
+                              to: "/channel",
+                              search: { channelId: v.channelId! },
+                            });
+                          }}
+                        >
+                          {v.channelTitle || v.channelId}
+                        </button>
+                      ) : (
+                        <div className="line-clamp-1 text-xs text-muted-foreground">
+                          {v.channelTitle || "Unknown channel"}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <div className="flex gap-3">
+                          {typeof v.durationSeconds === "number" && (
+                            <span>{Math.round(v.durationSeconds / 60)} min</span>
+                          )}
+                          {typeof v.viewCount === "number" && (
+                            <span>{v.viewCount.toLocaleString()} views</span>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 opacity-0 transition-opacity group-hover:opacity-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void trpcClient.utils.openExternalUrl.mutate({
+                              url: `https://www.youtube.com/watch?v=${v.videoId}`,
+                            });
+                          }}
+                        >
+                          <ExternalLinkIcon className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );

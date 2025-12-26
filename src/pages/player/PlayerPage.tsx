@@ -431,6 +431,9 @@ export default function PlayerPage(): React.JSX.Element {
               progress={playback?.progress ?? null}
               onStartDownload={() => startDownloadMutation.mutate()}
               isStarting={startDownloadMutation.isPending}
+              thumbnailPath={playback?.thumbnailPath}
+              thumbnailUrl={playback?.thumbnailUrl}
+              title={playback?.title}
             />
           ) : videoLoadError ? (
             <Alert variant="destructive">
