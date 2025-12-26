@@ -12,7 +12,6 @@ import {
   transcriptCollapsedAtom,
   showDualSubtitlesAtom,
   secondarySubtitleLangAtom,
-  sentenceModeAtom,
 } from "@/context/transcriptSettings";
 import { transcriptSelectionAtom } from "@/context/annotations";
 import { PlaybackData } from "@/context/playerStore";
@@ -79,8 +78,6 @@ export function TranscriptPanel({
   // Dual Subtitles State
   const [showDualSubtitles] = useAtom(showDualSubtitlesAtom);
   const [secondaryLang] = useAtom(secondarySubtitleLangAtom);
-  const [sentenceMode, setSentenceMode] = useAtom(sentenceModeAtom);
-  const pausedForSegmentRef = useRef<number | null>(null);
 
   // Local state
   const [showTranscriptSettings, setShowTranscriptSettings] = useState(false);
@@ -744,37 +741,6 @@ export function TranscriptPanel({
     setActiveSegIndex(idx >= 0 ? idx : null);
   }, [currentTime, segments, isSelecting, isHovering, isHoveringTooltip]);
 
-  // Sentence Mode logic: Auto-pause at end of sentences
-  useEffect(() => {
-    if (!sentenceMode || !videoRef?.current || activeSegIndex === null) return;
-
-    const segment = segments[activeSegIndex];
-    if (!segment) return;
-
-    const timeRemaining = segment.end - currentTime;
-
-    // Reset pause ref if we went back in time significantly (replaying the sentence)
-    if (pausedForSegmentRef.current === activeSegIndex && timeRemaining > 1.0) {
-      pausedForSegmentRef.current = null;
-    }
-
-    // Check pause condition
-    // We check for punctuation OR just auto-pause at every segment if strict mode?
-    // User requested "Sentence-by-Sentence". If segments are sentences, always pause.
-    // If segments are short fragments, pausing every time is bad.
-    // Heuristic: Ends with punctuation OR length > 50 chars?
-    // Let's stick to punctuation for quality.
-    const isSentenceEnd = /[.!?。！？"']$/.test(segment.text.trim());
-
-    if (isSentenceEnd && pausedForSegmentRef.current !== activeSegIndex) {
-      if (timeRemaining < 0.3) {
-        videoRef.current.pause();
-        pausedForSegmentRef.current = activeSegIndex;
-        // Optional: visual feedback
-      }
-    }
-  }, [currentTime, sentenceMode, activeSegIndex, segments, videoRef]);
-
   // Scroll active segment into view (freeze when selecting or hovering)
   useEffect(() => {
     if (activeSegIndex === null || !followPlayback) return;
@@ -965,17 +931,6 @@ export function TranscriptPanel({
                 <label htmlFor="follow-playback" className="text-xs text-muted-foreground">
                   Auto-scroll
                 </label>
-                {(isSelecting || isHovering || isHoveringTooltip) && (
-                  <span className="text-[10px] font-medium text-blue-500">
-                    {isSelecting
-                      ? "(selecting)"
-                      : isHoveringTooltip
-                        ? "(viewing translation)"
-                        : hoveredWord
-                          ? `(hovering: ${hoveredWord.trim().substring(0, 15)}...)`
-                          : "(hovering)"}
-                  </span>
-                )}
               </div>
             )}
 
@@ -999,20 +954,6 @@ export function TranscriptPanel({
                 </>
               )}
             </Button>
-
-            {/* Sentence Mode Toggle */}
-            {!isCollapsed && (
-              <Button
-                size="sm"
-                variant={sentenceMode ? "default" : "outline"}
-                onClick={() => setSentenceMode(!sentenceMode)}
-                className="mr-2 h-7"
-                title="Auto-pause after each sentence"
-              >
-                <span className="mr-1.5 text-xs">{sentenceMode ? "⏸" : "▶️|"}</span>
-                <span className="text-xs">Sentence Mode</span>
-              </Button>
-            )}
 
             {/* Transcript Settings Button */}
             {!isCollapsed && (

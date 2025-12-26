@@ -34,6 +34,3 @@ export const transcriptCollapsedAtom = atomWithStorage<boolean>("transcript-coll
 // Dual subtitles settings
 export const showDualSubtitlesAtom = atomWithStorage<boolean>("transcript-show-dual-subs", false);
 export const secondarySubtitleLangAtom = atomWithStorage<string>("transcript-secondary-lang", "vi");
-
-// Sentence Mode settings
-export const sentenceModeAtom = atomWithStorage<boolean>("transcript-sentence-mode", false);
