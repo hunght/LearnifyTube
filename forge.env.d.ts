@@ -6,12 +6,8 @@ declare global {
   // whether you're running in development or production).
   const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
   const MAIN_WINDOW_VITE_NAME: string;
-  const CLOCK_WINDOW_VITE_DEV_SERVER_URL: string;
-  const CLOCK_WINDOW_VITE_NAME: string;
   const NOTIFICATION_WINDOW_VITE_DEV_SERVER_URL: string;
   const NOTIFICATION_WINDOW_VITE_NAME: string;
-  const BLOCKING_NOTIFICATION_WINDOW_VITE_DEV_SERVER_URL: string;
-  const BLOCKING_NOTIFICATION_WINDOW_VITE_NAME: string;
 
   namespace NodeJS {
     interface Process {

@@ -387,14 +387,6 @@ const config: ForgeConfig = {
           entry: "src/preload/notification.ts",
           config: "vite.notification-preload.config.ts",
         },
-        {
-          entry: "src/preload/blocking-notification.ts",
-          config: "vite.blocking-notification-preload.config.ts",
-        },
-        {
-          entry: "src/preload/clock.ts",
-          config: "vite.clock-preload.config.ts",
-        },
       ],
       renderer: [
         {
@@ -404,14 +396,6 @@ const config: ForgeConfig = {
         {
           name: "notification_window",
           config: "vite.notification.config.ts",
-        },
-        {
-          name: "blocking_notification_window",
-          config: "vite.blocking-notification.config.ts",
-        },
-        {
-          name: "clock_window",
-          config: "vite.clock.config.ts",
         },
       ],
     }),

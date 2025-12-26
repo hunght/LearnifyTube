@@ -2,7 +2,6 @@ import { z } from "zod";
 import { publicProcedure, t } from "@/api/trpc";
 import { BrowserWindow, Tray } from "electron";
 import { logger } from "@/helpers/logger";
-import { hideClockWindow } from "@/main/windows/clock";
 
 // Global references to main window and tray
 let mainWindowRef: BrowserWindow | null = null;
@@ -79,26 +78,6 @@ export const windowRouter = t.router({
         return { success: true };
       } catch (error) {
         logger.error("Failed to update tray title", { error, title: input.title });
-        throw error;
-      }
-    }),
-
-  // WIN_CLOCK_VISIBILITY_CHANGE_CHANNEL
-  setClockVisibility: publicProcedure
-    .input(z.object({ isVisible: z.boolean() }))
-    .mutation(async ({ input }): Promise<WindowActionResult> => {
-      try {
-        // When clock visibility is disabled, hide the clock window
-        if (!input.isVisible) {
-          hideClockWindow();
-        }
-        // When enabled, don't show it immediately - it will show on next new session
-        return { success: true };
-      } catch (error) {
-        logger.error("Failed to handle clock visibility change", {
-          error,
-          isVisible: input.isVisible,
-        });
         throw error;
       }
     }),

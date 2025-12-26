@@ -5,7 +5,7 @@ import {
   History,
   Users,
   List,
-  Languages,
+  Brain,
   HardDrive,
   ScrollText,
   Settings,
@@ -95,8 +95,8 @@ const ALL_ITEMS: Array<{
   },
   {
     id: "my-words",
-    title: "My Words",
-    icon: Languages,
+    title: "Anki Flashcards",
+    icon: Brain,
     url: "/my-words",
   },
   {
