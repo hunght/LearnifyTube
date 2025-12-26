@@ -1102,19 +1102,28 @@ export const ytdlpRouter = t.router({
       const db = ctx.db ?? defaultDb;
       const limit = input.limit ?? 24;
 
-      // 1) Try DB first (offline-first)
+      // 1) Check if we've fetched before by checking channel's lastLatestFetchedAt
       try {
-        const cached = await db
+        const channel = await db
           .select()
-          .from(youtubeVideos)
-          .where(eq(youtubeVideos.channelId, input.channelId))
-          .orderBy(desc(youtubeVideos.publishedAt))
-          .limit(limit);
-        if (cached.length > 0 && !input.forceRefresh) {
-          return cached.map(toVideoResponse);
+          .from(channels)
+          .where(eq(channels.channelId, input.channelId))
+          .limit(1);
+
+        // If channel exists and has lastLatestFetchedAt, and we're not forcing refresh, use cached data
+        if (channel.length > 0 && channel[0].lastLatestFetchedAt !== null && !input.forceRefresh) {
+          const cached = await db
+            .select()
+            .from(youtubeVideos)
+            .where(eq(youtubeVideos.channelId, input.channelId))
+            .orderBy(desc(youtubeVideos.publishedAt))
+            .limit(limit);
+          if (cached.length > 0) {
+            return cached.map(toVideoResponse);
+          }
         }
       } catch (e) {
-        logger.error("[ytdlp] Failed to get cached videos (latest)", {
+        logger.error("[ytdlp] Failed to check channel fetch status (latest)", {
           channelId: input.channelId,
           error: String(e),
         });
@@ -1275,20 +1284,29 @@ export const ytdlpRouter = t.router({
       const db = ctx.db ?? defaultDb;
       const limit = input.limit ?? 24;
 
-      // 1) Try DB first (offline-first) – Use viewCount desc when available
+      // 1) Check if we've fetched before by checking channel's lastPopularFetchedAt
       try {
-        const cached = await db
+        const channel = await db
           .select()
-          .from(youtubeVideos)
-          .where(eq(youtubeVideos.channelId, input.channelId))
-          .limit(limit);
-        if (cached.length > 0 && !input.forceRefresh) {
-          // Sort by viewCount desc locally, fallback by updatedAt
-          const sorted = [...cached].sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
-          return sorted.map(toVideoResponse);
+          .from(channels)
+          .where(eq(channels.channelId, input.channelId))
+          .limit(1);
+
+        // If channel exists and has lastPopularFetchedAt, and we're not forcing refresh, use cached data
+        if (channel.length > 0 && channel[0].lastPopularFetchedAt !== null && !input.forceRefresh) {
+          const cached = await db
+            .select()
+            .from(youtubeVideos)
+            .where(eq(youtubeVideos.channelId, input.channelId))
+            .limit(limit);
+          if (cached.length > 0) {
+            // Sort by viewCount desc locally, fallback by updatedAt
+            const sorted = [...cached].sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
+            return sorted.map(toVideoResponse);
+          }
         }
       } catch (e) {
-        logger.error("[ytdlp] Failed to get cached videos (popular)", {
+        logger.error("[ytdlp] Failed to check channel fetch status (popular)", {
           channelId: input.channelId,
           error: String(e),
         });
@@ -1429,10 +1447,25 @@ export const ytdlpRouter = t.router({
       const videos = await db
         .select()
         .from(youtubeVideos)
-        .where(inArray(youtubeVideos.videoId, videoIds))
-        .orderBy(desc(youtubeVideos.publishedAt));
+        .where(inArray(youtubeVideos.videoId, videoIds));
 
-      return videos.map(toVideoResponse);
+      // Sort by viewCount desc locally, fallback by updatedAt
+      const sorted = [...videos].sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
+
+      // Update channel's lastPopularFetchedAt timestamp
+      try {
+        await db
+          .update(channels)
+          .set({ lastPopularFetchedAt: now, updatedAt: now })
+          .where(eq(channels.channelId, input.channelId));
+      } catch (e) {
+        logger.error("[ytdlp] Failed to update lastPopularFetchedAt", {
+          channelId: input.channelId,
+          error: String(e),
+        });
+      }
+
+      return sorted.map(toVideoResponse);
     }),
 
   // List playlists of a channel via yt-dlp (offline-first, cached in DB)
@@ -1448,19 +1481,32 @@ export const ytdlpRouter = t.router({
       const db = ctx.db ?? defaultDb;
       const limit = input.limit ?? 30;
 
-      // 1) Try DB first (offline-first)
+      // 1) Check if we've fetched before by checking channel's lastPlaylistsFetchedAt
       try {
-        const cached = await db
+        const channel = await db
           .select()
-          .from(channelPlaylists)
-          .where(eq(channelPlaylists.channelId, input.channelId))
-          .orderBy(desc(channelPlaylists.updatedAt))
-          .limit(limit);
-        if (cached.length > 0 && !input.forceRefresh) {
-          return cached.map(toPlaylistResponse);
+          .from(channels)
+          .where(eq(channels.channelId, input.channelId))
+          .limit(1);
+
+        // If channel exists and has lastPlaylistsFetchedAt, and we're not forcing refresh, use cached data
+        if (
+          channel.length > 0 &&
+          channel[0].lastPlaylistsFetchedAt !== null &&
+          !input.forceRefresh
+        ) {
+          const cached = await db
+            .select()
+            .from(channelPlaylists)
+            .where(eq(channelPlaylists.channelId, input.channelId))
+            .orderBy(desc(channelPlaylists.updatedAt))
+            .limit(limit);
+          if (cached.length > 0) {
+            return cached.map(toPlaylistResponse);
+          }
         }
       } catch (e) {
-        logger.error("[ytdlp] Failed to get cached playlists (playlists)", {
+        logger.error("[ytdlp] Failed to check channel fetch status (playlists)", {
           channelId: input.channelId,
           error: String(e),
         });
@@ -1623,6 +1669,20 @@ export const ytdlpRouter = t.router({
         .where(eq(channelPlaylists.channelId, input.channelId))
         .orderBy(desc(channelPlaylists.updatedAt))
         .limit(limit);
+
+      // Update channel's lastPlaylistsFetchedAt timestamp
+      try {
+        await db
+          .update(channels)
+          .set({ lastPlaylistsFetchedAt: now, updatedAt: now })
+          .where(eq(channels.channelId, input.channelId));
+      } catch (e) {
+        logger.error("[ytdlp] Failed to update lastPlaylistsFetchedAt", {
+          channelId: input.channelId,
+          error: String(e),
+        });
+      }
+
       return cached.map(toPlaylistResponse);
     }),
 });

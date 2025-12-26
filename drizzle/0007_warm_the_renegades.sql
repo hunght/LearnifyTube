@@ -1,0 +1,1 @@
+ALTER TABLE `channels` ADD `last_playlists_fetched_at` integer;

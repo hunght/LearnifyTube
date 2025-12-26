@@ -43,6 +43,20 @@
       "when": 1766483032636,
       "tag": "0005_solid_shiver_man",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1766679713068,
+      "tag": "0006_clever_roughhouse",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1766679784571,
+      "tag": "0007_warm_the_renegades",
+      "breakpoints": true
     }
   ]
 }

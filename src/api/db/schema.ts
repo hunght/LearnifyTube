@@ -18,6 +18,11 @@ export const channels = sqliteTable(
     customUrl: text("custom_url"), // e.g., @channelname
     raw: text("raw_json"), // Raw JSON metadata from YouTube
 
+    // Track when we last fetched videos from API
+    lastLatestFetchedAt: integer("last_latest_fetched_at"), // Last time we fetched latest videos
+    lastPopularFetchedAt: integer("last_popular_fetched_at"), // Last time we fetched popular videos
+    lastPlaylistsFetchedAt: integer("last_playlists_fetched_at"), // Last time we fetched playlists
+
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at"),
   },

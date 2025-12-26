@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { ExternalLink as ExternalLinkIcon, Download, Play, Loader2 } from "lucide-react";
@@ -50,22 +50,13 @@ const getDownloadStatusText = (status: string | null, progress: number | null): 
 };
 
 export const PopularTab: React.FC<PopularTabProps> = ({ channelId, onDownload }) => {
-  const queryClient = useQueryClient();
-
   const query = useQuery({
     queryKey: ["channel-popular", channelId],
-    queryFn: () => {
-      // Check if query has cached data (has run before)
-      const cachedData = queryClient.getQueryData(["channel-popular", channelId]);
-      const hasCachedData = cachedData !== undefined;
-
-      // Only force refresh on first run (no cached data)
-      return trpcClient.ytdlp.listChannelPopular.query({
+    queryFn: () =>
+      trpcClient.ytdlp.listChannelPopular.query({
         channelId,
         limit: 24,
-        forceRefresh: !hasCachedData,
-      });
-    },
+      }),
     enabled: !!channelId,
     staleTime: Infinity,
     gcTime: Infinity,
