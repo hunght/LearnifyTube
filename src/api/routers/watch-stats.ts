@@ -110,16 +110,25 @@ export const watchStatsRouter = t.router({
 
   // List recently watched videos joined with metadata
   listRecentWatched: publicProcedure
-    .input(z.object({ limit: z.number().min(1).max(200).optional() }).optional())
+    .input(
+      z
+        .object({
+          limit: z.number().min(1).max(200).optional(),
+          offset: z.number().min(0).optional(),
+        })
+        .optional()
+    )
     .query(async ({ input, ctx }): Promise<ListRecentWatchedResult> => {
       const db = ctx.db ?? defaultDb;
       const limit = input?.limit ?? 30;
+      const offset = input?.offset ?? 0;
       // Get recent watch stats
       const stats = await db
         .select()
         .from(videoWatchStats)
         .orderBy(desc(videoWatchStats.lastWatchedAt))
-        .limit(limit);
+        .limit(limit)
+        .offset(offset);
 
       const videoIds = stats.map((s) => s.videoId);
       if (videoIds.length === 0) return [];

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,6 @@ import {
   TrendingUp,
   Clock,
   Languages,
-  BarChart3,
   Loader2,
   Play,
   ChevronDown,
@@ -19,6 +18,7 @@ import {
   Video,
   BookmarkCheck,
   Brain,
+  RefreshCw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
@@ -45,6 +45,7 @@ export default function MyWordsPage(): React.JSX.Element {
     data: savedWordsData,
     isLoading: savedWordsLoading,
     refetch: refetchSavedWords,
+    isFetching,
   } = useQuery({
     queryKey: ["saved-words"],
     queryFn: async () =>
@@ -52,12 +53,6 @@ export default function MyWordsPage(): React.JSX.Element {
         limit: 100,
         offset: 0,
       }),
-  });
-
-  // Fetch statistics
-  const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ["translation-statistics"],
-    queryFn: async () => trpcClient.translation.getStatistics.query(),
   });
 
   // Search all translations (includes saved and unsaved)
@@ -124,6 +119,10 @@ export default function MyWordsPage(): React.JSX.Element {
         playlistIndex: undefined,
       },
     });
+  };
+
+  const handleRefresh = (): void => {
+    refetchSavedWords();
   };
 
   // Format saved words to match the expected structure
@@ -234,120 +233,44 @@ export default function MyWordsPage(): React.JSX.Element {
   return (
     <div className="container mx-auto space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">My Words</h1>
-          <p className="text-muted-foreground">
-            Your personal vocabulary learning list - words you've saved for study
-          </p>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold">My Words</h1>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search words..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-64 pl-9"
+            />
+          </div>
+          {searchQuery && (
+            <Button variant="ghost" size="sm" onClick={() => setSearchQuery("")}>
+              Clear
+            </Button>
+          )}
+          <Button
+            onClick={handleRefresh}
+            disabled={isFetching}
+            size="sm"
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saved Words</CardTitle>
-            <Languages className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {savedWordsLoading ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : (
-                savedWordsData?.total || 0
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">Words in your learning list</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Queries</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {statsLoading ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : (
-                stats?.totalQueries || 0
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">Times you looked up words</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Language Pairs</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {statsLoading ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : (
-                stats?.uniqueLanguagePairs || 0
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">Different language combinations</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Most Frequent</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="truncate text-lg font-bold">
-              {statsLoading ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : stats?.mostFrequent ? (
-                stats.mostFrequent.sourceText
-              ) : (
-                "—"
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {stats?.mostFrequent ? `${stats.mostFrequent.queryCount} times` : "No data"}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Search and Filter */}
+      {/* Words List Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Saved Words</CardTitle>
-          <CardDescription>
-            Your personal vocabulary learning list - words you've explicitly saved for study
-          </CardDescription>
+          <CardTitle className="text-base">
+            Saved Words {savedWordsData && savedWordsData.total > 0 && `(${savedWordsData.total})`}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Search Bar */}
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search saved words..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-          </div>
-
-          {/* Info text */}
-          {!debouncedSearch && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>Showing saved words (most recent first)</span>
-            </div>
-          )}
-
           {/* Translations List */}
           <div className="space-y-2">
             {isLoading ? (
