@@ -155,33 +155,54 @@ export const watchStatsRouter = t.router({
         .filter((v): v is WatchedVideoWithStats => v !== null);
     }),
 
-  // List videos by most recently added (watch history fallback)
+  // List videos by most recently added, balanced across channels
   listRecentVideos: publicProcedure
     .input(z.object({ limit: z.number().min(1).max(200).optional() }).optional())
     .query(async ({ input, ctx }): Promise<ListRecentVideosResult> => {
       const db = ctx.db ?? defaultDb;
       const limit = input?.limit ?? 30;
-      const rows = await db
-        .select()
-        .from(youtubeVideos)
-        .orderBy(desc(sql`${youtubeVideos.createdAt}`))
-        .limit(limit);
-      return rows.map((row) => ({
-        id: row.id,
-        videoId: row.videoId,
-        title: row.title,
-        description: row.description,
-        channelId: row.channelId,
-        channelTitle: row.channelTitle,
-        thumbnailUrl: row.thumbnailUrl,
-        thumbnailPath: row.thumbnailPath,
-        durationSeconds: row.durationSeconds,
-        viewCount: row.viewCount,
-        publishedAt: row.publishedAt,
-        downloadStatus: row.downloadStatus,
-        downloadProgress: row.downloadProgress,
-        downloadFilePath: row.downloadFilePath,
-      }));
+
+      // Use window function to rank videos within each channel by createdAt
+      // Then take top N per channel to ensure balanced representation
+      const videosPerChannel = 3; // Show up to 3 most recent videos per channel
+
+      const rows = await db.all<{
+        id: string;
+        videoId: string;
+        title: string;
+        description: string | null;
+        channelId: string | null;
+        channelTitle: string;
+        thumbnailUrl: string | null;
+        thumbnailPath: string | null;
+        durationSeconds: number | null;
+        viewCount: number | null;
+        publishedAt: number | null;
+        downloadStatus: string | null;
+        downloadProgress: number | null;
+        downloadFilePath: string | null;
+      }>(sql`
+        WITH ranked_videos AS (
+          SELECT 
+            *,
+            ROW_NUMBER() OVER (PARTITION BY channel_id ORDER BY created_at DESC) as rn
+          FROM youtube_videos
+          WHERE channel_id IS NOT NULL
+        )
+        SELECT 
+          id, video_id as videoId, title, description,
+          channel_id as channelId, channel_title as channelTitle,
+          thumbnail_url as thumbnailUrl, thumbnail_path as thumbnailPath,
+          duration_seconds as durationSeconds, view_count as viewCount,
+          published_at as publishedAt, download_status as downloadStatus,
+          download_progress as downloadProgress, download_file_path as downloadFilePath
+        FROM ranked_videos
+        WHERE rn <= ${videosPerChannel}
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `);
+
+      return rows;
     }),
 });
 

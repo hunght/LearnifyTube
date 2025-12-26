@@ -1,4 +1,11 @@
 PRAGMA foreign_keys=OFF;--> statement-breakpoint
+-- First, update NULL channel_title values from the channels table where possible
+UPDATE `youtube_videos` 
+SET `channel_title` = COALESCE(
+  (SELECT c.channel_title FROM channels c WHERE c.channel_id = youtube_videos.channel_id),
+  'Unknown Channel'
+) 
+WHERE `channel_title` IS NULL;--> statement-breakpoint
 CREATE TABLE `__new_youtube_videos` (
 	`id` text PRIMARY KEY NOT NULL,
 	`video_id` text NOT NULL,
