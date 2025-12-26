@@ -158,6 +158,15 @@ const channelMetadataSchema = z
       .array(z.object({ url: z.string().optional().catch(undefined) }))
       .optional()
       .catch([]),
+    thumbnails: z
+      .array(
+        z.object({
+          url: z.string().optional().catch(undefined),
+          id: z.string().optional().catch(undefined),
+        })
+      )
+      .optional()
+      .catch([]),
     uploader_avatar: z.string().optional().catch(undefined),
     channel_avatar: z.string().optional().catch(undefined),
     channel_follower_count: z.number().optional().catch(undefined),
@@ -193,6 +202,7 @@ export const extractChannelData = (meta: unknown): ExtractedChannelData | null =
     hasChannelThumbnails: Array.isArray(validated.channel_thumbnails)
       ? validated.channel_thumbnails.length
       : 0,
+    hasThumbnails: Array.isArray(validated.thumbnails) ? validated.thumbnails.length : 0,
     uploader_avatar: validated.uploader_avatar,
     channel_avatar: validated.channel_avatar,
   });
@@ -203,8 +213,20 @@ export const extractChannelData = (meta: unknown): ExtractedChannelData | null =
   }
 
   // Extract channel thumbnail (profile photo)
+  // Priority:
+  // 1. thumbnails with id="avatar_uncropped" (from flat-playlist)
+  // 2. channel_thumbnails (highest quality)
+  // 3. thumbnails (highest quality - fallback)
+  // 4. uploader_avatar / channel_avatar
   let channelThumbnail: string | null = null;
-  if (
+
+  // Check generic thumbnails first (often used in flat-playlist)
+  const thumbnails = validated.thumbnails ?? [];
+  const avatarUncropped = thumbnails.find((t) => t.id === "avatar_uncropped");
+
+  if (avatarUncropped?.url) {
+    channelThumbnail = avatarUncropped.url;
+  } else if (
     validated.channel_thumbnails &&
     Array.isArray(validated.channel_thumbnails) &&
     validated.channel_thumbnails.length > 0
@@ -212,15 +234,20 @@ export const extractChannelData = (meta: unknown): ExtractedChannelData | null =
     // Get the highest quality thumbnail
     channelThumbnail =
       validated.channel_thumbnails[validated.channel_thumbnails.length - 1]?.url ?? null;
+  } else if (thumbnails.length > 0) {
+    // Fallback to highest quality generic thumbnail
+    channelThumbnail = thumbnails[thumbnails.length - 1]?.url ?? null;
   } else if (validated.uploader_avatar ?? validated.channel_avatar) {
     channelThumbnail = validated.uploader_avatar ?? validated.channel_avatar ?? null;
   }
 
   logger.debug("[metadata] thumbnail selection", {
     selected: channelThumbnail,
+    avatar_uncropped: avatarUncropped?.url,
     channel_thumbnails_last: Array.isArray(validated.channel_thumbnails)
       ? validated.channel_thumbnails[validated.channel_thumbnails.length - 1]?.url
       : undefined,
+    thumbnails_last: thumbnails[thumbnails.length - 1]?.url,
   });
 
   return {
