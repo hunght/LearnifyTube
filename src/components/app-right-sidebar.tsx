@@ -13,7 +13,7 @@ import { DownloadQueueSidebar } from "@/components/DownloadQueueSidebar";
 import { AnnotationsSidebar } from "@/components/AnnotationsSidebar";
 import { AISummarySidebar } from "@/components/AISummarySidebar";
 import { QuizSidebar } from "@/components/QuizSidebar";
-import { Sparkles, StickyNote, Brain, BookmarkPlus } from "lucide-react";
+import { Sparkles, StickyNote, Brain } from "lucide-react";
 
 export function AppRightSidebar({
   className,
