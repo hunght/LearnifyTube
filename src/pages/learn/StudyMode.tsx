@@ -99,12 +99,12 @@ export function StudyMode({ cards, onComplete }: StudyModeProps): React.JSX.Elem
   // Cloze parsing logic
   const isCloze = currentCard.cardType === "cloze" || currentCard.clozeContent;
 
-  const renderClozeFront = (text: string) => {
+  const renderClozeFront = (text: string): string => {
     // Replace {{c1::answer}} with [...]
     return text.replace(/{{c1::(.*?)}}/g, "[...]");
   };
 
-  const renderClozeBack = (text: string) => {
+  const renderClozeBack = (text: string): React.JSX.Element => {
     // Highlight answer in bold/color
     const parts = text.split(/({{c1::.*?}})/g);
     return (
@@ -151,11 +151,21 @@ export function StudyMode({ cards, onComplete }: StudyModeProps): React.JSX.Elem
             {/* Image Context (if any) */}
             {currentCard.screenshotPath && (
               <div className="mb-6 w-full max-w-md overflow-hidden rounded-lg border shadow-sm">
-                <img
-                  src={currentCard.screenshotPath}
-                  alt="Context"
-                  className="h-auto w-full object-cover"
-                />
+                {currentCard.screenshotPath.startsWith("data:video") ? (
+                  <video
+                    src={currentCard.screenshotPath}
+                    autoPlay
+                    loop
+                    muted
+                    className="h-auto w-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={currentCard.screenshotPath}
+                    alt="Context"
+                    className="h-auto w-full object-cover"
+                  />
+                )}
               </div>
             )}
 
