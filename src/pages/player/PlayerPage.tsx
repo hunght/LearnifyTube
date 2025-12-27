@@ -375,12 +375,12 @@ export default function PlayerPage(): React.JSX.Element {
         return;
       }
 
-      // Alt+C: Open Quick Capture
+      // Alt+C: Open Quick Capture (Notes)
       if (e.altKey && (e.key === "c" || e.key === "C")) {
         e.preventDefault();
-        setRightSidebarContent("capture");
+        setRightSidebarContent("annotations"); // Open Notes sidebar
         setRightSidebarOpen(true);
-        toast("Quick Capture Input Opened", { icon: "⚡" });
+        toast("Quick Capture (Notes) Opened", { icon: "📝" });
       }
     };
 

@@ -102,13 +102,13 @@ is real?
     const segments = parseVttToSegments(vttContent);
 
     expect(segments.length).toBeGreaterThan(0);
-    
+
     // Should not contain HTML tags (but may contain > as part of text like ">>")
     segments.forEach((seg) => {
       expect(seg.text).not.toContain("<");
       expect(seg.text).not.toMatch(/<[^>]+>/); // No HTML tags
     });
-    
+
     // Should have segments with correct timing
     expect(segments.some((s) => s.text.includes("You know what's crazy"))).toBe(true);
     expect(segments.some((s) => s.text.includes("real?"))).toBe(true);

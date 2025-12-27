@@ -13,7 +13,6 @@ import { DownloadQueueSidebar } from "@/components/DownloadQueueSidebar";
 import { AnnotationsSidebar } from "@/components/AnnotationsSidebar";
 import { AISummarySidebar } from "@/components/AISummarySidebar";
 import { QuizSidebar } from "@/components/QuizSidebar";
-import { CaptureSidebar } from "@/pages/player/components/CaptureSidebar";
 import { Sparkles, StickyNote, Brain, BookmarkPlus } from "lucide-react";
 
 export function AppRightSidebar({
@@ -77,18 +76,6 @@ export function AppRightSidebar({
             >
               <Brain className="h-4 w-4" />
             </button>
-            <button
-              onClick={() => setContent("capture")}
-              className={cn(
-                "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                content === "capture"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
-              )}
-              title="Capture"
-            >
-              <BookmarkPlus className="h-4 w-4" />
-            </button>
           </div>
 
           {/* Content based on active tab */}
@@ -110,12 +97,6 @@ export function AppRightSidebar({
               videoId={annotationsData.videoId}
               videoRef={annotationsData.videoRef}
               videoTitle={annotationsData.videoTitle}
-            />
-          ) : content === "capture" ? (
-            <CaptureSidebar
-              videoId={annotationsData.videoId}
-              videoRef={annotationsData.videoRef}
-              currentTime={annotationsData.currentTime}
             />
           ) : null}
         </>

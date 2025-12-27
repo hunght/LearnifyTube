@@ -5,7 +5,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Trash2, Clock, Plus, X, Quote, Send } from "lucide-react";
+import {
+  Trash2,
+  Clock,
+  Plus,
+  X,
+  Quote,
+  Send,
+  Camera,
+} from "lucide-react";
 import { trpcClient } from "@/utils/trpc";
 import { toast } from "sonner";
 import { transcriptSelectionAtom } from "@/context/annotations";
@@ -35,6 +43,11 @@ function formatTimestamp(seconds: number): string {
   }
   return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
+
+// Helper to determine if note should be a flashcard
+const isFlashcardContent = (text: string, hasScreenshot: boolean): boolean => {
+  return text.includes("{{c1::") || hasScreenshot;
+};
 
 export function AnnotationsSidebar({
   videoId,
@@ -111,6 +124,8 @@ export function AnnotationsSidebar({
   const [selectedText, setSelectedText] = useState("");
   const [emoji, setEmoji] = useState<string | null>(null);
   const [timestamp, setTimestamp] = useState(currentTime);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [isFlashcardMode, setIsFlashcardMode] = useState(false);
 
   // Update form when selection changes
   useEffect(() => {
@@ -153,9 +168,74 @@ export function AnnotationsSidebar({
     },
   });
 
-  const handleSave = (): void => {
-    if (!note.trim() && !emoji) return; // Allow save if just emoji
+  const handleSave = async (): Promise<void> => {
+    if (!note.trim() && !emoji && !screenshotPreview) return;
+
+    // Always create annotation (note)
     createAnnotationMutation.mutate();
+
+    // If Flashcard Mode is active or content looks like a flashcard, create it
+    if (isFlashcardMode || isFlashcardContent(note, !!screenshotPreview)) {
+      try {
+        await trpcClient.flashcards.create.mutate({
+          cardType: note.includes("{{c1::") ? "cloze" : "concept", // Detect type
+          frontContent: selectedText || "Video Note", // Use selected text as context/front if available
+          backContent: note, // The note is the main content (or Cloze raw text)
+          clozeContent: note.includes("{{c1::") ? note : undefined,
+          videoId,
+          timestampSeconds: timestamp,
+          contextText: selectedText || undefined,
+          screenshotPath: screenshotPreview || undefined,
+          tags: emoji ? [emoji] : undefined,
+        });
+        toast.success("Flashcard created");
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to create flashcard", err);
+        toast.error("Note saved, but Flashcard failed");
+      }
+    }
+
+    // Clear screenshot after save
+    setScreenshotPreview(null);
+    setIsFlashcardMode(false);
+  };
+
+  const captureScreenshot = (): void => {
+    if (!videoRef.current) return;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        setScreenshotPreview(dataUrl);
+        setIsFlashcardMode(true); // Auto-enable flashcard mode on screenshot
+        toast.success("Screenshot captured");
+      }
+    } catch (e) {
+      toast.error("Screenshot failed");
+    }
+  };
+
+  const handleInsertCloze = (): void => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    const textarea = document.getElementById("note-textarea") as HTMLTextAreaElement;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+
+    if (start === end) return;
+
+    const selection = text.substring(start, end);
+    const newText = text.substring(0, start) + `{{c1::${selection}}}` + text.substring(end);
+
+    setNote(newText);
+    setIsFlashcardMode(true); // Auto-enable flashcard mode
   };
 
   const handleClearSelection = (): void => {
@@ -215,7 +295,34 @@ export function AnnotationsSidebar({
             </span>
           </div>
 
+          {screenshotPreview && (
+            <div className="relative mb-2 overflow-hidden rounded-md border border-border">
+              {screenshotPreview.startsWith("data:video") ? (
+                <video
+                  src={screenshotPreview}
+                  autoPlay
+                  loop
+                  muted
+                  className="max-h-[150px] w-full object-cover"
+                />
+              ) : (
+                <img
+                  src={screenshotPreview}
+                  alt="Screenshot"
+                  className="h-auto max-h-[120px] w-full object-cover"
+                />
+              )}
+              <button
+                className="absolute right-1 top-1 rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
+                onClick={() => setScreenshotPreview(null)}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+
           <Textarea
+            id="note-textarea"
             placeholder={selectedText ? "Add a thought..." : "Type a note at current time..."}
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -247,14 +354,33 @@ export function AnnotationsSidebar({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Tools */}
+            <button
+              onClick={captureScreenshot}
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Capture Screenshot"
+            >
+              <Camera className="h-4 w-4" />
+            </button>
+
+            <div className="mx-1 h-4 w-[1px] bg-border" />
 
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={(!note.trim() && !emoji) || createAnnotationMutation.isPending}
+              disabled={
+                (!note.trim() && !emoji && !screenshotPreview) || createAnnotationMutation.isPending
+              }
               className="gap-2 shadow-sm transition-all active:scale-95"
             >
-              {createAnnotationMutation.isPending ? "Saving..." : "Add Note"}
+              {createAnnotationMutation.isPending
+                ? "Saving..."
+                : isFlashcardMode
+                  ? "Add Note & Card"
+                  : "Add Note"}
               <Send className="h-3.5 w-3.5" />
             </Button>
           </div>
