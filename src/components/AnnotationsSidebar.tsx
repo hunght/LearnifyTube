@@ -5,15 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Trash2,
-  Clock,
-  Plus,
-  X,
-  Quote,
-  Send,
-  Camera,
-} from "lucide-react";
+import { Trash2, Clock, Plus, X, Quote, Send, Camera, Square, Film } from "lucide-react";
 import { trpcClient } from "@/utils/trpc";
 import { toast } from "sonner";
 import { transcriptSelectionAtom } from "@/context/annotations";
@@ -126,6 +118,9 @@ export function AnnotationsSidebar({
   const [timestamp, setTimestamp] = useState(currentTime);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [isFlashcardMode, setIsFlashcardMode] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   // Update form when selection changes
   useEffect(() => {
@@ -201,6 +196,57 @@ export function AnnotationsSidebar({
     setIsFlashcardMode(false);
   };
 
+  const handleRecordToggle = async (): Promise<void> => {
+    if (isRecording) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+        setIsRecording(false);
+      }
+    } else {
+      if (!videoRef.current) return;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/consistent-type-assertions
+        const stream = (videoRef.current as any).captureStream() as MediaStream;
+        if (!stream) {
+          toast.error("Browser does not support capturing from this video source.");
+          return;
+        }
+
+        const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+        mediaRecorderRef.current = recorder;
+        chunksRef.current = [];
+
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+
+        recorder.onstop = () => {
+          const blob = new Blob(chunksRef.current, { type: "video/webm" });
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === "string") {
+              setScreenshotPreview(reader.result);
+              setIsFlashcardMode(true);
+              toast.success("Loop captured!");
+            }
+          };
+          reader.readAsDataURL(blob);
+          stream.getTracks().forEach((t) => t.stop());
+        };
+
+        recorder.start();
+        setIsRecording(true);
+        toast.info("Recording loop... Play video!", { duration: 2000 });
+        if (videoRef.current.paused) {
+          videoRef.current.play().catch(() => {});
+        }
+      } catch (err) {
+        console.error("Recording failed", err);
+        toast.error("Could not start recording.");
+      }
+    }
+  };
+
   const captureScreenshot = (): void => {
     if (!videoRef.current) return;
     try {
@@ -218,24 +264,6 @@ export function AnnotationsSidebar({
     } catch (e) {
       toast.error("Screenshot failed");
     }
-  };
-
-  const handleInsertCloze = (): void => {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-    const textarea = document.getElementById("note-textarea") as HTMLTextAreaElement;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = textarea.value;
-
-    if (start === end) return;
-
-    const selection = text.substring(start, end);
-    const newText = text.substring(0, start) + `{{c1::${selection}}}` + text.substring(end);
-
-    setNote(newText);
-    setIsFlashcardMode(true); // Auto-enable flashcard mode
   };
 
   const handleClearSelection = (): void => {
@@ -364,6 +392,17 @@ export function AnnotationsSidebar({
               title="Capture Screenshot"
             >
               <Camera className="h-4 w-4" />
+            </button>
+            <button
+              onClick={handleRecordToggle}
+              className={`rounded-md p-1.5 transition-colors ${isRecording ? "animate-pulse bg-destructive text-destructive-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+              title={isRecording ? "Stop Recording" : "Record Video Loop"}
+            >
+              {isRecording ? (
+                <Square className="h-4 w-4 fill-current" />
+              ) : (
+                <Film className="h-4 w-4" />
+              )}
             </button>
 
             <div className="mx-1 h-4 w-[1px] bg-border" />
