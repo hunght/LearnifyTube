@@ -1,6 +1,5 @@
 import React, { useRef, useCallback } from "react";
 import { TranscriptWord } from "./TranscriptWord";
-import { logger } from "@/helpers/logger";
 
 interface TranscriptSegment {
   start: number;
@@ -45,17 +44,6 @@ export function TranscriptContent({
   segRefs,
   secondarySegments,
 }: TranscriptContentProps): React.JSX.Element {
-  // Log props changes
-  React.useEffect(() => {
-    logger.debug("[TranscriptContent] Props received", {
-      segmentsLength: segments.length,
-      activeSegIndex,
-      hasContainerRef: !!containerRef,
-      hasSegRefs: !!segRefs,
-      secondarySegmentsLength: secondarySegments?.length ?? 0,
-    });
-  }, [segments.length, activeSegIndex, containerRef, segRefs, secondarySegments?.length]);
-
   const internalContainerRef = useRef<HTMLDivElement>(null);
   const internalSegRefs = useRef<Array<HTMLParagraphElement | null>>([]);
 
@@ -96,18 +84,8 @@ export function TranscriptContent({
 
   // Render text with individual word highlighting and inline translations
   const renderTextWithWords = (text: string): React.JSX.Element => {
-    logger.debug("[TranscriptContent] renderTextWithWords called", {
-      inputText: text,
-      inputTextLength: text.length,
-    });
-
     // Split text into words while preserving punctuation
     const words = text.split(/(\s+)/); // Preserve spaces
-
-    logger.debug("[TranscriptContent] renderTextWithWords split result", {
-      wordsCount: words.length,
-      words: words.slice(0, 10), // First 10 words for debugging
-    });
 
     return (
       <span className="inline-flex flex-wrap items-start gap-x-1">
@@ -160,60 +138,16 @@ export function TranscriptContent({
           <div className="w-full space-y-1 pb-4 text-center">
             {/* Determine which segment to show - use activeSegIndex or fallback to first segment */}
             {(() => {
-              logger.debug("[TranscriptContent] Rendering transcript", {
-                activeSegIndex,
-                segmentsLength: segments.length,
-                hasSegments: segments.length > 0,
-              });
-
               const displayIndex =
                 activeSegIndex !== null ? activeSegIndex : segments.length > 0 ? 0 : null;
 
-              logger.debug("[TranscriptContent] Display index calculation", {
-                displayIndex,
-                activeSegIndex,
-                segmentsLength: segments.length,
-                willRender: displayIndex !== null && segments[displayIndex] !== undefined,
-              });
-
               if (displayIndex === null) {
-                logger.warn("[TranscriptContent] displayIndex is null, not rendering", {
-                  activeSegIndex,
-                  segmentsLength: segments.length,
-                });
                 return null;
               }
 
               if (!segments[displayIndex]) {
-                logger.warn("[TranscriptContent] Segment at displayIndex does not exist", {
-                  displayIndex,
-                  segmentsLength: segments.length,
-                  availableIndices: segments.map((_, i) => i),
-                });
                 return null;
               }
-
-              const segmentToRender = segments[displayIndex];
-              logger.info("[TranscriptContent] RENDERING SEGMENT TO UI", {
-                displayIndex,
-                segmentStart: segmentToRender.start,
-                segmentEnd: segmentToRender.end,
-                rawText: segmentToRender.text,
-                rawTextLength: segmentToRender.text.length,
-                rawTextFull: segmentToRender.text, // Full text without truncation
-                // Show what will be rendered
-                willRenderPrevious2: displayIndex > 1 && segments[displayIndex - 2],
-                willRenderPrevious1: displayIndex > 0 && segments[displayIndex - 1],
-                previous2Text:
-                  displayIndex > 1 && segments[displayIndex - 2]
-                    ? segments[displayIndex - 2].text
-                    : null,
-                previous1Text:
-                  displayIndex > 0 && segments[displayIndex - 1]
-                    ? segments[displayIndex - 1].text
-                    : null,
-                currentText: segmentToRender.text,
-              });
 
               return (
                 <>
