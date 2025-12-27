@@ -14,7 +14,11 @@ import { TranscriptPanel } from "./components/TranscriptPanel";
 import { VideoDescription } from "./components/VideoDescription";
 import { PlaylistNavigation } from "./components/PlaylistNavigation";
 import { ExternalLink } from "@/components/ExternalLink";
-import { rightSidebarContentAtom, annotationsSidebarDataAtom } from "@/context/rightSidebar";
+import {
+  rightSidebarContentAtom,
+  annotationsSidebarDataAtom,
+  rightSidebarOpenAtom,
+} from "@/context/rightSidebar";
 import {
   beginVideoPlayback,
   usePlayerStore,
@@ -282,6 +286,7 @@ export default function PlayerPage(): React.JSX.Element {
 
   // Right sidebar atoms
   const setRightSidebarContent = useSetAtom(rightSidebarContentAtom);
+  const setRightSidebarOpen = useSetAtom(rightSidebarOpenAtom);
   const setAnnotationsSidebarData = useSetAtom(annotationsSidebarDataAtom);
 
   const playbackStatus = playback && typeof playback.status === "string" ? playback.status : null;
@@ -358,6 +363,30 @@ export default function PlayerPage(): React.JSX.Element {
       setAnnotationsSidebarData(null);
     };
   }, [videoId, setRightSidebarContent, setAnnotationsSidebarData]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      // Ignore if input is focused
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "TEXTAREA" ||
+        document.activeElement?.getAttribute("contenteditable") === "true"
+      ) {
+        return;
+      }
+
+      // Alt+C: Open Quick Capture
+      if (e.altKey && (e.key === "c" || e.key === "C")) {
+        e.preventDefault();
+        setRightSidebarContent("capture");
+        setRightSidebarOpen(true);
+        toast("Quick Capture Input Opened", { icon: "⚡" });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [setRightSidebarContent, setRightSidebarOpen]);
 
   // Update sidebar data constantly as video plays
   useEffect(() => {

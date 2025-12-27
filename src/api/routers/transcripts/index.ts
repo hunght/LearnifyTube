@@ -11,14 +11,14 @@ import { spawnYtDlpWithLogging } from "@/api/utils/ytdlp-utils/ytdlp";
 
 const getTranscriptsDir = (): string => path.join(app.getPath("userData"), "cache", "transcripts");
 
-// Zod schema for validating transcript segments from JSON
-const transcriptSegmentSchema = z.array(
-  z.object({
-    start: z.number(),
-    end: z.number(),
-    text: z.string(),
-  })
-);
+// Zod schema for validating transcript segments from JSON (currently unused - segmentsJson cache disabled)
+// const transcriptSegmentSchema = z.array(
+//   z.object({
+//     start: z.number(),
+//     end: z.number(),
+//     text: z.string(),
+//   })
+// );
 
 // Return types for transcript download mutation (discriminated union for type safety)
 type DownloadTranscriptSuccess = {
@@ -135,11 +135,14 @@ export function parseVttToText(content: string): string {
 }
 
 // VTT -> segments with timestamps
-function parseVttToSegments(content: string): Array<{ start: number; end: number; text: string }> {
+export function parseVttToSegments(
+  content: string
+): Array<{ start: number; end: number; text: string }> {
   const lines = content.split(/\r?\n/);
   const segs: Array<{ start: number; end: number; text: string }> = [];
   let i = 0;
-  const recent: string[] = [];
+  // Track recent segments with both text and timing to avoid false duplicates
+  const recent: Array<{ text: string; start: number; end: number }> = [];
 
   const parseTime = (t: string): number => {
     const m = t.match(/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/);
@@ -194,13 +197,42 @@ function parseVttToSegments(content: string): Array<{ start: number; end: number
 
     const decodedText = decodeHTMLEntities(text);
     const lc = decodedText.toLowerCase();
-    const tail = recent.join(" ");
-    const tailSlice = tail.slice(Math.max(0, tail.length - 600));
-    const isDup = recent.includes(lc) || (lc.length > 10 && tailSlice.includes(lc));
+
+    // Check for duplicates: same text AND overlapping/very close timestamps (within 0.1s)
+    // This prevents skipping valid segments that happen to have similar text
+    const isDup = recent.some((r) => {
+      const textMatch = r.text === lc;
+      const timeOverlap = Math.abs(r.start - start) < 0.1 && Math.abs(r.end - end) < 0.1;
+      // Only skip if both text AND timing are very similar (true duplicate)
+      return textMatch && timeOverlap;
+    });
+
+    // Log first 20 segments for debugging
+    if (segs.length < 20 || isDup) {
+      if (isDup) {
+        logger.debug("[parseVttToSegments] Skipping duplicate segment", {
+          start,
+          end,
+          text: decodedText,
+          textLength: decodedText.length,
+          reason: "exact text and timing match in recent segments",
+        });
+      } else {
+        logger.info("[parseVttToSegments] PARSING RAW SEGMENT", {
+          index: segs.length,
+          start,
+          end,
+          text: decodedText,
+          textLength: decodedText.length,
+          rawTextLines: textLines,
+        });
+      }
+    }
+
     if (isDup) continue;
 
     segs.push({ start, end, text: decodedText });
-    recent.push(lc);
+    recent.push({ text: lc, start, end });
     if (recent.length > 16) recent.shift();
   }
 
@@ -356,12 +388,13 @@ export const transcriptsRouter = t.router({
           if (row.rawVtt && row.rawVtt.trim().length > 0) {
             try {
               const derived = parseVttToText(row.rawVtt);
-              const segs = parseVttToSegments(row.rawVtt);
-              const segmentsJson = JSON.stringify(segs);
+              // segmentsJson cache disabled for now - always parse from rawVtt
+              // const segs = parseVttToSegments(row.rawVtt);
+              // const segmentsJson = JSON.stringify(segs);
               const now = Date.now();
               await db
                 .update(videoTranscripts)
-                .set({ text: derived, segmentsJson, updatedAt: now })
+                .set({ text: derived, segmentsJson: null, updatedAt: now })
                 .where(
                   sql`${videoTranscripts.videoId} = ${input.videoId} AND ${videoTranscripts.language} = ${row.language}`
                 );
@@ -465,15 +498,31 @@ export const transcriptsRouter = t.router({
       }
 
       // Find resulting VTT file
+      // Prefer -orig files (original with timing tags) over cleaned versions
       let vttPath: string | null = null;
       try {
         const files = fs
           .readdirSync(transcriptsDir)
           .filter((f) => f.startsWith(input.videoId) && f.endsWith(".vtt"));
         if (files.length > 0) {
-          const withStat = files.map((f) => ({ f, s: fs.statSync(path.join(transcriptsDir, f)) }));
+          // Prefer files with -orig suffix (original format with timing tags)
+          const origFiles = files.filter((f) => f.includes("-orig"));
+          const candidates = origFiles.length > 0 ? origFiles : files;
+
+          const withStat = candidates.map((f) => ({
+            f,
+            s: fs.statSync(path.join(transcriptsDir, f)),
+          }));
           withStat.sort((a, b) => b.s.mtimeMs - a.s.mtimeMs);
           vttPath = path.join(transcriptsDir, withStat[0].f);
+
+          logger.info("[transcript] Selected VTT file", {
+            videoId: input.videoId,
+            selectedFile: withStat[0].f,
+            fileSize: withStat[0].s.size,
+            isOrig: withStat[0].f.includes("-orig"),
+            allFiles: files,
+          });
         }
       } catch {
         // Ignore - directory may not exist or be unreadable
@@ -489,8 +538,9 @@ export const transcriptsRouter = t.router({
       // Parse VTT
       const raw = fs.readFileSync(vttPath, "utf8");
       const text = parseVttToText(raw);
-      const segs = parseVttToSegments(raw);
-      const segmentsJson = JSON.stringify(segs);
+      // segmentsJson cache disabled for now - always parse from rawVtt
+      // const segs = parseVttToSegments(raw);
+      // const segmentsJson = JSON.stringify(segs);
       const now = Date.now();
 
       // Detect language from filename
@@ -517,7 +567,7 @@ export const transcriptsRouter = t.router({
             source: "yt-dlp",
             text,
             rawVtt: raw,
-            segmentsJson,
+            segmentsJson: null, // Cache disabled - always parse from rawVtt
             createdAt: now,
             updatedAt: now,
           });
@@ -529,7 +579,7 @@ export const transcriptsRouter = t.router({
               source: "yt-dlp",
               text,
               rawVtt: raw,
-              segmentsJson,
+              segmentsJson: null, // Cache disabled - always parse from rawVtt
               updatedAt: now,
             })
             .where(
@@ -565,7 +615,13 @@ export const transcriptsRouter = t.router({
 
   // Get transcript segments with timestamps for highlighting
   getSegments: publicProcedure
-    .input(z.object({ videoId: z.string(), lang: z.string().optional() }))
+    .input(
+      z.object({
+        videoId: z.string(),
+        lang: z.string().optional(),
+        forceReparse: z.boolean().optional(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       const db = ctx.db ?? defaultDb;
 
@@ -588,29 +644,32 @@ export const transcriptsRouter = t.router({
 
         if (rows.length > 0) {
           const row = rows[0];
-          if (row.segmentsJson) {
-            try {
-              const parseResult = transcriptSegmentSchema.safeParse(JSON.parse(row.segmentsJson));
-              if (parseResult.success) {
-                return {
-                  segments: parseResult.data,
-                  language: row.language ?? input.lang,
-                } as const;
-              }
-            } catch {
-              // Ignore - JSON parsing may fail for malformed data
-            }
-          }
+
+          // Always parse from rawVtt (segmentsJson cache disabled for now)
           if (row.rawVtt) {
+            logger.info("[getSegments] PARSING FRESH from rawVtt", {
+              videoId: input.videoId,
+              lang: input.lang,
+              rawVttLength: row.rawVtt.length,
+            });
             const segs = parseVttToSegments(row.rawVtt);
-            try {
-              await db
-                .update(videoTranscripts)
-                .set({ segmentsJson: JSON.stringify(segs), updatedAt: Date.now() })
-                .where(eq(videoTranscripts.id, row.id));
-            } catch {
-              // Ignore - DB update is not critical, segments still returned
-            }
+            logger.info("[getSegments] Parsed segments from rawVtt", {
+              videoId: input.videoId,
+              segmentsCount: segs.length,
+              firstSegment: segs[0]
+                ? {
+                    start: segs[0].start,
+                    end: segs[0].end,
+                    text: segs[0].text,
+                    textLength: segs[0].text.length,
+                  }
+                : null,
+              first5Segments: segs.slice(0, 5).map((s) => ({
+                start: s.start,
+                end: s.end,
+                text: s.text.substring(0, 80),
+              })),
+            });
             return { segments: segs, language: row.language ?? input.lang } as const;
           }
         }
@@ -638,14 +697,49 @@ export const transcriptsRouter = t.router({
         };
 
         const candidates = input.lang ? pickByLang(input.lang, files) : files;
-        const withStat = candidates.map((f) => ({
+
+        // Prefer -orig files (original with timing tags) over cleaned versions
+        const origFiles = candidates.filter((f) => f.includes("-orig"));
+        const preferredCandidates = origFiles.length > 0 ? origFiles : candidates;
+
+        const withStat = preferredCandidates.map((f) => ({
           f,
           s: fs.statSync(path.join(transcriptsDir, f)),
         }));
         withStat.sort((a, b) => b.s.mtimeMs - a.s.mtimeMs);
         const vttPath = path.join(transcriptsDir, withStat[0].f);
+
+        logger.info("[getSegments] FALLBACK: Selected VTT file from disk cache", {
+          videoId: input.videoId,
+          selectedFile: withStat[0].f,
+          fileSize: withStat[0].s.size,
+          isOrig: withStat[0].f.includes("-orig"),
+          allFiles: files,
+        });
+        logger.info("[getSegments] FALLBACK: Parsing from disk cache VTT file", {
+          videoId: input.videoId,
+          lang: input.lang,
+          vttPath,
+        });
         const raw = fs.readFileSync(vttPath, "utf8");
         const segments = parseVttToSegments(raw);
+        logger.info("[getSegments] Parsed segments from disk cache", {
+          videoId: input.videoId,
+          segmentsCount: segments.length,
+          firstSegment: segments[0]
+            ? {
+                start: segments[0].start,
+                end: segments[0].end,
+                text: segments[0].text,
+                textLength: segments[0].text.length,
+              }
+            : null,
+          first5Segments: segments.slice(0, 5).map((s) => ({
+            start: s.start,
+            end: s.end,
+            text: s.text.substring(0, 80),
+          })),
+        });
         return { segments, language: input.lang } as const;
       } catch {
         // Ignore - VTT parsing or file reading may fail

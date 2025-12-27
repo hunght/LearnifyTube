@@ -13,7 +13,8 @@ import { DownloadQueueSidebar } from "@/components/DownloadQueueSidebar";
 import { AnnotationsSidebar } from "@/components/AnnotationsSidebar";
 import { AISummarySidebar } from "@/components/AISummarySidebar";
 import { QuizSidebar } from "@/components/QuizSidebar";
-import { Sparkles, StickyNote, Brain } from "lucide-react";
+import { CaptureSidebar } from "@/pages/player/components/CaptureSidebar";
+import { Sparkles, StickyNote, Brain, BookmarkPlus } from "lucide-react";
 
 export function AppRightSidebar({
   className,
@@ -29,7 +30,10 @@ export function AppRightSidebar({
   // When we have video data (annotations mode or ai-summary), show tabbed interface
   const showVideoSidebar =
     annotationsData &&
-    (content === "annotations" || content === "ai-summary" || content === "quiz");
+    (content === "annotations" ||
+      content === "ai-summary" ||
+      content === "quiz" ||
+      content === "capture");
 
   const sidebarContent = (
     <div className="flex h-full flex-col p-2">
@@ -45,9 +49,9 @@ export function AppRightSidebar({
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
               )}
+              title="Notes"
             >
               <StickyNote className="h-4 w-4" />
-              Notes
             </button>
             <button
               onClick={() => setContent("ai-summary")}
@@ -57,9 +61,9 @@ export function AppRightSidebar({
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
               )}
+              title="AI Summary"
             >
               <Sparkles className="h-4 w-4" />
-              Summary
             </button>
             <button
               onClick={() => setContent("quiz")}
@@ -69,9 +73,21 @@ export function AppRightSidebar({
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
               )}
+              title="Quiz"
             >
               <Brain className="h-4 w-4" />
-              Quiz
+            </button>
+            <button
+              onClick={() => setContent("capture")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                content === "capture"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+              )}
+              title="Capture"
+            >
+              <BookmarkPlus className="h-4 w-4" />
             </button>
           </div>
 
@@ -94,6 +110,12 @@ export function AppRightSidebar({
               videoId={annotationsData.videoId}
               videoRef={annotationsData.videoRef}
               videoTitle={annotationsData.videoTitle}
+            />
+          ) : content === "capture" ? (
+            <CaptureSidebar
+              videoId={annotationsData.videoId}
+              videoRef={annotationsData.videoRef}
+              currentTime={annotationsData.currentTime}
             />
           ) : null}
         </>

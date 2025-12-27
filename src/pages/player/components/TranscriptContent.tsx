@@ -1,5 +1,6 @@
 import React, { useRef, useCallback } from "react";
 import { TranscriptWord } from "./TranscriptWord";
+import { logger } from "@/helpers/logger";
 
 interface TranscriptSegment {
   start: number;
@@ -44,6 +45,17 @@ export function TranscriptContent({
   segRefs,
   secondarySegments,
 }: TranscriptContentProps): React.JSX.Element {
+  // Log props changes
+  React.useEffect(() => {
+    logger.debug("[TranscriptContent] Props received", {
+      segmentsLength: segments.length,
+      activeSegIndex,
+      hasContainerRef: !!containerRef,
+      hasSegRefs: !!segRefs,
+      secondarySegmentsLength: secondarySegments?.length ?? 0,
+    });
+  }, [segments.length, activeSegIndex, containerRef, segRefs, secondarySegments?.length]);
+
   const internalContainerRef = useRef<HTMLDivElement>(null);
   const internalSegRefs = useRef<Array<HTMLParagraphElement | null>>([]);
 
@@ -84,8 +96,18 @@ export function TranscriptContent({
 
   // Render text with individual word highlighting and inline translations
   const renderTextWithWords = (text: string): React.JSX.Element => {
+    logger.debug("[TranscriptContent] renderTextWithWords called", {
+      inputText: text,
+      inputTextLength: text.length,
+    });
+
     // Split text into words while preserving punctuation
     const words = text.split(/(\s+)/); // Preserve spaces
+
+    logger.debug("[TranscriptContent] renderTextWithWords split result", {
+      wordsCount: words.length,
+      words: words.slice(0, 10), // First 10 words for debugging
+    });
 
     return (
       <span className="inline-flex flex-wrap items-start gap-x-1">
@@ -136,72 +158,134 @@ export function TranscriptContent({
           }}
         >
           <div className="w-full space-y-1 pb-4 text-center">
-            {/* Show previous 2 lines in faded color for context */}
-            {activeSegIndex !== null && activeSegIndex > 1 && segments[activeSegIndex - 2] && (
-              <div
-                className="transcript-text cursor-text px-4 text-foreground/30"
-                style={{
-                  fontFamily: getFontFamily(),
-                  fontSize: `${fontSize - 2}px`,
-                  lineHeight: showInlineTranslations ? "1.8" : "1.5",
-                  minHeight: showInlineTranslations ? "2em" : "auto",
-                }}
-              >
-                {renderTextWithWords(segments[activeSegIndex - 2].text)}
-              </div>
-            )}
-            {/* Show previous line in lighter color */}
-            {activeSegIndex !== null && activeSegIndex > 0 && segments[activeSegIndex - 1] && (
-              <div
-                className="transcript-text cursor-text px-4 text-foreground/50"
-                style={{
-                  fontFamily: getFontFamily(),
-                  fontSize: `${fontSize - 1}px`,
-                  lineHeight: showInlineTranslations ? "1.8" : "1.5",
-                  minHeight: showInlineTranslations ? "2em" : "auto",
-                }}
-              >
-                {renderTextWithWords(segments[activeSegIndex - 1].text)}
-              </div>
-            )}
-            {/* Show current line (active) */}
-            {activeSegIndex !== null && segments[activeSegIndex] && (
-              <div
-                ref={(el) => {
-                  if (el) finalSegRefs.current[activeSegIndex] = el;
-                }}
-                className="transcript-text cursor-text px-4 font-semibold leading-relaxed text-foreground"
-                style={{
-                  fontFamily: getFontFamily(),
-                  fontSize: `${fontSize}px`,
-                  lineHeight: showInlineTranslations ? "1.9" : "1.6",
-                  minHeight: showInlineTranslations ? "2.2em" : "auto",
-                }}
-                data-start={segments[activeSegIndex].start}
-                data-end={segments[activeSegIndex].end}
-              >
-                {renderTextWithWords(segments[activeSegIndex].text)}
+            {/* Determine which segment to show - use activeSegIndex or fallback to first segment */}
+            {(() => {
+              logger.debug("[TranscriptContent] Rendering transcript", {
+                activeSegIndex,
+                segmentsLength: segments.length,
+                hasSegments: segments.length > 0,
+              });
 
-                {/* Secondary Subtitle */}
-                {secondarySegments && secondarySegments.length > 0 && (
-                  <div
-                    className="mt-2 font-normal text-muted-foreground"
-                    style={{ fontSize: `${Math.max(12, fontSize - 2)}px` }}
-                  >
-                    {(() => {
-                      const currentStart = segments[activeSegIndex].start;
-                      const currentEnd = segments[activeSegIndex].end;
-                      const match = secondarySegments.find(
-                        (s) =>
-                          (s.start <= currentEnd && s.end >= currentStart) || // Overlap
-                          (s.start >= currentStart && s.start < currentEnd) // Starts within
-                      );
-                      return match ? match.text : null;
-                    })()}
-                  </div>
-                )}
-              </div>
-            )}
+              const displayIndex =
+                activeSegIndex !== null ? activeSegIndex : segments.length > 0 ? 0 : null;
+
+              logger.debug("[TranscriptContent] Display index calculation", {
+                displayIndex,
+                activeSegIndex,
+                segmentsLength: segments.length,
+                willRender: displayIndex !== null && segments[displayIndex] !== undefined,
+              });
+
+              if (displayIndex === null) {
+                logger.warn("[TranscriptContent] displayIndex is null, not rendering", {
+                  activeSegIndex,
+                  segmentsLength: segments.length,
+                });
+                return null;
+              }
+
+              if (!segments[displayIndex]) {
+                logger.warn("[TranscriptContent] Segment at displayIndex does not exist", {
+                  displayIndex,
+                  segmentsLength: segments.length,
+                  availableIndices: segments.map((_, i) => i),
+                });
+                return null;
+              }
+
+              const segmentToRender = segments[displayIndex];
+              logger.info("[TranscriptContent] RENDERING SEGMENT TO UI", {
+                displayIndex,
+                segmentStart: segmentToRender.start,
+                segmentEnd: segmentToRender.end,
+                rawText: segmentToRender.text,
+                rawTextLength: segmentToRender.text.length,
+                rawTextFull: segmentToRender.text, // Full text without truncation
+                // Show what will be rendered
+                willRenderPrevious2: displayIndex > 1 && segments[displayIndex - 2],
+                willRenderPrevious1: displayIndex > 0 && segments[displayIndex - 1],
+                previous2Text:
+                  displayIndex > 1 && segments[displayIndex - 2]
+                    ? segments[displayIndex - 2].text
+                    : null,
+                previous1Text:
+                  displayIndex > 0 && segments[displayIndex - 1]
+                    ? segments[displayIndex - 1].text
+                    : null,
+                currentText: segmentToRender.text,
+              });
+
+              return (
+                <>
+                  {/* Show previous 2 lines in faded color for context */}
+                  {displayIndex > 1 && segments[displayIndex - 2] && (
+                    <div
+                      className="transcript-text cursor-text px-4 text-foreground/30"
+                      style={{
+                        fontFamily: getFontFamily(),
+                        fontSize: `${fontSize - 2}px`,
+                        lineHeight: showInlineTranslations ? "1.8" : "1.5",
+                        minHeight: showInlineTranslations ? "2em" : "auto",
+                      }}
+                    >
+                      {renderTextWithWords(segments[displayIndex - 2].text)}
+                    </div>
+                  )}
+                  {/* Show previous line in lighter color */}
+                  {displayIndex > 0 && segments[displayIndex - 1] && (
+                    <div
+                      className="transcript-text cursor-text px-4 text-foreground/50"
+                      style={{
+                        fontFamily: getFontFamily(),
+                        fontSize: `${fontSize - 1}px`,
+                        lineHeight: showInlineTranslations ? "1.8" : "1.5",
+                        minHeight: showInlineTranslations ? "2em" : "auto",
+                      }}
+                    >
+                      {renderTextWithWords(segments[displayIndex - 1].text)}
+                    </div>
+                  )}
+                  {/* Show current line (active) */}
+                  {segments[displayIndex] && (
+                    <div
+                      ref={(el) => {
+                        if (el) finalSegRefs.current[displayIndex] = el;
+                      }}
+                      className="transcript-text cursor-text px-4 font-semibold leading-relaxed text-foreground"
+                      style={{
+                        fontFamily: getFontFamily(),
+                        fontSize: `${fontSize}px`,
+                        lineHeight: showInlineTranslations ? "1.9" : "1.6",
+                        minHeight: showInlineTranslations ? "2.2em" : "auto",
+                      }}
+                      data-start={segments[displayIndex].start}
+                      data-end={segments[displayIndex].end}
+                    >
+                      {renderTextWithWords(segments[displayIndex].text)}
+
+                      {/* Secondary Subtitle */}
+                      {secondarySegments && secondarySegments.length > 0 && (
+                        <div
+                          className="mt-2 font-normal text-muted-foreground"
+                          style={{ fontSize: `${Math.max(12, fontSize - 2)}px` }}
+                        >
+                          {(() => {
+                            const currentStart = segments[displayIndex].start;
+                            const currentEnd = segments[displayIndex].end;
+                            const match = secondarySegments.find(
+                              (s) =>
+                                (s.start <= currentEnd && s.end >= currentStart) || // Overlap
+                                (s.start >= currentStart && s.start < currentEnd) // Starts within
+                            );
+                            return match ? match.text : null;
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
           <div className="pointer-events-none absolute left-0 right-0 top-0 h-8 rounded-t-lg bg-gradient-to-b from-background to-transparent" />
           <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 rounded-b-lg bg-gradient-to-t from-background to-transparent" />

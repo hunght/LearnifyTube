@@ -29,6 +29,7 @@ import {
   setCooldown,
   clearCooldown,
 } from "../utils/transcriptUtils";
+import { logger } from "@/helpers/logger";
 
 // Zod schema for available language structure
 const availableLanguageSchema = z.object({
@@ -332,6 +333,48 @@ export function TranscriptPanel({
 
   const [activeSegIndex, setActiveSegIndex] = useState<number | null>(null);
   const [followPlayback, setFollowPlayback] = useState<boolean>(true);
+
+  // Log segments changes - show RAW transcript data
+  useEffect(() => {
+    logger.info("[TranscriptPanel] RAW SEGMENTS DATA", {
+      segmentsLength: segments.length,
+      firstSegment: segments[0]
+        ? {
+            start: segments[0].start,
+            end: segments[0].end,
+            text: segments[0].text,
+            textLength: segments[0].text.length,
+          }
+        : null,
+      lastSegment: segments[segments.length - 1]
+        ? {
+            start: segments[segments.length - 1].start,
+            end: segments[segments.length - 1].end,
+            text: segments[segments.length - 1].text,
+            textLength: segments[segments.length - 1].text.length,
+          }
+        : null,
+      activeSegIndex,
+      activeSegmentRaw:
+        activeSegIndex !== null && segments[activeSegIndex]
+          ? {
+              index: activeSegIndex,
+              start: segments[activeSegIndex].start,
+              end: segments[activeSegIndex].end,
+              text: segments[activeSegIndex].text,
+              textLength: segments[activeSegIndex].text.length,
+            }
+          : null,
+      // Show first 10 segments for comparison
+      first10Segments: segments.slice(0, 10).map((s, i) => ({
+        index: i,
+        start: s.start,
+        end: s.end,
+        text: s.text,
+        textLength: s.text.length,
+      })),
+    });
+  }, [segments, activeSegIndex]);
   const [isSelecting, setIsSelecting] = useState<boolean>(false);
   const [isHovering, setIsHovering] = useState<boolean>(false);
   const [hoveredWord, setHoveredWord] = useState<string | null>(null);
@@ -730,16 +773,92 @@ export function TranscriptPanel({
 
   // Active segment index based on current time (freeze when selecting or hovering)
   useEffect(() => {
+    logger.debug("[TranscriptPanel] Active segment calculation", {
+      segmentsLength: segments.length,
+      currentTime,
+      isSelecting,
+      isHovering,
+      isHoveringTooltip,
+      previousActiveSegIndex: activeSegIndex,
+    });
+
     if (!segments.length) {
+      logger.debug("[TranscriptPanel] No segments available, setting activeSegIndex to null");
       setActiveSegIndex(null);
       return;
     }
     // Don't update active segment while user is selecting text or hovering over word/tooltip
-    if (isSelecting || isHovering || isHoveringTooltip) return;
+    if (isSelecting || isHovering || isHoveringTooltip) {
+      logger.debug("[TranscriptPanel] Skipping update due to user interaction", {
+        isSelecting,
+        isHovering,
+        isHoveringTooltip,
+      });
+      return;
+    }
 
-    const idx = segments.findIndex((s) => currentTime >= s.start && currentTime < s.end);
-    setActiveSegIndex(idx >= 0 ? idx : null);
-  }, [currentTime, segments, isSelecting, isHovering, isHoveringTooltip]);
+    // First try to find exact match (currentTime within segment range)
+    let idx = segments.findIndex((s) => currentTime >= s.start && currentTime < s.end);
+    logger.debug("[TranscriptPanel] Exact match search", {
+      foundIndex: idx,
+      currentTime,
+      firstSegment: segments[0]
+        ? {
+            start: segments[0].start,
+            end: segments[0].end,
+            text: segments[0].text.substring(0, 50),
+          }
+        : null,
+      lastSegment: segments[segments.length - 1]
+        ? {
+            start: segments[segments.length - 1].start,
+            end: segments[segments.length - 1].end,
+            text: segments[segments.length - 1].text.substring(0, 50),
+          }
+        : null,
+    });
+
+    // If no exact match, find the closest segment
+    if (idx < 0) {
+      logger.debug("[TranscriptPanel] No exact match, finding closest segment");
+      // Find the segment that's closest to currentTime
+      let closestIdx = 0;
+      let minDistance = Math.abs(segments[0].start - currentTime);
+
+      for (let i = 1; i < segments.length; i++) {
+        const distance = Math.min(
+          Math.abs(segments[i].start - currentTime),
+          Math.abs(segments[i].end - currentTime)
+        );
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIdx = i;
+        }
+      }
+      idx = closestIdx;
+      logger.debug("[TranscriptPanel] Closest segment found", {
+        closestIdx,
+        minDistance,
+        segment: segments[closestIdx]
+          ? {
+              start: segments[closestIdx].start,
+              end: segments[closestIdx].end,
+              text: segments[closestIdx].text.substring(0, 50),
+            }
+          : null,
+      });
+    }
+
+    const finalIndex = idx >= 0 ? idx : null;
+    logger.debug("[TranscriptPanel] Setting activeSegIndex", {
+      finalIndex,
+      segmentText:
+        finalIndex !== null && segments[finalIndex]
+          ? segments[finalIndex].text.substring(0, 100)
+          : null,
+    });
+    setActiveSegIndex(finalIndex);
+  }, [currentTime, segments, isSelecting, isHovering, isHoveringTooltip, activeSegIndex]);
 
   // Scroll active segment into view (freeze when selecting or hovering)
   useEffect(() => {

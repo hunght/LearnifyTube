@@ -4,12 +4,15 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { logger } from "@/helpers/logger";
 import { setIsPlaying } from "@/context/playerStore";
 
+import { cn } from "@/lib/utils";
+
 interface VideoPlayerProps {
   videoRef: React.RefObject<HTMLVideoElement>;
   videoSrc: string | null; // Can be mediaUrl (HTTP) or local-file:// URL
   onTimeUpdate: (e: React.SyntheticEvent<HTMLVideoElement, Event>) => void;
   onSeekIndicator?: (indicator: { direction: "forward" | "backward"; amount: number }) => void;
   onError?: () => void;
+  className?: string;
 }
 
 export function VideoPlayer({
@@ -18,6 +21,7 @@ export function VideoPlayer({
   onTimeUpdate,
   onSeekIndicator,
   onError,
+  className,
 }: VideoPlayerProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const isSeekingRef = useRef<boolean>(false);
@@ -404,7 +408,7 @@ export function VideoPlayer({
             src={videoSrc}
             autoPlay
             controls
-            className="max-h-[60vh] w-full rounded border bg-black"
+            className={cn("max-h-[60vh] w-full rounded border bg-black", className)}
             onTimeUpdate={onTimeUpdate}
             onError={handleVideoError}
           />

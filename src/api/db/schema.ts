@@ -398,6 +398,13 @@ export const flashcards = sqliteTable(
     contextText: text("context_text"), // Context from video where word appeared
     audioUrl: text("audio_url"), // Optional pronunciation audio
     timestampSeconds: integer("timestamp_seconds"), // Optional timestamp in video
+
+    // Anki / SRS Enhancements
+    cardType: text("card_type").default("basic"), // 'basic', 'cloze', 'concept'
+    screenshotPath: text("screenshot_path"), // Path to captured frame
+    tags: text("tags"), // JSON array for organizing (e.g., "history", "grammar")
+    clozeContent: text("cloze_content"), // For cloze cards, strict raw format if needed
+
     // Spaced repetition fields
     difficulty: integer("difficulty").default(0), // 0=new, 1=easy, 2=medium, 3=hard
     nextReviewAt: text("next_review_at"),
