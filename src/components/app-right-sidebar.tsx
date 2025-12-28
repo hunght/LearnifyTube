@@ -131,7 +131,7 @@ export function AppRightSidebar({
       minWidth={250}
       maxWidth={500}
       className={cn(
-        "border-l border-primary/20 bg-white/80 backdrop-blur-sm dark:border-primary/10 dark:bg-gray-900/80",
+        "border-l border-primary/20 bg-white/80 pt-10 backdrop-blur-sm dark:border-primary/10 dark:bg-gray-900/80",
         className
       )}
       {...props}

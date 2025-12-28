@@ -64,6 +64,14 @@ export const youtubeVideos = sqliteTable(
     isRetryable: integer("is_retryable", { mode: "boolean" }),
     lastDownloadedAt: integer("last_downloaded_at"),
 
+    // Video optimization fields
+    optimizationStatus: text("optimization_status", {
+      enum: ["queued", "optimizing", "completed", "failed", "cancelled"],
+    }),
+    optimizationProgress: integer("optimization_progress"), // 0-100
+    lastOptimizedAt: integer("last_optimized_at"),
+    originalFileSize: integer("original_file_size"), // Size before optimization (for tracking savings)
+
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at"),
   },

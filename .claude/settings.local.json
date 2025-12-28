@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx drizzle-kit generate:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run:*)",
+      "Bash(sqlite3:*)"
+    ]
+  }
+}

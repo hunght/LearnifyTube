@@ -9,6 +9,7 @@ import { Trash2, Clock, Plus, X, Quote, Send, Camera, Square, Film } from "lucid
 import { trpcClient } from "@/utils/trpc";
 import { toast } from "sonner";
 import { transcriptSelectionAtom } from "@/context/annotations";
+import { logger } from "@/helpers/logger";
 
 interface AnnotationsSidebarProps {
   videoId: string;
@@ -69,6 +70,17 @@ export function AnnotationsSidebar({
       return trpcClient.annotations.list.query({ videoId });
     },
     enabled: !!videoId,
+  });
+
+  // Fetch transcript segments for context auto-fill
+  const transcriptSegmentsQuery = useQuery({
+    queryKey: ["transcript-segments", videoId],
+    queryFn: async () => {
+      if (!videoId) return { segments: [] };
+      return await trpcClient.transcripts.getSegments.query({ videoId });
+    },
+    enabled: !!videoId,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
 
   // Own delete mutation
@@ -144,7 +156,13 @@ export function AnnotationsSidebar({
         videoId,
         timestampSeconds: timestamp,
         selectedText: selectedText || undefined,
-        note,
+        note:
+          note ||
+          (screenshotPreview
+            ? screenshotPreview.startsWith("data:video")
+              ? "🎥 Video Loop"
+              : "📸 Screenshot"
+            : ""),
         emoji: emoji || undefined,
       });
     },
@@ -205,7 +223,7 @@ export function AnnotationsSidebar({
     } else {
       if (!videoRef.current) return;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/consistent-type-assertions
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         const stream = (videoRef.current as any).captureStream() as MediaStream;
         if (!stream) {
           toast.error("Browser does not support capturing from this video source.");
@@ -227,6 +245,16 @@ export function AnnotationsSidebar({
             if (typeof reader.result === "string") {
               setScreenshotPreview(reader.result);
               setIsFlashcardMode(true);
+
+              // Auto-insert context if selection is empty
+              if (!selectedText) {
+                const contextText = getContextAtCurrentTime();
+                if (contextText) {
+                  setSelectedText(contextText);
+                  toast.success("Added context from transcript");
+                }
+              }
+
               toast.success("Loop captured!");
             }
           };
@@ -241,10 +269,23 @@ export function AnnotationsSidebar({
           videoRef.current.play().catch(() => {});
         }
       } catch (err) {
-        console.error("Recording failed", err);
+        logger.error("Recording failed", err);
         toast.error("Could not start recording.");
       }
     }
+  };
+
+  const getContextAtCurrentTime = (): string => {
+    const segments = transcriptSegmentsQuery.data?.segments || [];
+    if (!segments.length) return "";
+
+    // Find segment covering current time
+    const currentSegment = segments.find((s) => currentTime >= s.start && currentTime < s.end);
+    if (currentSegment) return currentSegment.text;
+
+    // Fallback: Find closest segment within 1 second
+    const closest = segments.find((s) => Math.abs(s.start - currentTime) < 1);
+    return closest ? closest.text : "";
   };
 
   const captureScreenshot = (): void => {
@@ -258,7 +299,17 @@ export function AnnotationsSidebar({
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
         setScreenshotPreview(dataUrl);
-        setIsFlashcardMode(true); // Auto-enable flashcard mode on screenshot
+        setIsFlashcardMode(true);
+
+        // Auto-insert context if selection is empty
+        if (!selectedText) {
+          const contextText = getContextAtCurrentTime();
+          if (contextText) {
+            setSelectedText(contextText);
+            toast.success("Added context from transcript");
+          }
+        }
+
         toast.success("Screenshot captured");
       }
     } catch (e) {

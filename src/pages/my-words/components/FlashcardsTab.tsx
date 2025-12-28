@@ -1,19 +1,45 @@
 import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Clock, Brain, TrendingUp, GraduationCap } from "lucide-react";
+import { Clock, Brain, TrendingUp, GraduationCap, Trash2, FileQuestion } from "lucide-react";
+import { toast } from "sonner";
 
 export function FlashcardsTab({
   onRequestStudy,
 }: {
   onRequestStudy: () => void;
 }): React.JSX.Element {
+  const queryClient = useQueryClient();
   const [viewingCategory, setViewingCategory] = useState<
     "due" | "new" | "learning" | "graduated" | null
   >(null);
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await trpcClient.flashcards.delete.mutate({ id });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["flashcards", "list"] });
+      queryClient.invalidateQueries({ queryKey: ["flashcards", "due"] });
+      toast.success("Card deleted");
+    },
+    onError: (err) => {
+      // eslint-disable-next-line no-console
+      console.error(err);
+      toast.error("Failed to delete card");
+    },
+  });
+
+  const handleDelete = (id: string, e: React.MouseEvent): void => {
+    e.stopPropagation();
+    if (window.confirm("Are you sure you want to delete this card?")) {
+      deleteMutation.mutate(id);
+    }
+  };
 
   // Helper to strip markdown/brackets for clean display
   const PlatformFreeText = (text: string): string => {
@@ -106,7 +132,7 @@ export function FlashcardsTab({
 
       {/* Cards List Dialog */}
       <Dialog open={!!viewingCategory} onOpenChange={(open) => !open && setViewingCategory(null)}>
-        <DialogContent className="flex max-h-[80vh] max-w-2xl flex-col overflow-hidden">
+        <DialogContent className="flex max-h-[80vh] w-full max-w-5xl flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="capitalize">
               {viewingCategory === "due"
@@ -118,40 +144,108 @@ export function FlashcardsTab({
                     : "Graduated Words"}
             </DialogTitle>
           </DialogHeader>
-          <div className="flex-1 space-y-3 overflow-y-auto pr-2">
-            {allFlashcards
-              ?.filter((card) => {
-                if (viewingCategory === "due") {
-                  return card.nextReviewAt && new Date(card.nextReviewAt) <= new Date();
-                }
-                if (viewingCategory === "new") return (card.reviewCount ?? 0) === 0;
-                if (viewingCategory === "graduated") return (card.interval ?? 0) > 21;
-                if (viewingCategory === "learning")
-                  return (card.reviewCount ?? 0) > 0 && (card.interval ?? 0) <= 21;
-                return false;
-              })
-              .map((card) => (
-                <div
-                  key={card.id}
-                  className="flex items-center justify-between rounded-lg border p-3"
-                >
-                  <div>
-                    <p className="font-medium">{card.frontContent}</p>
-                    <p className="line-clamp-1 text-sm text-muted-foreground">
-                      {PlatformFreeText(card.backContent)}
-                    </p>
-                  </div>
-                  <div className="text-right text-xs text-muted-foreground">
-                    <div>Interval: {card.interval}d</div>
-                    <div>Reviews: {card.reviewCount}</div>
-                    {viewingCategory === "due" && (
-                      <div className="mt-1 inline-block rounded bg-destructive/10 px-2 py-0.5 text-destructive">
-                        Due
+          <div className="flex-1 overflow-y-auto pr-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {allFlashcards
+                ?.filter((card) => {
+                  if (viewingCategory === "due") {
+                    return card.nextReviewAt && new Date(card.nextReviewAt) <= new Date();
+                  }
+                  if (viewingCategory === "new") return (card.reviewCount ?? 0) === 0;
+                  if (viewingCategory === "graduated") return (card.interval ?? 0) > 21;
+                  if (viewingCategory === "learning")
+                    return (card.reviewCount ?? 0) > 0 && (card.interval ?? 0) <= 21;
+                  return false;
+                })
+                .map((card) => (
+                  <div
+                    key={card.id}
+                    className="group relative flex flex-col justify-between overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm transition-all hover:border-primary/50 hover:shadow-md"
+                  >
+                    {/* Card Preview / Header */}
+                    <div className="relative aspect-[16/9] w-full bg-muted/30">
+                      {card.screenshotPath ? (
+                        card.screenshotPath.startsWith("data:video") ? (
+                          <div className="flex h-full w-full items-center justify-center bg-black/5">
+                            <video
+                              src={card.screenshotPath}
+                              autoPlay
+                              loop
+                              muted
+                              className="h-full w-full object-cover opacity-90"
+                            />
+                            <div className="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                              LOOP
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <img
+                              src={card.screenshotPath}
+                              alt="Card context"
+                              className="h-full w-full object-cover opacity-90"
+                            />
+                            <div className="absolute right-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                              IMG
+                            </div>
+                          </>
+                        )
+                      ) : (
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground/50">
+                          {card.cardType === "cloze" ? (
+                            <FileQuestion className="h-8 w-8" />
+                          ) : (
+                            <Brain className="h-8 w-8" />
+                          )}
+                        </div>
+                      )}
+
+                      {/* Type Icon Overlay */}
+                      <div className="absolute left-2 top-2">
+                        {card.cardType !== "basic" && (
+                          <span className="rounded bg-primary/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-sm">
+                            {card.cardType}
+                          </span>
+                        )}
                       </div>
-                    )}
+                    </div>
+
+                    {/* Card Content */}
+                    <div className="flex flex-1 flex-col gap-2 p-3">
+                      <div className="space-y-1">
+                        <p className="line-clamp-2 font-medium leading-snug">{card.frontContent}</p>
+                        <div className="h-[1px] w-10 bg-border/50" />
+                        <p className="line-clamp-2 text-xs text-muted-foreground">
+                          {PlatformFreeText(card.backContent)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Footer / Meta */}
+                    <div className="flex items-center justify-between border-t bg-muted/20 px-3 py-2 text-[10px] text-muted-foreground">
+                      <div className="flex gap-2">
+                        <span>Int: {card.interval}d</span>
+                        <span>Rev: {card.reviewCount}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {viewingCategory === "due" && (
+                          <div className="font-bold text-destructive">DUE</div>
+                        )}
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={(e) => handleDelete(card.id, e)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+            </div>
             {(!allFlashcards ||
               allFlashcards.filter((card) => {
                 if (viewingCategory === "due") {
