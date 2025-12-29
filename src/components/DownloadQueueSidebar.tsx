@@ -11,13 +11,13 @@ import { cn } from "@/lib/utils";
 import { logger } from "@/helpers/logger";
 
 const statusColors = {
-  pending: "bg-gray-500",
-  queued: "bg-blue-500",
-  downloading: "bg-green-500",
-  paused: "bg-yellow-500",
-  completed: "bg-emerald-500",
-  failed: "bg-red-500",
-  cancelled: "bg-gray-500",
+  pending: "bg-gray-500 text-white",
+  queued: "bg-blue-500 text-white",
+  downloading: "bg-green-500 text-white",
+  paused: "bg-amber-500 text-gray-900", // Dark text on yellow for better contrast
+  completed: "bg-emerald-500 text-white",
+  failed: "bg-red-500 text-white",
+  cancelled: "bg-gray-500 text-white",
 } as const;
 
 const statusLabels = {
@@ -180,8 +180,8 @@ export const DownloadQueueSidebar: React.FC = () => {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-primary/20 pb-3 dark:border-primary/10">
-        <h2 className="text-base font-semibold text-primary dark:text-white">Download Queue</h2>
+      <div className="flex items-center justify-between border-b border-border pb-3">
+        <h2 className="text-base font-semibold text-foreground">Download Queue</h2>
       </div>
 
       {/* Download List */}
@@ -194,7 +194,7 @@ export const DownloadQueueSidebar: React.FC = () => {
           allDownloads.map((download) => (
             <div
               key={download.id}
-              className="group overflow-hidden rounded-lg border border-primary/20 bg-white/50 shadow-sm transition-all hover:shadow-md dark:border-primary/10 dark:bg-gray-800/50"
+              className="group overflow-hidden rounded-lg border border-border bg-card shadow-sm transition-all hover:border-primary/50 hover:shadow-md"
             >
               {/* Top section with thumbnail and info */}
               <div className="flex gap-2 p-2.5">
@@ -231,7 +231,7 @@ export const DownloadQueueSidebar: React.FC = () => {
                 <div className="min-w-0 flex-1 space-y-2">
                   {/* Header */}
                   <div className="space-y-0.5">
-                    <p className="line-clamp-2 text-xs font-semibold leading-tight text-primary dark:text-white">
+                    <p className="line-clamp-2 text-xs font-semibold leading-tight text-foreground">
                       {download.title || download.url}
                     </p>
                     {download.channelTitle && (
@@ -311,7 +311,7 @@ export const DownloadQueueSidebar: React.FC = () => {
 
               {/* Full-width Progress bar section */}
               {download.status === "downloading" && (
-                <div className="space-y-1 border-t border-primary/20 bg-white/30 px-2.5 pb-2 pt-1.5 dark:border-primary/10 dark:bg-gray-800/30">
+                <div className="space-y-1 border-t border-border bg-muted/50 px-2.5 pb-2 pt-1.5">
                   <Progress value={download.progress} className="h-1.5" />
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                     <div className="flex items-center gap-1.5">
@@ -321,16 +321,16 @@ export const DownloadQueueSidebar: React.FC = () => {
                         </span>
                       )}
                       {download.downloadSpeed && (
-                        <span className="font-medium text-accent">• {download.downloadSpeed}</span>
+                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                          • {download.downloadSpeed}
+                        </span>
                       )}
                     </div>
                     <div className="flex items-center gap-1.5">
                       {download.eta && (
-                        <span className="font-medium text-primary dark:text-accent">
-                          ETA {download.eta}
-                        </span>
+                        <span className="font-medium text-primary">ETA {download.eta}</span>
                       )}
-                      <span className="font-semibold">{download.progress}%</span>
+                      <span className="font-semibold text-foreground">{download.progress}%</span>
                     </div>
                   </div>
                 </div>

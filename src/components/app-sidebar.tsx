@@ -148,15 +148,12 @@ export function AppSidebar({
   return (
     <Sidebar
       collapsible="icon"
-      className={cn(
-        "border-r border-primary/20 bg-white/80 backdrop-blur-sm dark:border-primary/10 dark:bg-gray-900/80",
-        className
-      )}
+      className={cn("border-r border-border bg-sidebar", className)}
       {...props}
     >
       <SidebarHeader className="px-3 py-2 pt-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-primary dark:text-white">LearnifyTube</span>
+          <span className="text-sm font-semibold text-foreground">LearnifyTube</span>
 
           <SidebarThemeToggle variant="icon" />
         </div>
@@ -171,11 +168,10 @@ export function AppSidebar({
                 isActive={activeItem === item.title}
                 tooltip={item.title}
                 className={cn(
-                  "gap-2 text-primary/70 transition-colors dark:text-white/70",
-                  "hover:bg-accent/10 hover:text-primary",
-                  "dark:hover:bg-accent/5 dark:hover:text-accent",
+                  "gap-2 text-muted-foreground transition-colors",
+                  "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                   activeItem === item.title &&
-                    "bg-accent/10 text-primary dark:bg-accent/5 dark:text-white"
+                    "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                 )}
               >
                 <Link

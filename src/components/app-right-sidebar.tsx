@@ -112,10 +112,7 @@ export function AppRightSidebar({
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
           side="right"
-          className={cn(
-            "w-[85vw] max-w-md border-l border-primary/20 bg-white/95 p-0 backdrop-blur-sm dark:border-primary/10 dark:bg-gray-900/95",
-            className
-          )}
+          className={cn("w-[85vw] max-w-md border-l border-border bg-background p-0", className)}
         >
           {sidebarContent}
         </SheetContent>
@@ -130,10 +127,7 @@ export function AppRightSidebar({
       defaultWidth={320}
       minWidth={250}
       maxWidth={500}
-      className={cn(
-        "border-l border-primary/20 bg-white/80 pt-10 backdrop-blur-sm dark:border-primary/10 dark:bg-gray-900/80",
-        className
-      )}
+      className={cn("border-l border-border bg-background pt-10", className)}
       {...props}
     >
       {sidebarContent}

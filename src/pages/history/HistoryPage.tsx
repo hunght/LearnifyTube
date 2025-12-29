@@ -78,7 +78,7 @@ export default function HistoryPage(): React.JSX.Element {
                   return (
                     <div
                       key={v.videoId}
-                      className="group cursor-pointer space-y-2 rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                      className="group cursor-pointer space-y-2 rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:bg-muted/50"
                       onClick={() =>
                         navigate({
                           to: "/player",

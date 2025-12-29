@@ -324,12 +324,12 @@ export default function PlaylistPage(): React.JSX.Element {
                   return (
                     <div
                       key={v.videoId}
-                      className={`group cursor-pointer space-y-2 rounded-lg border p-3 transition-colors hover:bg-muted/50 ${
+                      className={`group cursor-pointer space-y-2 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/50 ${
                         isCurrentVideo
-                          ? "border-primary bg-primary/5"
+                          ? "border-primary bg-primary/10 dark:bg-primary/20"
                           : isSelected
-                            ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
-                            : ""
+                            ? "border-primary/60 bg-primary/5 dark:bg-primary/15"
+                            : "hover:border-primary/30"
                       }`}
                       onClick={() => handlePlayVideo(index)}
                     >

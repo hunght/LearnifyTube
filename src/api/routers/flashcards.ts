@@ -205,6 +205,42 @@ export const flashcardsRouter = t.router({
       .orderBy(asc(flashcards.nextReviewAt)); // Oldest due first
   }),
 
+  // Update a flashcard
+  update: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        frontContent: z.string().optional(),
+        backContent: z.string().optional(),
+        contextText: z.string().optional(),
+        clozeContent: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = ctx.db ?? defaultDb;
+      const { id, ...updates } = input;
+
+      const card = await db.select().from(flashcards).where(eq(flashcards.id, id)).get();
+      if (!card) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Flashcard not found" });
+      }
+
+      await db
+        .update(flashcards)
+        .set({
+          ...(updates.frontContent !== undefined && { frontContent: updates.frontContent }),
+          ...(updates.backContent !== undefined && { backContent: updates.backContent }),
+          ...(updates.contextText !== undefined && { contextText: updates.contextText }),
+          ...(updates.clozeContent !== undefined && { clozeContent: updates.clozeContent }),
+          ...(updates.tags !== undefined && { tags: JSON.stringify(updates.tags) }),
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(flashcards.id, id));
+
+      return { success: true };
+    }),
+
   // Delete a flashcard
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input, ctx }) => {
     const db = ctx.db ?? defaultDb;

@@ -148,27 +148,6 @@ export function StudyMode({ cards, onComplete }: StudyModeProps): React.JSX.Elem
           )}
         >
           <div className="flex max-h-[70vh] flex-1 flex-col items-center justify-center overflow-y-auto p-8 text-center">
-            {/* Image Context (if any) */}
-            {currentCard.screenshotPath && (
-              <div className="mb-6 w-full max-w-md overflow-hidden rounded-lg border shadow-sm">
-                {currentCard.screenshotPath.startsWith("data:video") ? (
-                  <video
-                    src={currentCard.screenshotPath}
-                    autoPlay
-                    loop
-                    muted
-                    className="h-auto w-full object-cover"
-                  />
-                ) : (
-                  <img
-                    src={currentCard.screenshotPath}
-                    alt="Context"
-                    className="h-auto w-full object-cover"
-                  />
-                )}
-              </div>
-            )}
-
             {/* Front Side Content */}
             {!isFlipped ? (
               <div className="w-full space-y-6 animate-in fade-in zoom-in-95">

@@ -56,48 +56,48 @@
   }
   :root {
     /* LearnifyTube Light Mode - Sidebar */
-    --sidebar-background: 210 20% 98%; /* Gray 50 */
-    --sidebar-foreground: 217 19% 27%; /* Gray 700 */
+    --sidebar-background: 210 20% 98%; /* Gray 50 #F9FAFB */
+    --sidebar-foreground: 220 13% 18%; /* Gray 800 - Match main foreground */
     --sidebar-primary: 217.2 91.2% 59.8%; /* Primary Blue */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 14% 96%; /* Gray 100 */
-    --sidebar-accent-foreground: 217 19% 27%;
-    --sidebar-border: 220 13% 91%; /* Gray 200 */
+    --sidebar-accent: 217.2 91.2% 95%; /* Very light blue for active states */
+    --sidebar-accent-foreground: 217.2 91.2% 45%; /* Darker blue for active text */
+    --sidebar-border: 220 13% 86%; /* Slightly darker border - visible */
     --sidebar-ring: 217.2 91.2% 59.8%; /* Primary Blue */
   }
   .dark {
     /* LearnifyTube Dark Mode - Sidebar */
-    --sidebar-background: 220 26% 12%; /* Gray 900 */
-    --sidebar-foreground: 210 20% 98%; /* Gray 50 */
-    --sidebar-primary: 217.2 91.2% 59.8%; /* Primary Blue */
+    --sidebar-background: 222 47% 8%; /* Match main dark background */
+    --sidebar-foreground: 210 40% 98%; /* Near white */
+    --sidebar-primary: 213 94% 68%; /* Brighter blue for dark mode */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 19% 17%; /* Gray 800 */
-    --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 217 19% 27%; /* Gray 700 */
-    --sidebar-ring: 217.2 91.2% 59.8%; /* Primary Blue */
+    --sidebar-accent: 213 94% 20%; /* Dark blue background for active states */
+    --sidebar-accent-foreground: 213 94% 78%; /* Bright blue for active text */
+    --sidebar-border: 220 20% 25%; /* Visible border in dark mode */
+    --sidebar-ring: 213 94% 68%; /* Brighter blue */
   }
 }
 
 @layer base {
   :root {
-    /* LearnifyTube Light Mode Colors */
-    --background: 0 0% 100%; /* White */
-    --foreground: 217 19% 27%; /* Gray 700 */
+    /* LearnifyTube Light Mode Colors - WCAG AA Compliant */
+    --background: 0 0% 100%; /* White #FFFFFF */
+    --foreground: 220 13% 18%; /* Gray 800 #1F2937 - Improved from Gray 700 for better contrast */
 
     --card: 0 0% 100%; /* White */
-    --card-foreground: 217 19% 27%; /* Gray 700 */
+    --card-foreground: 220 13% 18%; /* Gray 800 - Better contrast */
 
     --popover: 0 0% 100%; /* White */
-    --popover-foreground: 217 19% 27%; /* Gray 700 */
+    --popover-foreground: 220 13% 18%; /* Gray 800 */
 
     --primary: 217.2 91.2% 59.8%; /* Primary Blue #3B82F6 */
     --primary-foreground: 0 0% 100%; /* White */
 
-    --secondary: 220 14% 96%; /* Gray 100 */
-    --secondary-foreground: 217 19% 27%; /* Gray 700 */
+    --secondary: 220 14% 96%; /* Gray 100 #F3F4F6 */
+    --secondary-foreground: 220 13% 18%; /* Gray 800 */
 
     --muted: 220 14% 96%; /* Gray 100 */
-    --muted-foreground: 220 9% 46%; /* Gray 500 */
+    --muted-foreground: 215 14% 34%; /* Gray 600 #4B5563 - Improved from Gray 500 for better contrast (7:1 ratio) */
 
     --accent: 160 84% 39.4%; /* Accent Green #10B981 */
     --accent-foreground: 0 0% 100%; /* White */
@@ -106,13 +106,13 @@
     --success-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%; /* Warning Orange #F59E0B */
-    --warning-foreground: 0 0% 100%;
+    --warning-foreground: 220 13% 18%; /* Dark text for better contrast on yellow */
 
     --destructive: 0 84% 60%; /* Error Red #EF4444 */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%; /* Gray 200 */
-    --input: 220 13% 91%; /* Gray 200 */
+    --border: 220 13% 86%; /* Gray 250 #D6D9DE - Slightly darker for better visibility */
+    --input: 220 13% 86%; /* Gray 250 */
     --ring: 217.2 91.2% 59.8%; /* Primary Blue */
 
     --radius: 0.5rem; /* 8px - matches brand guidelines */
@@ -120,47 +120,57 @@
     /* LearnifyTube Brand Specific */
     --brand-blue: 217.2 91.2% 59.8%;
     --brand-green: 160 84% 39.4%;
+
+    /* Additional contrast helpers */
+    --text-primary: 220 13% 18%; /* Gray 800 */
+    --text-secondary: 215 14% 34%; /* Gray 600 */
+    --text-tertiary: 220 9% 46%; /* Gray 500 */
   }
 
   .dark {
-    /* LearnifyTube Dark Mode Colors */
-    --background: 220 26% 12%; /* Gray 900 #111827 */
-    --foreground: 210 20% 98%; /* Gray 50 #F9FAFB */
+    /* LearnifyTube Dark Mode Colors - WCAG AA Compliant */
+    --background: 222 47% 8%; /* Darker background #0A0F1A for better contrast */
+    --foreground: 210 40% 98%; /* Near white #F8FAFC - Improved brightness */
 
-    --card: 217 19% 17%; /* Gray 800 #1F2937 */
-    --card-foreground: 210 20% 98%; /* Gray 50 */
+    --card: 220 30% 13%; /* #151B28 - Slightly brighter for card elevation */
+    --card-foreground: 210 40% 98%; /* Near white */
 
-    --popover: 217 19% 17%; /* Gray 800 */
-    --popover-foreground: 210 20% 98%; /* Gray 50 */
+    --popover: 220 30% 13%; /* Match card background */
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 217.2 91.2% 59.8%; /* Primary Blue - same in dark mode */
-    --primary-foreground: 0 0% 100%;
+    --primary: 213 94% 68%; /* Brighter blue #60A5FA for dark mode - Better visibility */
+    --primary-foreground: 222 47% 8%; /* Dark background color for contrast */
 
-    --secondary: 217 19% 27%; /* Gray 700 */
-    --secondary-foreground: 210 20% 98%; /* Gray 50 */
+    --secondary: 220 25% 20%; /* #242C3D - Visible secondary surfaces */
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 217 19% 27%; /* Gray 700 */
-    --muted-foreground: 218 11% 65%; /* Gray 400 */
+    --muted: 220 25% 20%; /* #242C3D */
+    --muted-foreground: 215 20% 75%; /* #ADB5C4 - Brighter for better readability (8:1 ratio) */
 
-    --accent: 160 84% 39.4%; /* Accent Green - same in dark mode */
-    --accent-foreground: 0 0% 100%;
+    --accent: 160 84% 45%; /* Slightly brighter green #12D594 for dark mode */
+    --accent-foreground: 222 47% 8%;
 
-    --success: 160 84% 39.4%; /* Accent Green */
-    --success-foreground: 0 0% 100%;
+    --success: 160 84% 45%; /* Brighter green for visibility */
+    --success-foreground: 222 47% 8%;
 
-    --warning: 38 92% 50%; /* Warning Orange */
-    --warning-foreground: 0 0% 100%;
+    --warning: 38 92% 55%; /* Brighter orange #F7AC22 */
+    --warning-foreground: 222 47% 8%;
 
-    --destructive: 0 84% 60%; /* Error Red */
+    --destructive: 0 84% 65%; /* Brighter red #F87171 for dark mode */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 217 19% 27%; /* Gray 700 */
-    --input: 217 19% 27%; /* Gray 700 */
-    --ring: 217.2 91.2% 59.8%; /* Primary Blue */
+    --border: 220 20% 25%; /* #323B4E - More visible borders */
+    --input: 220 20% 25%; /* Match border */
+    --ring: 213 94% 68%; /* Brighter blue for focus rings */
 
-    /* Brand colors remain same in dark mode */
-    --brand-blue: 217.2 91.2% 59.8%;
-    --brand-green: 160 84% 39.4%;
+    /* Brand colors adjusted for dark mode visibility */
+    --brand-blue: 213 94% 68%;
+    --brand-green: 160 84% 45%;
+
+    /* Additional contrast helpers */
+    --text-primary: 210 40% 98%;
+    --text-secondary: 215 20% 75%;
+    --text-tertiary: 215 16% 60%;
   }
 }
 
@@ -320,11 +330,11 @@
 
 /* RichTextEditor dark mode styles */
 .dark .ProseMirror {
-  color: white;
+  color: hsl(var(--foreground));
 }
 
 .dark .ProseMirror p {
-  color: white;
+  color: hsl(var(--foreground));
 }
 
 .dark .ProseMirror h1,
@@ -333,47 +343,47 @@
 .dark .ProseMirror h4,
 .dark .ProseMirror h5,
 .dark .ProseMirror h6 {
-  color: white;
+  color: hsl(var(--foreground));
 }
 
 .dark .ProseMirror strong {
-  color: white;
+  color: hsl(var(--foreground));
 }
 
 .dark .ProseMirror em {
-  color: white;
+  color: hsl(var(--foreground));
 }
 
 .dark .ProseMirror code {
-  color: white;
-  background-color: rgba(255, 255, 255, 0.1);
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--muted));
 }
 
 .dark .ProseMirror pre {
-  color: white;
-  background-color: rgba(255, 255, 255, 0.1);
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--muted));
 }
 
 .dark .ProseMirror blockquote {
-  color: white;
-  border-left-color: rgba(255, 255, 255, 0.3);
+  color: hsl(var(--muted-foreground));
+  border-left-color: hsl(var(--border));
 }
 
 .dark .ProseMirror ul,
 .dark .ProseMirror ol {
-  color: white;
+  color: hsl(var(--foreground));
 }
 
 .dark .ProseMirror li {
-  color: white;
+  color: hsl(var(--foreground));
 }
 
 .dark .ProseMirror a {
-  color: #60a5fa;
+  color: hsl(var(--primary));
 }
 
 .dark .ProseMirror a:hover {
-  color: #93c5fd;
+  color: hsl(var(--primary) / 0.8);
 }
 
 /* For the rendered read-only view */
@@ -395,4 +405,50 @@
 .task-list li p {
   margin: 0;
   line-height: 1.5;
+}
+
+/* ============================================
+   ENHANCED CONTRAST UTILITIES
+   ============================================ */
+@layer utilities {
+  /* High contrast text utilities for accessibility */
+  .text-high-contrast {
+    color: hsl(var(--foreground));
+  }
+
+  .text-medium-contrast {
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Ensure good contrast on colored backgrounds */
+  .text-on-primary {
+    color: hsl(var(--primary-foreground));
+  }
+
+  .text-on-accent {
+    color: hsl(var(--accent-foreground));
+  }
+
+  /* Card hover states with better visibility */
+  .card-interactive {
+    @apply transition-all duration-200;
+  }
+
+  .card-interactive:hover {
+    @apply border-primary/40 shadow-md;
+  }
+
+  .card-interactive:focus-visible {
+    @apply border-primary ring-2 ring-primary/20;
+  }
+
+  /* Enhanced focus states for accessibility */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* Better disabled states */
+  .disabled-state {
+    @apply pointer-events-none opacity-50;
+  }
 }

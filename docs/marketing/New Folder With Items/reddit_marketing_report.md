@@ -90,3 +90,21 @@ While building Reddit karma, consider posting the "Show HN" content to:
 -   **Manual Guide:** `/Users/owner/.gemini/antigravity/brain/d06a652d-1942-4740-881e-2c77e945fa9e/manual_karma_building_guide.md`
 -   **Show HN Draft:** `/Users/owner/.gemini/antigravity/brain/d06a652d-1942-4740-881e-2c77e945fa9e/show_hn_post_opensource.md`
 -   **Walkthrough:** `/Users/owner/.gemini/antigravity/brain/d06a652d-1942-4740-881e-2c77e945fa9e/walkthrough.md`
+
+### 5. Niche Research: E.A.S.Y. Schedule & Parenting (Validated for EasyBabyTracker)
+We validated `easybabytracker.com` (now branded as **BabyEase**). It features "One-Tap Logging" and explicit "E.A.S.Y. Support", making it a perfect fit for this niche.
+
+**Target Opportunities (Active 2024/2025):**
+We identified 3 high-potential threads where the app solves an immediate pain point.
+
+| Subreddit | Thread Focus | Engagement Strategy |
+| :--- | :--- | :--- |
+| **`r/NewParents`** | [Did anyone really have a schedule in the newborn...](https://www.reddit.com/r/NewParents/comments/1eobaau/did_anyone_really_have_a_schedule_in_the_newborn/) | **Problem:** "Survival mode", lack of structure. <br>**Pitch:** Suggest the app not for *strict* schedules, but to find the baby's natural "rhythm" using the one-tap logger to spot patterns. |
+| **`r/Parenting`** | [Opinions on 'Secrets of the Baby Whisperer'](https://www.reddit.com/r/Parenting/comments/1hvasfp/opinions_on_secrets_of_the_baby_whisperer/) | **Problem:** Trying to implement E.A.S.Y. to fix sleep associations. <br>**Pitch:** "I built a free tool that actually has E.A.S.Y. built-in so you don't have to mental math the 'Activity' window." |
+| **`r/NewParents`** | [Sample schedules online are BS](https://www.reddit.com/r/NewParents/comments/1joamsy/sample_schedules_online_are_bs/) | **Problem:** Generic schedules don't fit individual babies (e.g., 30-min naps). <br>**Pitch:** Validate their frustration. "Totally agree. Every baby is different. I made a tracker to log *your* baby's actual windows instead of forcing a template." |
+
+**Potential Angle for EasyBabyTracker:**
+*   **"The Modern E.A.S.Y. Tool":** Positioning EasyBabyTracker as the perfect digital companion for Tracy Hogg's method.
+    *   *Pitch:* "I built this because paper logs were messy. It's designed specifically for the Eat, Activity, Sleep flow."
+    *   *Value Prop:* Simplified tracking that helps parents spot the "Activity" window and "Sleep" cues.
+
