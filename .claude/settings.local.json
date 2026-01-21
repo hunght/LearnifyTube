@@ -7,7 +7,12 @@
       "Bash(npx drizzle-kit generate:*)",
       "Bash(npm run build:*)",
       "Bash(npm run:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(node:*)",
+      "Bash(curl:*)",
+      "Bash(ls:*)",
+      "Bash(pkill:*)",
+      "Bash(git add:*)"
     ]
   }
 }

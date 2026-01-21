@@ -439,6 +439,7 @@ export const preferencesRouter = t.router({
             visibleItems: z
               .array(
                 z.enum([
+                  "home",
                   "dashboard",
                   "channels",
                   "playlists",

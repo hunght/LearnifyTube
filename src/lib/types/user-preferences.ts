@@ -7,6 +7,7 @@
 export type ThemeMode = "light" | "dark";
 
 export type SidebarItem =
+  | "home"
   | "dashboard"
   | "channels"
   | "playlists"
@@ -64,6 +65,7 @@ export interface UserPreferences {
 // Defaults
 export const DEFAULT_SIDEBAR_PREFERENCES: SidebarPreferences = {
   visibleItems: [
+    "home",
     "dashboard",
     "channels",
     "playlists",

@@ -205,6 +205,78 @@ export const flashcardsRouter = t.router({
       .orderBy(asc(flashcards.nextReviewAt)); // Oldest due first
   }),
 
+  // Get flashcards for a specific study session type
+  getStudySession: publicProcedure
+    .input(
+      z.object({
+        sessionType: z.enum(["quick", "standard", "full", "new_only", "review_only"]),
+        limit: z.number().min(1).max(100).optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      const db = ctx.db ?? defaultDb;
+      const now = new Date().toISOString();
+      const { and, gt } = await import("drizzle-orm");
+
+      // Default limits per session type
+      const limits: Record<string, number> = {
+        quick: 10,
+        standard: 25,
+        full: 100,
+        new_only: 20,
+        review_only: 20,
+      };
+      const limit = input.limit ?? limits[input.sessionType] ?? 25;
+
+      // Type for flashcard rows
+      type FlashcardRow = typeof flashcards.$inferSelect;
+
+      let cards: FlashcardRow[];
+
+      switch (input.sessionType) {
+        case "quick":
+        case "standard":
+        case "full":
+          // All due cards, with limit
+          cards = await db
+            .select()
+            .from(flashcards)
+            .where(lte(flashcards.nextReviewAt, now))
+            .orderBy(asc(flashcards.nextReviewAt))
+            .limit(limit);
+          break;
+
+        case "new_only":
+          // Only cards that have never been reviewed (reviewCount = 0)
+          cards = await db
+            .select()
+            .from(flashcards)
+            .where(and(lte(flashcards.nextReviewAt, now), eq(flashcards.reviewCount, 0)))
+            .orderBy(asc(flashcards.createdAt))
+            .limit(limit);
+          break;
+
+        case "review_only":
+          // Only cards that have been reviewed before (reviewCount > 0)
+          cards = await db
+            .select()
+            .from(flashcards)
+            .where(and(lte(flashcards.nextReviewAt, now), gt(flashcards.reviewCount, 0)))
+            .orderBy(asc(flashcards.nextReviewAt))
+            .limit(limit);
+          break;
+
+        default:
+          cards = [];
+      }
+
+      return {
+        cards,
+        sessionType: input.sessionType,
+        totalAvailable: cards.length,
+      };
+    }),
+
   // Update a flashcard
   update: publicProcedure
     .input(

@@ -99,6 +99,17 @@ type SavedWordForHighlight = {
 
 type GetAllSavedWordsResult = SavedWordForHighlight[];
 
+type SavedWordByVideoItem = {
+  id: string;
+  sourceText: string;
+  translatedText: string;
+  timestampSeconds: number;
+  notes: string | null;
+  createdAt: number;
+};
+
+type GetSavedWordsByVideoIdResult = SavedWordByVideoItem[];
+
 /**
  * Translation router - handles translation cache and learning features
  */
@@ -640,6 +651,51 @@ export const translationRouter = t.router({
       throw error;
     }
   }),
+
+  /**
+   * Get saved words for a specific video
+   * Returns words that were saved from this video's transcript
+   */
+  getSavedWordsByVideoId: publicProcedure
+    .input(
+      z.object({
+        videoId: z.string(),
+      })
+    )
+    .query(async ({ ctx, input }): Promise<GetSavedWordsByVideoIdResult> => {
+      const db = ctx.db ?? defaultDb;
+
+      try {
+        // Get saved words that have contexts from this video
+        const words = await db
+          .select({
+            id: savedWords.id,
+            sourceText: translationCache.sourceText,
+            translatedText: translationCache.translatedText,
+            timestampSeconds: translationContexts.timestampSeconds,
+            notes: savedWords.notes,
+            createdAt: savedWords.createdAt,
+          })
+          .from(savedWords)
+          .innerJoin(translationCache, eq(savedWords.translationId, translationCache.id))
+          .innerJoin(
+            translationContexts,
+            eq(translationCache.id, translationContexts.translationId)
+          )
+          .where(eq(translationContexts.videoId, input.videoId))
+          .orderBy(translationContexts.timestampSeconds);
+
+        logger.debug("[translation] getSavedWordsByVideoId", {
+          videoId: input.videoId,
+          count: words.length,
+        });
+
+        return words;
+      } catch (error) {
+        logger.error("[translation] getSavedWordsByVideoId failed", error);
+        throw error;
+      }
+    }),
 });
 
 // Router type not exported (unused)

@@ -1,7 +1,15 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
-type RightSidebarContent = "queue" | "annotations" | "ai-summary" | "quiz" | "capture" | null;
+type RightSidebarContent =
+  | "queue"
+  | "annotations"
+  | "ai-summary"
+  | "quiz"
+  | "capture"
+  | "learning-stats"
+  | "vocabulary"
+  | null;
 
 // Right sidebar state atoms
 export const rightSidebarOpenAtom = atomWithStorage<boolean>("right-sidebar-open", true);

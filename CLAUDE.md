@@ -9,15 +9,27 @@ LearnifyTube is an Electron + React desktop application for downloading YouTube 
 ## Common Commands
 
 ```bash
-npm run dev           # Start development with hot reload
+# Development
+npm run dev           # Start development with hot reload (or npm start)
+npm run storybook     # Run Storybook component library on port 6006
+
+# Quality checks
 npm run type-check    # TypeScript validation
 npm run lint          # ESLint check
 npm run lint:fix      # ESLint with auto-fix
-npm run test          # Run Jest tests
-npm run test:watch    # Run tests in watch mode
-npm run test:database # Database-specific tests
+
+# Testing
+npm run test                        # Run all Jest tests
+npm run test:watch                  # Run tests in watch mode
+npm run test -- path/to/file.test.ts  # Run a single test file
+npm run test:database               # Database-specific tests
+npm run test:e2e                    # Playwright end-to-end tests
+
+# Database
 npm run db:generate   # Generate Drizzle migrations
 npm run db:studio     # Open Drizzle Studio for database inspection
+
+# Build
 npm run make          # Package the application
 ```
 
@@ -37,9 +49,9 @@ Communication between renderer and main process uses electron-trpc:
 Renderer → trpcClient.call() → ipcLink → Main Process tRPC Handler → Router/Procedure → Database/APIs
 ```
 
-- tRPC routers are in `src/api/routers/`
-- Root router combines all routers in `src/api/index.ts`
-- Client setup in `src/utils/trpc.ts`
+- tRPC routers in `src/api/routers/`: utils, window, ytdlp, queue, preferences, translation, annotations, watchStats, transcripts, playlists, binary, ai, flashcards, optimization
+- Root router: `src/api/index.ts`
+- Client setup: `src/utils/trpc.ts`
 
 ### Database (Drizzle + SQLite)
 
@@ -120,9 +132,11 @@ const useCategoryData = () => {
 };
 ```
 
+Wrapper hooks are only justified when they add real value like complex validation logic, computed state, or data transformations.
+
 ## Git Hooks (Lefthook)
 
-Pre-commit runs automatically:
+Pre-commit runs automatically (in parallel):
 - Type checking
 - ESLint with auto-fix on staged files
 - Prettier formatting on staged files

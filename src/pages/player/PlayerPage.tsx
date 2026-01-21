@@ -9,6 +9,7 @@ import { Rewind, FastForward } from "lucide-react";
 import { toast } from "sonner";
 import { useWatchProgress } from "./hooks/useWatchProgress";
 import { VideoPlayer } from "./components/VideoPlayer";
+import { VideoProgressIndicator } from "./components/VideoProgressIndicator";
 import { DownloadStatus } from "./components/DownloadStatus";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { VideoDescription } from "./components/VideoDescription";
@@ -53,6 +54,9 @@ export default function PlayerPage(): React.JSX.Element {
 
   // Track if video file failed to load (e.g., file was deleted)
   const [videoLoadError, setVideoLoadError] = useState(false);
+
+  // Track video duration for progress indicator
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
   // Auto-clear seek indicator after 800ms
   useEffect(() => {
@@ -127,8 +131,29 @@ export default function PlayerPage(): React.JSX.Element {
   // Reset error state when videoId or filePath changes
   useEffect(() => {
     setVideoLoadError(false);
+    setVideoDuration(null);
     autoStartedRef.current = false;
   }, [videoId, playback?.filePath]);
+
+  // Track video duration when metadata loads
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleLoadedMetadata = (): void => {
+      if (video.duration && isFinite(video.duration)) {
+        setVideoDuration(video.duration);
+      }
+    };
+
+    // Check if already loaded
+    if (video.duration && isFinite(video.duration)) {
+      setVideoDuration(video.duration);
+    }
+
+    video.addEventListener("loadedmetadata", handleLoadedMetadata);
+    return () => video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+  }, [playback?.filePath]);
 
   // Auto-start download once if file is missing and not already downloading
   const autoStartedRef = useRef(false);
@@ -444,6 +469,14 @@ export default function PlayerPage(): React.JSX.Element {
                 {videoTitle}
               </ExternalLink>
             </CardTitle>
+            {/* Video progress indicator - only show when video is loaded */}
+            {filePath && !videoLoadError && videoDuration && (
+              <VideoProgressIndicator
+                currentTime={currentTime}
+                duration={videoDuration}
+                className="mt-2"
+              />
+            )}
           </CardHeader>
           <CardContent>
             {playbackIsLoading ? (

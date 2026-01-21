@@ -1,6 +1,7 @@
 import { createRoute } from "@tanstack/react-router";
 import { RootRoute } from "./__root";
 import SettingsPage from "@/pages/settings-page/SettingsPage";
+import HomePage from "@/pages/home/HomePage";
 import DashboardPage from "@/pages/dashboard/DashboardPage";
 import PlayerPage from "@/pages/player/PlayerPage";
 import ChannelPage from "@/pages/channel/ChannelPage";
@@ -36,9 +37,15 @@ const isDevelopment = (): boolean => {
   return process.env.NODE_ENV !== "production";
 };
 
-const DashboardRoute = createRoute({
+const HomeRoute = createRoute({
   getParentRoute: () => RootRoute,
   path: "/",
+  component: HomePage,
+});
+
+const DownloadsRoute = createRoute({
+  getParentRoute: () => RootRoute,
+  path: "/downloads",
   component: DashboardPage,
 });
 
@@ -120,7 +127,8 @@ const StorageRoute = createRoute({
 });
 
 const baseRoutes = [
-  DashboardRoute,
+  HomeRoute,
+  DownloadsRoute,
   SettingsRoute,
   PlayerRoute,
   ChannelRoute,

@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner";
 import { Flashcard } from "@/api/db/schema";
 import { cn } from "@/lib/utils";
+import { SRSProgressChart } from "./SRSProgressChart";
 
 export function FlashcardsTab({
   onRequestStudy,
@@ -60,7 +61,6 @@ export function FlashcardsTab({
   // Update mutation - uses the flashcards.update endpoint added to the router
   const updateMutation = useMutation({
     mutationFn: async (data: { id: string; frontContent: string; backContent: string }) => {
-       
       return await trpcClient.flashcards.update.mutate(data);
     },
     onSuccess: () => {
@@ -201,6 +201,9 @@ export function FlashcardsTab({
           </CardContent>
         </Card>
       </div>
+
+      {/* SRS Progress Visualization */}
+      {allFlashcards && allFlashcards.length > 0 && <SRSProgressChart flashcards={allFlashcards} />}
 
       {/* Cards List Dialog */}
       <Dialog open={!!viewingCategory} onOpenChange={(open) => !open && setViewingCategory(null)}>

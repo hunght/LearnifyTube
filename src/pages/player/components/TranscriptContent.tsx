@@ -20,10 +20,13 @@ interface TranscriptContentProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   onWordMouseEnter: (word: string) => void;
   onWordMouseLeave: () => void;
+  onWordClick?: (word: string) => void;
   isSelecting: boolean;
   containerRef?: React.RefObject<HTMLDivElement>;
   segRefs?: React.MutableRefObject<Array<HTMLParagraphElement | null>>;
   secondarySegments?: TranscriptSegment[];
+  savingWord?: string | null;
+  justSavedWord?: string | null;
 }
 
 export function TranscriptContent({
@@ -39,10 +42,13 @@ export function TranscriptContent({
   onKeyDown,
   onWordMouseEnter,
   onWordMouseLeave,
+  onWordClick,
   isSelecting,
   containerRef,
   segRefs,
   secondarySegments,
+  savingWord,
+  justSavedWord,
 }: TranscriptContentProps): React.JSX.Element {
   const internalContainerRef = useRef<HTMLDivElement>(null);
   const internalSegRefs = useRef<Array<HTMLParagraphElement | null>>([]);
@@ -93,6 +99,12 @@ export function TranscriptContent({
           const isHovered = hoveredWord === word && word.trim().length > 0;
           const translation = getTranslationForWord(word);
           const hasTranslation = !!translation;
+          const cleanWord = word
+            .replace(/[.,!?;:'"()\[\]{}]/g, "")
+            .toLowerCase()
+            .trim();
+          const isSaving = savingWord === cleanWord;
+          const justSaved = justSavedWord === cleanWord;
 
           return (
             <TranscriptWord
@@ -104,6 +116,9 @@ export function TranscriptContent({
               showInlineTranslations={showInlineTranslations}
               onMouseEnter={() => word.trim() && onWordMouseEnter(word)}
               onMouseLeave={onWordMouseLeave}
+              onClick={onWordClick ? () => onWordClick(word) : undefined}
+              isSaving={isSaving}
+              justSaved={justSaved}
             />
           );
         })}

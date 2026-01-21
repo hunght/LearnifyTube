@@ -8,10 +8,15 @@ import { RefreshCw, GraduationCap, Layers, BookmarkCheck } from "lucide-react";
 import { StudyMode } from "@/pages/learn/StudyMode";
 import { SavedWordsTab } from "./components/SavedWordsTab";
 import { FlashcardsTab } from "./components/FlashcardsTab";
+import { StudySessionSelector, type StudySessionType } from "./components/StudySessionSelector";
+import type { Flashcard } from "@/api/db/schema";
 
 export default function MyWordsPage(): React.JSX.Element {
   const queryClient = useQueryClient();
+  const [showSessionSelector, setShowSessionSelector] = useState(false);
   const [isStudyMode, setIsStudyMode] = useState(false);
+  const [studyCards, setStudyCards] = useState<Flashcard[]>([]);
+  const [sessionType, setSessionType] = useState<StudySessionType | null>(null);
 
   // Fetch due flashcards for study (used for header button)
   const {
@@ -31,6 +36,37 @@ export default function MyWordsPage(): React.JSX.Element {
     refetchDueCards();
   };
 
+  const handleSelectSession = (type: StudySessionType, cards: Flashcard[]): void => {
+    setSessionType(type);
+    setStudyCards(cards);
+    setShowSessionSelector(false);
+    setIsStudyMode(true);
+  };
+
+  const handleStudyComplete = (): void => {
+    setIsStudyMode(false);
+    setStudyCards([]);
+    setSessionType(null);
+    queryClient.invalidateQueries({ queryKey: ["flashcards"] });
+  };
+
+  const getSessionTitle = (): string => {
+    switch (sessionType) {
+      case "quick":
+        return "Quick Review";
+      case "standard":
+        return "Standard Review";
+      case "full":
+        return "Full Review";
+      case "new_only":
+        return "New Cards";
+      case "review_only":
+        return "Review Session";
+      default:
+        return "Flashcard Study";
+    }
+  };
+
   return (
     <div className="container mx-auto space-y-6 p-6">
       <Tabs defaultValue="flashcards" className="space-y-4">
@@ -47,7 +83,7 @@ export default function MyWordsPage(): React.JSX.Element {
           </TabsList>
           <div className="flex items-center gap-2">
             <Button
-              onClick={() => setIsStudyMode(true)}
+              onClick={() => setShowSessionSelector(true)}
               disabled={dueCount === 0}
               size="sm"
               className="flex items-center gap-2"
@@ -75,9 +111,25 @@ export default function MyWordsPage(): React.JSX.Element {
 
         {/* Flashcards Tab */}
         <TabsContent value="flashcards" className="space-y-6">
-          <FlashcardsTab onRequestStudy={() => setIsStudyMode(true)} />
+          <FlashcardsTab onRequestStudy={() => setShowSessionSelector(true)} />
         </TabsContent>
       </Tabs>
+
+      {/* Session Selector Dialog */}
+      <Dialog open={showSessionSelector} onOpenChange={setShowSessionSelector}>
+        <DialogContent className="max-h-[90vh] w-full max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GraduationCap className="h-5 w-5" />
+              Choose Study Session
+            </DialogTitle>
+          </DialogHeader>
+          <StudySessionSelector
+            onSelectSession={handleSelectSession}
+            onCancel={() => setShowSessionSelector(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Study Mode Dialog */}
       <Dialog open={isStudyMode} onOpenChange={setIsStudyMode}>
@@ -85,17 +137,11 @@ export default function MyWordsPage(): React.JSX.Element {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <GraduationCap className="h-5 w-5" />
-              Flashcard Study
+              {getSessionTitle()}
             </DialogTitle>
           </DialogHeader>
-          {dueCards && dueCards.length > 0 ? (
-            <StudyMode
-              cards={dueCards}
-              onComplete={() => {
-                setIsStudyMode(false);
-                queryClient.invalidateQueries({ queryKey: ["flashcards"] });
-              }}
-            />
+          {studyCards.length > 0 ? (
+            <StudyMode cards={studyCards} onComplete={handleStudyComplete} />
           ) : (
             <div className="flex flex-col items-center justify-center space-y-4 py-12 text-center text-muted-foreground">
               <div className="rounded-full bg-muted p-4">

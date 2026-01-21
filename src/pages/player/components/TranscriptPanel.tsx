@@ -343,6 +343,8 @@ export function TranscriptPanel({
     loading: boolean;
     saved?: boolean;
   } | null>(null);
+  const [savingWord, setSavingWord] = useState<string | null>(null);
+  const [justSavedWord, setJustSavedWord] = useState<string | null>(null);
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const segRefs = useRef<Array<HTMLParagraphElement | null>>([]);
   const isSnappingRef = useRef<boolean>(false);
@@ -388,6 +390,7 @@ export function TranscriptPanel({
       // Invalidate saved words queries to refresh transcript highlights and MyWords page
       queryClient.invalidateQueries({ queryKey: ["saved-words"] });
       queryClient.invalidateQueries({ queryKey: ["saved-words-all"] });
+      queryClient.invalidateQueries({ queryKey: ["translation", "savedWordsByVideo"] });
     },
     onError: (error) => {
       toast.error("Failed to save word: " + String(error));
@@ -464,6 +467,82 @@ export function TranscriptPanel({
       return translation;
     },
     [translationMap, showInlineTranslations]
+  );
+
+  // Quick save handler - translate and save word in one action (double-click)
+  const handleQuickSave = useCallback(
+    async (word: string): Promise<void> => {
+      // Clean the word
+      const cleanWord = word
+        .replace(/[.,!?;:'"()[\]{}]/g, "")
+        .toLowerCase()
+        .trim();
+      if (!cleanWord || cleanWord.length < 2) return;
+
+      // Check if already saved
+      const existingTranslation = getTranslationForWord(word);
+      if (existingTranslation) {
+        toast.info("Word already saved");
+        return;
+      }
+
+      // Set saving state
+      setSavingWord(cleanWord);
+
+      try {
+        // Get current timestamp for context
+        const timestamp =
+          activeSegIndex !== null && segments[activeSegIndex]
+            ? segments[activeSegIndex].start
+            : currentTime;
+
+        // Get context text
+        const contextText =
+          activeSegIndex !== null && segments[activeSegIndex] ? segments[activeSegIndex].text : "";
+
+        // Translate the word
+        const result = await trpcClient.utils.translateText.query({
+          text: cleanWord,
+          targetLang: translationTargetLang,
+          sourceLang: "auto",
+          videoId,
+          timestampSeconds: Math.floor(timestamp),
+          contextText,
+        });
+
+        if (result.success && result.translationId) {
+          // Save the word
+          await trpcClient.translation.saveWord.mutate({ translationId: result.translationId });
+
+          // Show success feedback
+          setJustSavedWord(cleanWord);
+          toast.success(`"${cleanWord}" saved! 📚`);
+
+          // Invalidate queries to refresh
+          queryClient.invalidateQueries({ queryKey: ["saved-words"] });
+          queryClient.invalidateQueries({ queryKey: ["saved-words-all"] });
+          queryClient.invalidateQueries({ queryKey: ["translation", "savedWordsByVideo"] });
+
+          // Clear justSaved state after animation
+          setTimeout(() => setJustSavedWord(null), 1500);
+        } else {
+          toast.error("Failed to translate word");
+        }
+      } catch {
+        toast.error("Failed to save word");
+      } finally {
+        setSavingWord(null);
+      }
+    },
+    [
+      activeSegIndex,
+      segments,
+      currentTime,
+      translationTargetLang,
+      videoId,
+      queryClient,
+      getTranslationForWord,
+    ]
   );
 
   // Handle word hover with debouncing and automatic translation
@@ -855,9 +934,12 @@ export function TranscriptPanel({
               onKeyDown={handleTranscriptKeyDown}
               onWordMouseEnter={handleWordMouseEnter}
               onWordMouseLeave={handleWordMouseLeave}
+              onWordClick={handleQuickSave}
               isSelecting={isSelecting}
               containerRef={transcriptContainerRef}
               segRefs={segRefs}
+              savingWord={savingWord}
+              justSavedWord={justSavedWord}
             />
 
             {/* Translation Tooltip - appears on long hover */}
@@ -886,7 +968,7 @@ export function TranscriptPanel({
           {/* Left side - hint text */}
           {!isCollapsed && segments.length > 0 && (
             <p className="text-xs italic text-muted-foreground">
-              💡 Hover words to translate • Saved words highlighted in blue
+              💡 Hover to translate • Double-click to quick save • Saved words in blue
             </p>
           )}
           {isCollapsed && (

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import {
-  Timer,
+  Home,
   Clapperboard,
   History,
   Users,
@@ -25,6 +25,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarGroup,
+  SidebarGroupLabel,
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { SidebarThemeToggle } from "@/components/SidebarThemeToggle";
@@ -53,69 +55,42 @@ const isDevelopment = (): boolean => {
   return process.env.NODE_ENV !== "production";
 };
 
-// All available sidebar items
-const ALL_ITEMS: Array<{
+// Sidebar item type
+type SidebarItemConfig = {
   id: SidebarItem;
   title: string;
   icon: React.ComponentType<{ className?: string }>;
   url: string;
-  isActive?: boolean;
+};
+
+// Sidebar groups configuration
+const SIDEBAR_GROUPS: Array<{
+  label: string;
+  items: SidebarItemConfig[];
 }> = [
   {
-    id: "dashboard",
-    title: "Dashboard",
-    icon: Timer,
-    url: "/",
-    isActive: true,
+    label: "LEARN",
+    items: [
+      { id: "home", title: "Home", icon: Home, url: "/" },
+      { id: "my-words", title: "Flashcards", icon: Brain, url: "/my-words" },
+      { id: "history", title: "History", icon: History, url: "/history" },
+    ],
   },
   {
-    id: "channels",
-    title: "Channels",
-    icon: Users,
-    url: "/channels",
+    label: "LIBRARY",
+    items: [
+      { id: "channels", title: "Channels", icon: Users, url: "/channels" },
+      { id: "playlists", title: "Playlists", icon: List, url: "/playlists" },
+      { id: "subscriptions", title: "Subscriptions", icon: Clapperboard, url: "/subscriptions" },
+    ],
   },
   {
-    id: "playlists",
-    title: "Playlists",
-    icon: List,
-    url: "/playlists",
-  },
-  {
-    id: "subscriptions",
-    title: "Subscriptions",
-    icon: Clapperboard,
-    url: "/subscriptions",
-  },
-
-  {
-    id: "history",
-    title: "History",
-    icon: History,
-    url: "/history",
-  },
-  {
-    id: "my-words",
-    title: "Anki Flashcards",
-    icon: Brain,
-    url: "/my-words",
-  },
-  {
-    id: "storage",
-    title: "Storage",
-    icon: HardDrive,
-    url: "/storage",
-  },
-  {
-    id: "settings",
-    title: "Settings",
-    icon: Settings,
-    url: "/settings",
-  },
-  {
-    id: "logs",
-    title: "Logs",
-    icon: ScrollText,
-    url: "/app-debug-logs",
+    label: "MANAGE",
+    items: [
+      { id: "storage", title: "Storage", icon: HardDrive, url: "/storage" },
+      { id: "settings", title: "Settings", icon: Settings, url: "/settings" },
+      { id: "logs", title: "Logs", icon: ScrollText, url: "/app-debug-logs" },
+    ],
   },
 ];
 
@@ -130,19 +105,29 @@ export function AppSidebar({
   // Load user preferences from atom
   const sidebarPreferences = useAtomValue(sidebarPreferencesAtom);
 
-  // Filter items based on user preferences
-  const items = useMemo(() => {
-    return ALL_ITEMS.filter((item) => {
-      // Always hide logs if not in dev mode
-      if (item.id === "logs" && !isDevelopment()) {
-        return false;
-      }
-      // Special logic: Flashcards visibility is tied to "my-words" preference
-      if (item.id === "flashcards") {
-        return sidebarPreferences.visibleItems.includes("my-words");
-      }
-      return sidebarPreferences.visibleItems.includes(item.id);
-    });
+  // Filter groups and items based on user preferences
+  const filteredGroups = useMemo(() => {
+    return SIDEBAR_GROUPS.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        // Always hide logs if not in dev mode
+        if (item.id === "logs" && !isDevelopment()) {
+          return false;
+        }
+        // Special logic: Flashcards visibility is tied to "my-words" preference
+        if (item.id === "flashcards") {
+          return sidebarPreferences.visibleItems.includes("my-words");
+        }
+        // Home is always visible (maps to dashboard in preferences)
+        if (item.id === "home") {
+          return (
+            sidebarPreferences.visibleItems.includes("home") ||
+            sidebarPreferences.visibleItems.includes("dashboard")
+          );
+        }
+        return sidebarPreferences.visibleItems.includes(item.id);
+      }),
+    })).filter((group) => group.items.length > 0);
   }, [sidebarPreferences.visibleItems]);
 
   return (
@@ -154,49 +139,54 @@ export function AppSidebar({
       <SidebarHeader className="px-3 py-2 pt-3">
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-semibold text-foreground">LearnifyTube</span>
-
           <SidebarThemeToggle variant="icon" />
         </div>
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarMenu>
-          {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton
-                asChild
-                isActive={activeItem === item.title}
-                tooltip={item.title}
-                className={cn(
-                  "gap-2 text-muted-foreground transition-colors",
-                  "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                  activeItem === item.title &&
-                    "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                )}
-              >
-                <Link
-                  to={item.url}
-                  onClick={() => {
-                    logger.debug("Sidebar navigation", {
-                      from: currentPath,
-                      to: item.url,
-                      title: item.title,
-                      source: "AppSidebar",
-                    });
-                    setActiveItem(item.title);
-                  }}
-                >
-                  <item.icon className="size-4" />
-                  <span>{item.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
+        {filteredGroups.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel className="text-xs font-medium text-muted-foreground/70">
+              {group.label}
+            </SidebarGroupLabel>
+            <SidebarMenu>
+              {group.items.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={currentPath === item.url || activeItem === item.title}
+                    tooltip={item.title}
+                    className={cn(
+                      "gap-2 text-muted-foreground transition-colors",
+                      "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                      (currentPath === item.url || activeItem === item.title) &&
+                        "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <Link
+                      to={item.url}
+                      onClick={() => {
+                        logger.debug("Sidebar navigation", {
+                          from: currentPath,
+                          to: item.url,
+                          title: item.title,
+                          source: "AppSidebar",
+                        });
+                        setActiveItem(item.title);
+                      }}
+                    >
+                      <item.icon className="size-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter>
-        {/* Minimized player - always rendered to keep video element mounted, but only shows UI when not on player page */}
         <MinimizedPlayer />
       </SidebarFooter>
 

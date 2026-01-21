@@ -13,7 +13,9 @@ import { DownloadQueueSidebar } from "@/components/DownloadQueueSidebar";
 import { AnnotationsSidebar } from "@/components/AnnotationsSidebar";
 import { AISummarySidebar } from "@/components/AISummarySidebar";
 import { QuizSidebar } from "@/components/QuizSidebar";
-import { Sparkles, StickyNote, Brain } from "lucide-react";
+import { VocabularySidebar } from "@/components/VocabularySidebar";
+import { LearningStatsSidebar } from "@/components/LearningStatsSidebar";
+import { Sparkles, StickyNote, Brain, BookOpen } from "lucide-react";
 
 export function AppRightSidebar({
   className,
@@ -32,7 +34,8 @@ export function AppRightSidebar({
     (content === "annotations" ||
       content === "ai-summary" ||
       content === "quiz" ||
-      content === "capture");
+      content === "capture" ||
+      content === "vocabulary");
 
   const sidebarContent = (
     <div className="flex h-full flex-col p-2">
@@ -51,6 +54,18 @@ export function AppRightSidebar({
               title="Notes"
             >
               <StickyNote className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setContent("vocabulary")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                content === "vocabulary"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+              )}
+              title="Vocabulary"
+            >
+              <BookOpen className="h-4 w-4" />
             </button>
             <button
               onClick={() => setContent("ai-summary")}
@@ -86,6 +101,12 @@ export function AppRightSidebar({
               videoTitle={annotationsData.videoTitle}
               currentTime={annotationsData.currentTime}
             />
+          ) : content === "vocabulary" ? (
+            <VocabularySidebar
+              videoId={annotationsData.videoId}
+              videoRef={annotationsData.videoRef}
+              videoTitle={annotationsData.videoTitle}
+            />
           ) : content === "ai-summary" ? (
             <AISummarySidebar
               videoId={annotationsData.videoId}
@@ -100,6 +121,8 @@ export function AppRightSidebar({
             />
           ) : null}
         </>
+      ) : content === "learning-stats" ? (
+        <LearningStatsSidebar />
       ) : (
         <DownloadQueueSidebar />
       )}
