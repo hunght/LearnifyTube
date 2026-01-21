@@ -9,6 +9,7 @@ import { Search, Trash2, TrendingUp, Clock, Loader2, BookmarkCheck, Brain } from
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { VideoPlayButton } from "./VideoContextHelpers";
+import { PronunciationButton } from "@/components/PronunciationButton";
 
 export function SavedWordsTab(): React.JSX.Element {
   const { toast } = useToast();
@@ -183,7 +184,16 @@ export function SavedWordsTab(): React.JSX.Element {
                             </Badge>
                             <BookmarkCheck className="h-4 w-4 text-blue-500" />
                           </div>
-                          <p className="text-xl font-bold">{translation.sourceText}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xl font-bold">{translation.sourceText}</p>
+                            <PronunciationButton
+                              text={translation.sourceText}
+                              lang={translation.sourceLang}
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 shrink-0"
+                            />
+                          </div>
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -210,9 +220,18 @@ export function SavedWordsTab(): React.JSX.Element {
                               {translation.targetLang.toUpperCase()}
                             </Badge>
                           </div>
-                          <p className="text-xl font-bold text-primary">
-                            {translation.translatedText}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xl font-bold text-primary">
+                              {translation.translatedText}
+                            </p>
+                            <PronunciationButton
+                              text={translation.translatedText}
+                              lang={translation.targetLang}
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 shrink-0"
+                            />
+                          </div>
                           {hasNotes && (
                             <p className="mt-2 line-clamp-2 text-sm italic text-muted-foreground">
                               {String(translation.notes)}
@@ -226,7 +245,7 @@ export function SavedWordsTab(): React.JSX.Element {
                               {formatDistanceToNow(
                                 new Date(
                                   "savedAt" in translation &&
-                                  typeof translation.savedAt === "number"
+                                    typeof translation.savedAt === "number"
                                     ? translation.savedAt
                                     : translation.createdAt
                                 ),

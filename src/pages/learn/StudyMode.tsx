@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { VideoPlayer } from "@/pages/player/components/VideoPlayer";
+import { PronunciationButton } from "@/components/PronunciationButton";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -151,10 +152,18 @@ export function StudyMode({ cards, onComplete }: StudyModeProps): React.JSX.Elem
             {/* Front Side Content */}
             {!isFlipped ? (
               <div className="w-full space-y-6 animate-in fade-in zoom-in-95">
-                <div className="text-3xl font-medium leading-relaxed">
-                  {isCloze
-                    ? renderClozeFront(currentCard.clozeContent || currentCard.frontContent)
-                    : currentCard.frontContent}
+                <div className="flex items-center justify-center gap-3">
+                  <div className="text-3xl font-medium leading-relaxed">
+                    {isCloze
+                      ? renderClozeFront(currentCard.clozeContent || currentCard.frontContent)
+                      : currentCard.frontContent}
+                  </div>
+                  <PronunciationButton
+                    text={currentCard.frontContent}
+                    size="default"
+                    variant="outline"
+                    className="shrink-0"
+                  />
                 </div>
 
                 <p className="mt-8 text-sm text-muted-foreground">Tap reveal to check answer</p>
@@ -171,7 +180,15 @@ export function StudyMode({ cards, onComplete }: StudyModeProps): React.JSX.Elem
 
                 {/* Answer (Back) */}
                 {!isCloze && (
-                  <div className="text-3xl font-bold text-primary">{currentCard.backContent}</div>
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="text-3xl font-bold text-primary">{currentCard.backContent}</div>
+                    <PronunciationButton
+                      text={currentCard.backContent}
+                      size="default"
+                      variant="outline"
+                      className="shrink-0"
+                    />
+                  </div>
                 )}
 
                 {/* Context Text */}

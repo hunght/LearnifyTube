@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { Flashcard } from "@/api/db/schema";
 import { cn } from "@/lib/utils";
 import { SRSProgressChart } from "./SRSProgressChart";
+import { SRSCalendarView } from "./SRSCalendarView";
 
 export function FlashcardsTab({
   onRequestStudy,
@@ -204,6 +205,9 @@ export function FlashcardsTab({
 
       {/* SRS Progress Visualization */}
       {allFlashcards && allFlashcards.length > 0 && <SRSProgressChart flashcards={allFlashcards} />}
+
+      {/* Review Calendar */}
+      {allFlashcards && allFlashcards.length > 0 && <SRSCalendarView flashcards={allFlashcards} />}
 
       {/* Cards List Dialog */}
       <Dialog open={!!viewingCategory} onOpenChange={(open) => !open && setViewingCategory(null)}>
