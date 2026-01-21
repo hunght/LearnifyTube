@@ -6,6 +6,7 @@ import {
   Users,
   List,
   Brain,
+  BarChart3,
   HardDrive,
   ScrollText,
   Settings,
@@ -73,6 +74,7 @@ const SIDEBAR_GROUPS: Array<{
     items: [
       { id: "home", title: "Home", icon: Home, url: "/" },
       { id: "my-words", title: "Flashcards", icon: Brain, url: "/my-words" },
+      { id: "analytics", title: "Analytics", icon: BarChart3, url: "/analytics" },
       { id: "history", title: "History", icon: History, url: "/history" },
     ],
   },

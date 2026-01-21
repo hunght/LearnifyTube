@@ -11,6 +11,7 @@ import PlaylistsPage from "@/pages/playlists/PlaylistsPage";
 import SubscriptionsPage from "@/pages/subscriptions/SubscriptionsPage";
 import HistoryPage from "@/pages/history/HistoryPage";
 import MyWordsPage from "@/pages/my-words/MyWordsPage";
+import AnalyticsPage from "@/pages/analytics/AnalyticsPage";
 import StorageManagerPage from "@/pages/storage/StorageManagerPage";
 import LogPage from "@/pages/app-debug-logs/index";
 
@@ -120,6 +121,12 @@ const MyWordsRoute = createRoute({
   component: MyWordsPage,
 });
 
+const AnalyticsRoute = createRoute({
+  getParentRoute: () => RootRoute,
+  path: "/analytics",
+  component: AnalyticsPage,
+});
+
 const StorageRoute = createRoute({
   getParentRoute: () => RootRoute,
   path: "/storage",
@@ -138,6 +145,7 @@ const baseRoutes = [
   SubscriptionsRoute,
   HistoryRoute,
   MyWordsRoute,
+  AnalyticsRoute,
   StorageRoute,
 ];
 
