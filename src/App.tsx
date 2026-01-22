@@ -17,6 +17,7 @@ import { useAppearancePreferences } from "./hooks/useAppearancePreferences";
 import { YtDlpInstaller } from "@/components/ytdlp-installer";
 import { FfmpegInstaller } from "@/components/ffmpeg-installer";
 import { BinaryInitializationGuard } from "@/components/BinaryInitializationGuard";
+import { AppUpdateChecker } from "@/components/version-checker";
 import { getAppVersion } from "./helpers/version";
 import { logger } from "./helpers/logger";
 import DownloadFolderAccessInitializer from "@/components/DownloadFolderAccessInitializer";
@@ -99,6 +100,7 @@ function App(): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <AppUpdateChecker />
         <YtDlpInstaller />
         <FfmpegInstaller />
         <BinaryInitializationGuard>

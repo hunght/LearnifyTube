@@ -60,8 +60,6 @@ export const EXTERNAL_DEPENDENCIES = [
   "@trpc/server",
   // ZIP extraction library for auto-updates (replaced extract-zip with yauzl for better reliability)
   "yauzl",
-  // Auto-update helper to match the iTracksy implementation
-  "update-electron-app",
   // FFmpeg binary provider (must be bundled so we can copy the binary at runtime)
   "ffmpeg-static",
 ];

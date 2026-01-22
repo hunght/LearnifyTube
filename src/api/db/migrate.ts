@@ -33,7 +33,7 @@ const integrityCheckSchema = z.object({
 });
 
 const pragmaHashSchema = z.object({
-  hash: z.number(),
+  hash: z.string(),
 });
 
 interface MigrationOptions {

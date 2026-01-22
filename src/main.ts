@@ -25,8 +25,6 @@ import { initializeQueueManager } from "./services/download-queue/queue-manager"
 import defaultDb from "./api/db";
 import { userPreferences } from "./api/db/schema";
 
-import { updateElectronApp } from "update-electron-app";
-
 // Global error handlers to prevent crashes from logging errors
 process.on("uncaughtException", (error) => {
   // Ignore EIO errors from console/stdout (happens when terminal is closed)
@@ -55,24 +53,6 @@ let isQuiting: boolean = false;
 let stopAccessingSecurityScopedResource: (() => void) | null = null;
 
 const isVoidFunction = (value: unknown): value is () => void => typeof value === "function";
-
-/**
- * Initialize auto-update functionality with safe error handling.
- * Mirrors the iTracksy setup so production builds receive updates automatically.
- */
-function initializeAutoUpdate(): void {
-  if (process.env.NODE_ENV === "development" || !app.isPackaged) {
-    logger.info("[auto-update] Skipping auto-update initialization in development mode");
-    return;
-  }
-
-  try {
-    updateElectronApp();
-    logger.info("[auto-update] Auto-update initialized; updates will be checked automatically");
-  } catch (error) {
-    logger.error("[auto-update] Failed to initialize auto-update functionality:", error);
-  }
-}
 
 /**
  * Get the tray instance
@@ -357,8 +337,6 @@ app.whenReady().then(async () => {
   if (process.platform === "win32") {
     app.setAppUserModelId(app.getName());
   }
-
-  initializeAutoUpdate();
 
   try {
     logger.clearLogFile();
