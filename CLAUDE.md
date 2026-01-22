@@ -29,8 +29,11 @@ npm run test:e2e                    # Playwright end-to-end tests
 npm run db:generate   # Generate Drizzle migrations
 npm run db:studio     # Open Drizzle Studio for database inspection
 
-# Build
-npm run make          # Package the application
+# Build & Release
+npm run make              # Package the application
+npm run release           # Bump patch version and publish release
+npm run release:no-draft  # Release without draft (publishes immediately)
+npm run release minor     # Bump minor version and release
 ```
 
 ## Architecture
@@ -150,3 +153,20 @@ Use `@/*` to import from `src/*`:
 ```typescript
 import { Button } from '@/components/ui/button';
 ```
+
+## macOS Media Streaming
+
+The app uses main-process streaming (like lossless-cut) to avoid Chromium's `DEMUXER_ERROR_COULD_NOT_OPEN`:
+- Renderer never touches `file://` URLs directly
+- Main process streams bytes via custom `local-file://` protocol and HTTP media server
+- One-time folder authorization for Downloads/Desktop/Documents via user-selected-folder entitlement
+
+## Database Migrations
+
+Migrations are in `drizzle/` folder. On app start:
+1. Backup created before migration (keeps 5 most recent)
+2. Drizzle runs pending migrations
+3. Integrity check validates database
+4. Recovery mechanism wipes corrupted DB and starts fresh if all retries fail
+
+Backup files: `local.db.{version}.{timestamp}.backup` in app data folder.
