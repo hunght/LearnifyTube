@@ -439,3 +439,246 @@ export const killOptimization = (jobId: string): boolean => {
 export const isFfmpegAvailable = (): boolean => {
   return getFfmpegPath() !== null;
 };
+
+/**
+ * Audio format options
+ */
+export type AudioFormat = "mp3" | "m4a" | "opus";
+
+/**
+ * Audio quality presets
+ */
+export type AudioQuality = "high" | "medium" | "low";
+
+const AUDIO_BITRATE: Record<AudioQuality, string> = {
+  high: "192k",
+  medium: "128k",
+  low: "96k",
+};
+
+/**
+ * Build FFmpeg arguments for audio extraction
+ */
+const buildAudioExtractionArgs = (
+  inputPath: string,
+  outputPath: string,
+  format: AudioFormat,
+  quality: AudioQuality
+): string[] => {
+  const args: string[] = [];
+  const bitrate = AUDIO_BITRATE[quality];
+
+  // Input
+  args.push("-i", inputPath);
+
+  // No video
+  args.push("-vn");
+
+  // Audio codec based on format
+  switch (format) {
+    case "mp3":
+      args.push("-c:a", "libmp3lame");
+      args.push("-b:a", bitrate);
+      break;
+    case "m4a":
+      args.push("-c:a", "aac");
+      args.push("-b:a", bitrate);
+      break;
+    case "opus":
+      args.push("-c:a", "libopus");
+      args.push("-b:a", bitrate);
+      break;
+  }
+
+  // Overwrite output without asking
+  args.push("-y");
+
+  // Progress output
+  args.push("-progress", "pipe:1");
+
+  // Output path
+  args.push(outputPath);
+
+  return args;
+};
+
+/**
+ * Audio conversion job type
+ */
+export interface AudioConversionJob {
+  id: string;
+  videoId: string;
+  title: string;
+  sourceFilePath: string;
+  targetFilePath: string;
+  format: AudioFormat;
+  quality: AudioQuality;
+  status: "queued" | "converting" | "completed" | "failed" | "cancelled";
+  progress: number;
+  originalSize: number;
+  finalSize: number | null;
+  errorMessage: string | null;
+  addedAt: number;
+  startedAt: number | null;
+  completedAt: number | null;
+  durationSeconds: number;
+  deleteOriginal: boolean;
+}
+
+/**
+ * Active audio conversion workers
+ */
+const activeAudioWorkers = new Map<string, WorkerState>();
+
+/**
+ * Spawn audio conversion worker for a job
+ */
+export const spawnAudioConversion = async (
+  job: AudioConversionJob,
+  onProgress: ProgressCallback,
+  onComplete: CompletionCallback
+): Promise<void> => {
+  const { id: jobId, sourceFilePath, targetFilePath, format, quality, durationSeconds } = job;
+
+  try {
+    // Check if already processing
+    if (activeAudioWorkers.has(jobId)) {
+      logger.warn("[audio-worker] Job already active", { jobId });
+      return;
+    }
+
+    // Get FFmpeg path
+    const ffmpegPath = getFfmpegPath();
+    if (!ffmpegPath) {
+      onComplete(jobId, false, undefined, undefined, "FFmpeg not found");
+      return;
+    }
+
+    // Verify source file exists
+    if (!fs.existsSync(sourceFilePath)) {
+      onComplete(jobId, false, undefined, undefined, "Source file not found");
+      return;
+    }
+
+    // Get video duration if not provided
+    let duration = durationSeconds || 0;
+    if (duration === 0) {
+      duration = await getVideoDuration(sourceFilePath);
+    }
+
+    // Build FFmpeg arguments
+    const args = buildAudioExtractionArgs(sourceFilePath, targetFilePath, format, quality);
+
+    logger.info("[audio-worker] Starting audio conversion", {
+      jobId,
+      sourceFilePath,
+      targetFilePath,
+      format,
+      quality,
+      duration,
+      command: `${ffmpegPath} ${args.join(" ")}`,
+    });
+
+    // Spawn FFmpeg process
+    const proc = spawn(ffmpegPath, args);
+
+    // Store worker state
+    const worker: WorkerState = {
+      jobId,
+      process: proc,
+      startTime: Date.now(),
+      lastProgressUpdate: Date.now(),
+      durationSeconds: duration,
+    };
+    activeAudioWorkers.set(jobId, worker);
+
+    // Handle stdout (progress output)
+    proc.stdout?.on("data", (data: Buffer) => {
+      const output = data.toString();
+      const progress = parseProgress(output, duration);
+
+      if (progress !== null) {
+        const now = Date.now();
+        if (now - worker.lastProgressUpdate >= 500) {
+          worker.lastProgressUpdate = now;
+          onProgress(jobId, progress);
+        }
+      }
+    });
+
+    // Handle stderr (FFmpeg logs)
+    proc.stderr?.on("data", (data: Buffer) => {
+      const output = data.toString();
+
+      if (output.toLowerCase().includes("error")) {
+        logger.warn("[audio-worker] FFmpeg stderr", { jobId, output: output.trim() });
+      }
+
+      const progress = parseProgress(output, duration);
+      if (progress !== null) {
+        const now = Date.now();
+        if (now - worker.lastProgressUpdate >= 500) {
+          worker.lastProgressUpdate = now;
+          onProgress(jobId, progress);
+        }
+      }
+    });
+
+    // Handle process completion
+    proc.on("close", async (code: number | null) => {
+      activeAudioWorkers.delete(jobId);
+
+      if (code === 0) {
+        if (fs.existsSync(targetFilePath)) {
+          const stats = fs.statSync(targetFilePath);
+          if (stats.size > 0) {
+            logger.info("[audio-worker] Audio conversion completed", {
+              jobId,
+              outputPath: targetFilePath,
+              outputSize: stats.size,
+            });
+            onComplete(jobId, true, targetFilePath, stats.size);
+          } else {
+            logger.error("[audio-worker] Output file is empty", { jobId });
+            onComplete(jobId, false, undefined, undefined, "Output file is empty");
+          }
+        } else {
+          logger.error("[audio-worker] Output file not found", { jobId });
+          onComplete(jobId, false, undefined, undefined, "Output file not created");
+        }
+      } else {
+        logger.error("[audio-worker] FFmpeg exited with error", { jobId, code });
+        onComplete(jobId, false, undefined, undefined, `FFmpeg exited with code ${code}`);
+      }
+    });
+
+    // Handle process errors
+    proc.on("error", (error: Error) => {
+      activeAudioWorkers.delete(jobId);
+      logger.error("[audio-worker] FFmpeg process error", { jobId, error: error.message });
+      onComplete(jobId, false, undefined, undefined, error.message);
+    });
+  } catch (error) {
+    activeAudioWorkers.delete(jobId);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    logger.error("[audio-worker] Failed to spawn audio conversion", {
+      jobId,
+      error: errorMessage,
+    });
+    onComplete(jobId, false, undefined, undefined, errorMessage);
+  }
+};
+
+/**
+ * Kill an audio conversion worker
+ */
+export const killAudioConversion = (jobId: string): boolean => {
+  const worker = activeAudioWorkers.get(jobId);
+  if (worker?.process) {
+    worker.process.kill("SIGTERM");
+    activeAudioWorkers.delete(jobId);
+    logger.info("[audio-worker] Killed audio conversion job", { jobId });
+    return true;
+  }
+  return false;
+};

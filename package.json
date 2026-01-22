@@ -155,6 +155,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-query": "^5.85.5",
     "@tanstack/react-router": "1.131.28",
+    "@tanstack/react-table": "^8.21.3",
     "@tanstack/router-devtools": "1.131.28",
     "@tiptap/extension-link": "^2.11.5",
     "@tiptap/extension-placeholder": "^2.11.5",

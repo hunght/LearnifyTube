@@ -584,6 +584,41 @@ export const playlistsRouter = t.router({
         return { success: false, message: "Failed to update playback position" };
       }
     }),
+
+  // Get all video-playlist mappings directly from database (no API calls)
+  // This is an efficient alternative to calling getDetails for each playlist
+  getAllVideoPlaylistMappings: publicProcedure.query(async ({ ctx }) => {
+    const db = ctx.db ?? defaultDb;
+
+    try {
+      // Get YouTube playlist items with playlist titles
+      const youtubeItems = await db
+        .select({
+          videoId: playlistItems.videoId,
+          playlistTitle: channelPlaylists.title,
+        })
+        .from(playlistItems)
+        .innerJoin(channelPlaylists, eq(playlistItems.playlistId, channelPlaylists.playlistId));
+
+      // Import custom playlist tables dynamically to avoid circular deps
+      const { customPlaylists, customPlaylistItems } = await import("@/api/db/schema");
+
+      // Get custom playlist items with playlist names
+      const customItems = await db
+        .select({
+          videoId: customPlaylistItems.videoId,
+          playlistTitle: customPlaylists.name,
+        })
+        .from(customPlaylistItems)
+        .innerJoin(customPlaylists, eq(customPlaylistItems.playlistId, customPlaylists.id));
+
+      // Combine both sources
+      return [...youtubeItems, ...customItems];
+    } catch (e) {
+      logger.error("[playlists] getAllVideoPlaylistMappings failed", e);
+      return [];
+    }
+  }),
 });
 
 // Router type not exported (unused)
