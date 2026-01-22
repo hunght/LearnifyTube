@@ -181,22 +181,6 @@ export default [
           json: 'always',
         },
       ],
-      'import/no-unused-modules': [
-        'error',
-        {
-          unusedExports: true,
-          missingExports: false,
-          src: ['src/**/*.ts', 'src/**/*.tsx'],
-          ignoreExports: [
-            'src/main.ts',
-            'src/preload/**',
-            'src/**/*.d.ts',
-            'src/components/ui/**',
-            'src/stories/**',
-            'src/components/DownloadFolderAccessInitializer.tsx',
-          ],
-        },
-      ],
       '@typescript-eslint/no-require-imports': 'off', // Allow require() for dynamic imports
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/ban-ts-comment': 'off',

@@ -2,30 +2,68 @@ import React, { useState, useMemo } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageContainer } from "@/components/ui/page-container";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Play, List as ListIcon, Download, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import Thumbnail from "@/components/Thumbnail";
+import { PlaylistHeader, PlaylistHeaderSkeleton } from "./components/PlaylistHeader";
+import {
+  PlaylistVideoCard,
+  PlaylistVideoCardSkeleton,
+  type PlaylistVideo,
+} from "./components/PlaylistVideoCard";
+import { CustomPlaylistVideoCard } from "./components/CustomPlaylistVideoCard";
+import { BatchDownloadBar } from "./components/BatchDownloadBar";
+import {
+  PlaylistFilters,
+  PlaylistEmptyState,
+  type FilterOption,
+  type ViewMode,
+} from "./components/PlaylistFilters";
+import { EditPlaylistDialog } from "@/components/playlists/EditPlaylistDialog";
+import { cn } from "@/lib/utils";
+import { FolderHeart, MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 export default function PlaylistPage(): React.JSX.Element {
   const navigate = useNavigate();
   const search = useSearch({ from: "/playlist" });
   const playlistId = search.playlistId;
+  const isCustomPlaylist = search.type === "custom";
   const queryClient = useQueryClient();
-  const [_currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [selectedVideoIds, setSelectedVideoIds] = useState<Set<string>>(new Set());
 
-  const query = useQuery({
-    queryKey: ["playlist-details", playlistId],
+  const [selectedVideoIds, setSelectedVideoIds] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState<FilterOption>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  // YouTube playlist query
+  const youtubeQuery = useQuery({
+    queryKey: ["playlist-details", playlistId, "youtube"],
     queryFn: async () => {
-      if (!playlistId) return null;
+      // Double-check this is not a custom playlist (guard against race conditions)
+      if (!playlistId || isCustomPlaylist) return null;
       return await trpcClient.playlists.getDetails.query({ playlistId });
     },
-    enabled: !!playlistId,
+    enabled: !!playlistId && !isCustomPlaylist,
     staleTime: Infinity,
     gcTime: Infinity,
     networkMode: "offlineFirst",
@@ -33,19 +71,22 @@ export default function PlaylistPage(): React.JSX.Element {
     refetchOnWindowFocus: false,
   });
 
-  const updatePlaybackMutation = useMutation({
-    mutationFn: ({ videoIndex, watchTime }: { videoIndex: number; watchTime?: number }) =>
-      trpcClient.playlists.updatePlayback.mutate({
-        playlistId: playlistId!,
-        currentVideoIndex: videoIndex,
-        watchTimeSeconds: watchTime,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ytdlp", "all-playlists"] });
+  // Custom playlist query
+  const customQuery = useQuery({
+    queryKey: ["customPlaylist-details", playlistId],
+    queryFn: async () => {
+      if (!playlistId) return null;
+      return await trpcClient.customPlaylists.getDetails.query({ playlistId });
     },
+    enabled: !!playlistId && isCustomPlaylist,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    networkMode: "offlineFirst",
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const query = isCustomPlaylist ? customQuery : youtubeQuery;
 
   const downloadMutation = useMutation({
     mutationFn: (urls: string[]) => trpcClient.queue.addToQueue.mutate({ urls }),
@@ -62,12 +103,82 @@ export default function PlaylistPage(): React.JSX.Element {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to add to queue"),
   });
 
+  const deletePlaylistMutation = useMutation({
+    mutationFn: () => trpcClient.customPlaylists.delete.mutate({ playlistId: playlistId! }),
+    onSuccess: (res) => {
+      if (res.success) {
+        queryClient.invalidateQueries({ queryKey: ["customPlaylists"] });
+        toast.success("Playlist deleted");
+        navigate({ to: "/playlists" });
+      } else if ("message" in res) {
+        toast.error(res.message ?? "Failed to delete playlist");
+      } else {
+        toast.error("Failed to delete playlist");
+      }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete playlist"),
+  });
+
+  // Normalize data from both query types
+  const data = useMemo(() => {
+    if (isCustomPlaylist && customQuery.data) {
+      return {
+        playlistId: customQuery.data.id,
+        title: customQuery.data.name,
+        description: customQuery.data.description,
+        thumbnailUrl: customQuery.data.thumbnailUrl,
+        thumbnailPath: customQuery.data.thumbnailPath,
+        itemCount: customQuery.data.itemCount,
+        currentVideoIndex: customQuery.data.currentVideoIndex ?? 0,
+        videos: customQuery.data.videos ?? [],
+      };
+    } else if (!isCustomPlaylist && youtubeQuery.data) {
+      return youtubeQuery.data;
+    }
+    return null;
+  }, [isCustomPlaylist, customQuery.data, youtubeQuery.data]);
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    const videos = data?.videos ?? [];
+    const downloaded = videos.filter((v) => v.downloadStatus === "completed" && v.downloadFilePath);
+    return {
+      total: videos.length,
+      downloaded: downloaded.length,
+      notDownloaded: videos.length - downloaded.length,
+    };
+  }, [data?.videos]);
+
+  // Filter videos
+  const filteredVideos = useMemo((): PlaylistVideo[] => {
+    const videos = data?.videos ?? [];
+    switch (filter) {
+      case "downloaded":
+        return videos.filter((v) => v.downloadStatus === "completed" && v.downloadFilePath);
+      case "not-downloaded":
+        return videos.filter((v) => v.downloadStatus !== "completed" || !v.downloadFilePath);
+      default:
+        return videos;
+    }
+  }, [data?.videos, filter]);
+
+  // Get not downloaded videos for selection
+  const notDownloadedVideos = useMemo(() => {
+    return (data?.videos ?? []).filter(
+      (v) => v.downloadStatus !== "completed" || !v.downloadFilePath
+    );
+  }, [data?.videos]);
+
   const handleRefresh = async (): Promise<void> => {
     if (!playlistId || isRefreshing) return;
     try {
       setIsRefreshing(true);
-      await trpcClient.playlists.getDetails.query({ playlistId, forceRefresh: true });
-      await query.refetch();
+      if (isCustomPlaylist) {
+        await customQuery.refetch();
+      } else {
+        await trpcClient.playlists.getDetails.query({ playlistId, forceRefresh: true });
+        await youtubeQuery.refetch();
+      }
     } finally {
       setIsRefreshing(false);
     }
@@ -78,60 +189,33 @@ export default function PlaylistPage(): React.JSX.Element {
       toast.error("No videos in playlist");
       return;
     }
-    // Start from saved position or beginning
     const startIndex = data.currentVideoIndex || 0;
     const video = data.videos[startIndex];
     if (video && playlistId) {
-      setCurrentVideoIndex(startIndex);
       navigate({
         to: "/player",
         search: {
           videoId: video.videoId,
-          playlistId,
+          playlistId: isCustomPlaylist ? playlistId : playlistId,
           playlistIndex: startIndex,
         },
       });
     }
   };
 
-  const handlePlayVideo = (videoIndex: number): void => {
-    setCurrentVideoIndex(videoIndex);
-    updatePlaybackMutation.mutate({ videoIndex });
-    const video = data?.videos[videoIndex];
+  const handlePlayVideo = (index: number): void => {
+    const video = data?.videos[index];
     if (video && playlistId) {
       navigate({
         to: "/player",
         search: {
           videoId: video.videoId,
           playlistId,
-          playlistIndex: videoIndex,
+          playlistIndex: index,
         },
       });
     }
   };
-
-  const data = query.data;
-  // Show title from data if available, otherwise show "Loading..." during initial load
-  const title =
-    data?.title ?? (query.isLoading ? "Loading Playlist..." : (playlistId ?? "Playlist"));
-
-  const progress =
-    data?.itemCount && data?.currentVideoIndex
-      ? Math.round((data.currentVideoIndex / data.itemCount) * 100)
-      : 0;
-
-  // Calculate download statistics
-  const downloadStats = useMemo(() => {
-    if (!data?.videos) return { downloaded: 0, notDownloaded: 0, total: 0 };
-    const downloaded = data.videos.filter(
-      (v) => v.downloadStatus === "completed" && v.downloadFilePath
-    ).length;
-    return {
-      downloaded,
-      notDownloaded: data.videos.length - downloaded,
-      total: data.videos.length,
-    };
-  }, [data?.videos]);
 
   const handleToggleVideo = (videoId: string): void => {
     setSelectedVideoIds((prev) => {
@@ -146,15 +230,15 @@ export default function PlaylistPage(): React.JSX.Element {
   };
 
   const handleToggleAll = (): void => {
-    if (!data?.videos) return;
-    const notDownloadedVideos = data.videos.filter(
-      (v) => v.downloadStatus !== "completed" || !v.downloadFilePath
-    );
     if (selectedVideoIds.size === notDownloadedVideos.length) {
       setSelectedVideoIds(new Set());
     } else {
       setSelectedVideoIds(new Set(notDownloadedVideos.map((v) => v.videoId)));
     }
+  };
+
+  const handleClearSelection = (): void => {
+    setSelectedVideoIds(new Set());
   };
 
   const handleDownloadSelected = (): void => {
@@ -168,252 +252,205 @@ export default function PlaylistPage(): React.JSX.Element {
     downloadMutation.mutate(urls);
   };
 
-  return (
-    <div className="container mx-auto space-y-6 p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between text-base">
-            <span>{title}</span>
-            {query.dataUpdatedAt > 0 && (
-              <span className="text-xs text-muted-foreground">
-                {query.isFetching ? (
-                  <>
-                    <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
-                    Refreshing…
-                  </>
-                ) : (
-                  <>Last updated: {new Date(query.dataUpdatedAt).toLocaleString()}</>
-                )}
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {query.isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : !playlistId ? (
-            <Alert>
-              <AlertTitle>Missing playlist</AlertTitle>
-              <AlertDescription>No playlist id provided.</AlertDescription>
-            </Alert>
-          ) : !data ? (
-            <Alert>
-              <AlertTitle>Not found</AlertTitle>
-              <AlertDescription>Could not find that playlist.</AlertDescription>
-            </Alert>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-start gap-4">
-                {typeof data?.thumbnailUrl === "string" &&
-                data.thumbnailUrl.includes("no_thumbnail") ? (
-                  <div className="aspect-video w-48 rounded bg-muted" />
-                ) : (
-                  <Thumbnail
-                    thumbnailPath={data?.thumbnailPath}
-                    thumbnailUrl={data?.thumbnailUrl}
-                    alt={title}
-                    className="aspect-video w-48 rounded object-cover"
-                  />
-                )}
-                <div className="flex-1 space-y-2">
-                  {data?.description && (
-                    <p className="line-clamp-5 whitespace-pre-line text-sm text-muted-foreground">
-                      {data.description}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                    {typeof data?.itemCount === "number" && <span>{data.itemCount} items</span>}
-                    {progress > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        {progress}% complete
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <Badge variant="default" className="flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" />
-                      {downloadStats.downloaded} Downloaded
-                    </Badge>
-                    {downloadStats.notDownloaded > 0 ? (
-                      <Badge variant="outline" className="flex items-center gap-1">
-                        <Download className="h-3 w-3" />
-                        {downloadStats.notDownloaded} To Download
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant="secondary"
-                        className="flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400"
-                      >
-                        <CheckCircle2 className="h-3 w-3" />
-                        All Downloaded
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <Button size="sm" onClick={handlePlayAll} className="flex items-center gap-2">
-                      <Play className="h-4 w-4" />
-                      {progress > 0 ? "Continue Playlist" : "Play All"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleRefresh}
-                      disabled={query.isFetching || isRefreshing}
-                    >
-                      {query.isFetching || isRefreshing ? "Refreshing…" : "Refresh"}
-                    </Button>
-                    {downloadStats.notDownloaded > 0 && (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={handleDownloadSelected}
-                        disabled={selectedVideoIds.size === 0 || downloadMutation.isPending}
-                        className="flex items-center gap-2"
-                      >
-                        {downloadMutation.isPending ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Adding...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="h-4 w-4" />
-                            Download ({selectedVideoIds.size})
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                  {progress > 0 && (
-                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full bg-primary transition-all"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
+  const handleDeletePlaylist = (): void => {
+    deletePlaylistMutation.mutate();
+    setShowDeleteDialog(false);
+  };
 
-              {downloadStats.notDownloaded > 0 && (
-                <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-3">
-                  <Checkbox
-                    id="select-all"
-                    checked={
-                      selectedVideoIds.size > 0 &&
-                      selectedVideoIds.size ===
-                        data.videos.filter(
-                          (v) => v.downloadStatus !== "completed" || !v.downloadFilePath
-                        ).length
-                    }
-                    onCheckedChange={handleToggleAll}
-                  />
-                  <label htmlFor="select-all" className="flex-1 cursor-pointer text-sm font-medium">
-                    Select all not downloaded ({downloadStats.notDownloaded} videos)
-                  </label>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {(data?.videos ?? []).map((v, index) => {
-                  const isCurrentVideo = index === (data?.currentVideoIndex || 0);
-                  const isDownloaded = v.downloadStatus === "completed" && v.downloadFilePath;
-                  const isSelected = selectedVideoIds.has(v.videoId);
-                  const hideNoThumb =
-                    typeof v.thumbnailUrl === "string" && v.thumbnailUrl.includes("no_thumbnail");
-                  return (
-                    <div
-                      key={v.videoId}
-                      className={`group cursor-pointer space-y-2 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/50 ${
-                        isCurrentVideo
-                          ? "border-primary bg-primary/10 dark:bg-primary/20"
-                          : isSelected
-                            ? "border-primary/60 bg-primary/5 dark:bg-primary/15"
-                            : "hover:border-primary/30"
-                      }`}
-                      onClick={() => handlePlayVideo(index)}
-                    >
-                      <div className="relative">
-                        {hideNoThumb ? (
-                          <div className="aspect-video w-full rounded bg-muted" />
-                        ) : (
-                          <Thumbnail
-                            thumbnailPath={v.thumbnailPath}
-                            thumbnailUrl={v.thumbnailUrl}
-                            alt={v.title}
-                            className="aspect-video w-full rounded object-cover"
-                          />
-                        )}
-                        {!isDownloaded && (
-                          <div
-                            className="absolute left-2 top-2"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleVideo(v.videoId);
-                            }}
-                          >
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={() => handleToggleVideo(v.videoId)}
-                              className="h-5 w-5 bg-white shadow-lg"
-                            />
-                          </div>
-                        )}
-                        <div className="absolute bottom-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white">
-                          #{index + 1}
-                        </div>
-                        {isCurrentVideo && (
-                          <div className="absolute right-2 top-2">
-                            <Badge variant="default" className="flex items-center gap-1">
-                              <ListIcon className="h-3 w-3" />
-                              Current
-                            </Badge>
-                          </div>
-                        )}
-                        {isDownloaded && !isCurrentVideo && (
-                          <div className="absolute right-2 top-2">
-                            <Badge
-                              variant="default"
-                              className="flex items-center gap-1 bg-green-600"
-                            >
-                              <CheckCircle2 className="h-3 w-3" />
-                              Downloaded
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <div className="line-clamp-2 text-sm font-medium">{v.title}</div>
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <div className="flex gap-3">
-                            {typeof v.durationSeconds === "number" && (
-                              <span>{Math.round(v.durationSeconds / 60)} min</span>
-                            )}
-                            {typeof v.viewCount === "number" && (
-                              <span>{v.viewCount.toLocaleString()} views</span>
-                            )}
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0 opacity-0 transition-opacity group-hover:opacity-100"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void trpcClient.utils.openExternalUrl.mutate({ url: v.url });
-                            }}
-                          >
-                            <Play className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+  // Loading state
+  if (query.isLoading) {
+    return (
+      <PageContainer className="space-y-6">
+        <PlaylistHeaderSkeleton />
+        <div
+          className={cn(
+            "grid gap-4",
+            viewMode === "grid"
+              ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              : "grid-cols-1"
           )}
-        </CardContent>
-      </Card>
-    </div>
+        >
+          {Array.from({ length: 8 }).map((_, i) => (
+            <PlaylistVideoCardSkeleton key={i} />
+          ))}
+        </div>
+      </PageContainer>
+    );
+  }
+
+  // Missing playlist ID
+  if (!playlistId) {
+    return (
+      <PageContainer>
+        <Alert>
+          <AlertTitle>Missing playlist</AlertTitle>
+          <AlertDescription>No playlist ID provided.</AlertDescription>
+        </Alert>
+      </PageContainer>
+    );
+  }
+
+  // Playlist not found
+  if (!data) {
+    return (
+      <PageContainer>
+        <Alert>
+          <AlertTitle>Not found</AlertTitle>
+          <AlertDescription>Could not find that playlist.</AlertDescription>
+        </Alert>
+      </PageContainer>
+    );
+  }
+
+  const title = data.title ?? playlistId;
+
+  return (
+    <PageContainer className="space-y-6">
+      {/* Custom playlist badge and actions */}
+      {isCustomPlaylist && (
+        <div className="flex items-center justify-between">
+          <Badge variant="secondary" className="flex items-center gap-1.5">
+            <FolderHeart className="h-3.5 w-3.5" />
+            My Playlist
+          </Badge>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <MoreVertical className="h-4 w-4" />
+                Actions
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit Playlist
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setShowDeleteDialog(true)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Playlist
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+
+      <PlaylistHeader
+        title={title}
+        description={data.description}
+        thumbnailUrl={data.thumbnailUrl}
+        thumbnailPath={data.thumbnailPath}
+        itemCount={stats.total}
+        currentVideoIndex={data.currentVideoIndex || 0}
+        downloadedCount={stats.downloaded}
+        isRefreshing={query.isFetching || isRefreshing}
+        lastUpdated={query.dataUpdatedAt}
+        onPlayAll={handlePlayAll}
+        onRefresh={handleRefresh}
+      />
+
+      <BatchDownloadBar
+        selectedCount={selectedVideoIds.size}
+        totalNotDownloaded={stats.notDownloaded}
+        isDownloading={downloadMutation.isPending}
+        onSelectAll={handleToggleAll}
+        onClearSelection={handleClearSelection}
+        onDownload={handleDownloadSelected}
+        isAllSelected={selectedVideoIds.size === notDownloadedVideos.length}
+      />
+
+      <PlaylistFilters
+        filter={filter}
+        viewMode={viewMode}
+        totalCount={stats.total}
+        downloadedCount={stats.downloaded}
+        notDownloadedCount={stats.notDownloaded}
+        onFilterChange={setFilter}
+        onViewModeChange={setViewMode}
+      />
+
+      {filteredVideos.length === 0 ? (
+        <PlaylistEmptyState filter={filter} />
+      ) : (
+        <div
+          className={cn(
+            "grid gap-4",
+            viewMode === "grid"
+              ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+              : "grid-cols-1 md:grid-cols-2"
+          )}
+        >
+          {filteredVideos.map((video) => {
+            const originalIndex = (data.videos ?? []).findIndex((v) => v.videoId === video.videoId);
+            const isCurrentVideo = originalIndex === (data.currentVideoIndex || 0);
+
+            if (isCustomPlaylist) {
+              return (
+                <CustomPlaylistVideoCard
+                  key={video.videoId}
+                  video={video}
+                  index={originalIndex}
+                  playlistId={playlistId}
+                  totalVideos={data.videos?.length ?? 0}
+                  isCurrentVideo={isCurrentVideo}
+                  isSelected={selectedVideoIds.has(video.videoId)}
+                  onPlay={() => handlePlayVideo(originalIndex)}
+                  onToggleSelect={() => handleToggleVideo(video.videoId)}
+                  onRemoved={() => query.refetch()}
+                />
+              );
+            }
+
+            return (
+              <PlaylistVideoCard
+                key={video.videoId}
+                video={video}
+                index={originalIndex}
+                isCurrentVideo={isCurrentVideo}
+                isSelected={selectedVideoIds.has(video.videoId)}
+                onPlay={() => handlePlayVideo(originalIndex)}
+                onToggleSelect={() => handleToggleVideo(video.videoId)}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Edit dialog for custom playlists */}
+      {isCustomPlaylist && customQuery.data && (
+        <EditPlaylistDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          playlistId={playlistId}
+          initialName={customQuery.data.name}
+          initialDescription={customQuery.data.description}
+          onUpdated={() => customQuery.refetch()}
+        />
+      )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Playlist?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{title}"? This action cannot be undone. The videos
+              will not be deleted, only removed from this playlist.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeletePlaylist}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </PageContainer>
   );
 }

@@ -485,3 +485,73 @@ export const savedWordsRelations = relations(savedWords, ({ one }) => ({
     references: [translationCache.id],
   }),
 }));
+
+// Custom playlists table (user-created playlists, separate from YouTube playlists)
+export const customPlaylists = sqliteTable(
+  "custom_playlists",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description"),
+    itemCount: integer("item_count").default(0),
+
+    // Playback tracking (consistent with channelPlaylists)
+    viewCount: integer("view_count").default(0),
+    lastViewedAt: integer("last_viewed_at"),
+    currentVideoIndex: integer("current_video_index").default(0),
+    totalWatchTimeSeconds: integer("total_watch_time_seconds").default(0),
+
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at"),
+  },
+  (table) => [
+    index("custom_playlists_updated_at_idx").on(table.updatedAt),
+    index("custom_playlists_last_viewed_at_idx").on(table.lastViewedAt),
+  ]
+);
+
+// Junction table for custom playlist videos
+export const customPlaylistItems = sqliteTable(
+  "custom_playlist_items",
+  {
+    id: text("id").primaryKey(),
+    playlistId: text("playlist_id")
+      .notNull()
+      .references(() => customPlaylists.id, { onDelete: "cascade" }),
+    videoId: text("video_id")
+      .notNull()
+      .references(() => youtubeVideos.videoId, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    addedAt: integer("added_at").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at"),
+  },
+  (table) => [
+    index("custom_playlist_items_playlist_id_idx").on(table.playlistId),
+    index("custom_playlist_items_video_id_idx").on(table.videoId),
+    index("custom_playlist_items_position_idx").on(table.playlistId, table.position),
+    unique().on(table.playlistId, table.videoId),
+  ]
+);
+
+// Relations for custom playlists
+export const customPlaylistsRelations = relations(customPlaylists, ({ many }) => ({
+  items: many(customPlaylistItems),
+}));
+
+export const customPlaylistItemsRelations = relations(customPlaylistItems, ({ one }) => ({
+  playlist: one(customPlaylists, {
+    fields: [customPlaylistItems.playlistId],
+    references: [customPlaylists.id],
+  }),
+  video: one(youtubeVideos, {
+    fields: [customPlaylistItems.videoId],
+    references: [youtubeVideos.videoId],
+  }),
+}));
+
+export type CustomPlaylist = typeof customPlaylists.$inferSelect;
+export type NewCustomPlaylist = typeof customPlaylists.$inferInsert;
+
+export type CustomPlaylistItem = typeof customPlaylistItems.$inferSelect;
+export type NewCustomPlaylistItem = typeof customPlaylistItems.$inferInsert;

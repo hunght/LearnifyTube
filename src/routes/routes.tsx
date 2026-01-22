@@ -93,6 +93,7 @@ const PlaylistRoute = createRoute({
   validateSearch: (search: Record<string, unknown>) => {
     return {
       playlistId: typeof search.playlistId === "string" ? search.playlistId : undefined,
+      type: search.type === "custom" ? ("custom" as const) : undefined,
     };
   },
 });

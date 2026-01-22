@@ -5,6 +5,7 @@ import { trpcClient } from "@/utils/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PageContainer } from "@/components/ui/page-container";
 import { ExternalLink as ExternalLinkIcon, Loader2, Search, RefreshCw } from "lucide-react";
 import Thumbnail from "@/components/Thumbnail";
 
@@ -47,9 +48,9 @@ export default function SubscriptionsPage(): React.JSX.Element {
   };
 
   return (
-    <div className="container mx-auto space-y-6 p-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">Subscriptions</h1>
+    <PageContainer>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold sm:text-3xl">Subscriptions</h1>
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -196,6 +197,6 @@ export default function SubscriptionsPage(): React.JSX.Element {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

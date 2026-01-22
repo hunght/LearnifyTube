@@ -161,72 +161,76 @@ export function SRSCalendarView({
 
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="px-4 py-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <Calendar className="h-4 w-4 text-primary" />
             Review Calendar
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-6 w-6"
               onClick={() => navigateMonth(-1)}
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3 w-3" />
             </Button>
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={goToToday}>
-              Today
-            </Button>
+            <button
+              onClick={goToToday}
+              className="min-w-[100px] text-center text-xs font-medium hover:text-primary"
+              title="Go to today"
+            >
+              {MONTHS[currentMonth.getMonth()].slice(0, 3)} {currentMonth.getFullYear()}
+            </button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-6 w-6"
               onClick={() => navigateMonth(1)}
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3 w-3" />
             </Button>
           </div>
         </div>
-        <div className="text-center text-lg font-semibold">
-          {MONTHS[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Stats Summary */}
-        <div className="flex justify-center gap-6 rounded-lg bg-muted/50 py-2">
-          <div className="flex items-center gap-2">
-            <Flame className="h-4 w-4 text-orange-500" />
-            <span className="text-sm">
-              <span className="font-bold">{stats.todayDue}</span> due today
+      <CardContent className="space-y-2 px-4 pb-4 pt-0">
+        {/* Stats Summary - inline with header style */}
+        <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Flame className="h-3 w-3 text-orange-500" />
+            <span>
+              <span className="font-semibold text-foreground">{stats.todayDue}</span> due today
             </span>
           </div>
-          <div className="h-4 w-px bg-border" />
-          <div className="text-sm">
-            <span className="font-bold">{stats.weekTotal}</span> this week
-          </div>
+          <span className="text-border">|</span>
+          <span>
+            <span className="font-semibold text-foreground">{stats.weekTotal}</span> this week
+          </span>
         </div>
 
-        {/* Calendar Grid */}
-        <div className="grid grid-cols-7 gap-1">
+        {/* Calendar Grid - Compact */}
+        <div className="grid grid-cols-7 gap-0.5">
           {/* Day Headers */}
           {DAYS.map((day) => (
-            <div key={day} className="py-1 text-center text-xs font-medium text-muted-foreground">
-              {day}
+            <div
+              key={day}
+              className="py-0.5 text-center text-[10px] font-medium text-muted-foreground"
+            >
+              {day.charAt(0)}
             </div>
           ))}
 
-          {/* Calendar Cells */}
+          {/* Calendar Cells - Compact */}
           {calendarData.map((cell, idx) => (
             <div
               key={idx}
               className={cn(
-                "relative flex aspect-square items-center justify-center rounded-md text-sm transition-colors",
+                "relative flex h-6 w-full items-center justify-center rounded text-[11px] transition-colors",
                 cell.day === null && "bg-transparent",
-                cell.day !== null && "border",
-                cell.isToday && "ring-2 ring-primary ring-offset-1",
-                cell.isPast && cell.day !== null && "opacity-60",
+                cell.day !== null && "border border-border/50",
+                cell.isToday && "ring-1 ring-primary",
+                cell.isPast && cell.day !== null && "opacity-50",
                 getIntensityClass(cell.reviewCount, cell.isPast)
               )}
               title={
@@ -236,41 +240,37 @@ export function SRSCalendarView({
               }
             >
               {cell.day}
-              {/* Study indicator - small dot */}
+              {/* Study indicator */}
               {cell.hasStudied && (
-                <div className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-green-500" />
+                <div className="absolute -bottom-0.5 left-1/2 h-0.5 w-0.5 -translate-x-1/2 rounded-full bg-green-500" />
               )}
-              {/* Review count badge for high-count days */}
+              {/* Review count badge */}
               {cell.reviewCount >= 5 && (
-                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                  {cell.reviewCount > 9 ? "9+" : cell.reviewCount}
+                <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
+                  {cell.reviewCount > 9 ? "+" : cell.reviewCount}
                 </span>
               )}
             </div>
           ))}
         </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap items-center justify-center gap-4 pt-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <div className="h-3 w-3 rounded border bg-green-300 dark:bg-green-700" />
-            <span>1-2 cards</span>
+        {/* Legend - More compact */}
+        <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-0.5">
+            <div className="h-2 w-2 rounded-sm bg-green-300 dark:bg-green-700" />
+            <span>1-2</span>
           </div>
-          <div className="flex items-center gap-1">
-            <div className="h-3 w-3 rounded border bg-yellow-400" />
-            <span>3-4 cards</span>
+          <div className="flex items-center gap-0.5">
+            <div className="h-2 w-2 rounded-sm bg-yellow-400" />
+            <span>3-4</span>
           </div>
-          <div className="flex items-center gap-1">
-            <div className="h-3 w-3 rounded border bg-orange-400" />
-            <span>5-9 cards</span>
+          <div className="flex items-center gap-0.5">
+            <div className="h-2 w-2 rounded-sm bg-orange-400" />
+            <span>5-9</span>
           </div>
-          <div className="flex items-center gap-1">
-            <div className="h-3 w-3 rounded border bg-red-500" />
-            <span>10+ cards</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="h-1 w-1 rounded-full bg-green-500" />
-            <span>Studied</span>
+          <div className="flex items-center gap-0.5">
+            <div className="h-2 w-2 rounded-sm bg-red-500" />
+            <span>10+</span>
           </div>
         </div>
       </CardContent>

@@ -10,7 +10,6 @@ import {
   setPlaybackData,
 } from "./playerStore";
 
-// eslint-disable-next-line import/no-unused-modules
 export function _ensurePlayerStoreExportsAreReferenced(): void {
   void getState();
   void subscribe(() => {});

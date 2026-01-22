@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSetAtom } from "jotai";
 import { Plus } from "lucide-react";
 import { trpcClient } from "@/utils/trpc";
-import { rightSidebarContentAtom } from "@/context/rightSidebar";
 import { Button } from "@/components/ui/button";
+import { PageContainer } from "@/components/ui/page-container";
 import { QuickAddDialog } from "@/components/QuickAddDialog";
 import { StudyStreakCard } from "./components/StudyStreakCard";
 import { QuickStatsRow } from "./components/QuickStatsRow";
@@ -19,15 +18,6 @@ const getGreeting = (): string => {
 
 export default function HomePage(): React.JSX.Element {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const setRightSidebarContent = useSetAtom(rightSidebarContentAtom);
-
-  // Set right sidebar to learning stats when on home page
-  useEffect(() => {
-    setRightSidebarContent("learning-stats");
-    return () => {
-      setRightSidebarContent("queue");
-    };
-  }, [setRightSidebarContent]);
 
   // Fetch dashboard stats
   const statsQuery = useQuery({
@@ -63,20 +53,21 @@ export default function HomePage(): React.JSX.Element {
       : 0;
 
   return (
-    <div className="container mx-auto min-h-screen space-y-6 p-4 pb-8 md:p-6 lg:p-8">
+    <PageContainer>
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
             {getGreeting()}!
           </h1>
           <p className="mt-1 text-sm text-muted-foreground sm:text-base">
             Ready to continue your learning journey?
           </p>
         </div>
-        <Button onClick={() => setQuickAddOpen(true)} className="gap-2" size="lg">
+        <Button onClick={() => setQuickAddOpen(true)} className="shrink-0 gap-2" size="lg">
           <Plus className="h-4 w-4" />
-          Add Video
+          <span className="hidden sm:inline">Add Video</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       </div>
 
@@ -105,6 +96,6 @@ export default function HomePage(): React.JSX.Element {
 
       {/* Quick Add Dialog */}
       <QuickAddDialog open={quickAddOpen} onOpenChange={setQuickAddOpen} />
-    </div>
+    </PageContainer>
   );
 }

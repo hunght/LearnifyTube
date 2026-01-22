@@ -3,6 +3,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PageContainer } from "@/components/ui/page-container";
 import { Clock, PlayCircle, Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import Thumbnail from "@/components/Thumbnail";
@@ -37,9 +38,9 @@ export default function HistoryPage(): React.JSX.Element {
       : 0;
 
   return (
-    <div className="container mx-auto space-y-6 p-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">History</h1>
+    <PageContainer>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold sm:text-3xl">History</h1>
         {totalWatchedMinutes > 0 && (
           <div className="flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary">
             <Clock className="h-4 w-4" />
@@ -172,6 +173,6 @@ export default function HistoryPage(): React.JSX.Element {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

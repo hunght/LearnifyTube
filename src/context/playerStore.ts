@@ -21,7 +21,6 @@ export interface PlaybackData {
   [key: string]: unknown;
 }
 
-// eslint-disable-next-line import/no-unused-modules
 export interface PlayerState {
   videoId: string | null;
   playlistId: string | null;

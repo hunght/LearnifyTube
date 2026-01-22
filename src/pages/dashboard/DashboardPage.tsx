@@ -5,6 +5,7 @@ import { trpcClient } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PageContainer } from "@/components/ui/page-container";
 import { toast } from "sonner";
 import { logger } from "@/helpers/logger";
 import {
@@ -366,7 +367,7 @@ export default function DashboardPage(): React.JSX.Element {
     if (playlistId) {
       logger.debug("Dashboard navigating to playlist", { url, playlistId });
       // Navigate to playlist page
-      navigate({ to: "/playlist", search: { playlistId } });
+      navigate({ to: "/playlist", search: { playlistId, type: undefined } });
       return;
     }
 
@@ -382,16 +383,18 @@ export default function DashboardPage(): React.JSX.Element {
   });
 
   return (
-    <div className="container mx-auto min-h-screen space-y-6 p-4 pb-8 md:p-6 lg:p-8">
+    <PageContainer>
       {/* Header Section */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">Dashboard</h1>
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+            Dashboard
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground sm:text-base">
             Download and manage your YouTube videos
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           <TrendingUp className="h-4 w-4" />
           <span className="hidden sm:inline">Quick access to your content</span>
         </div>
@@ -773,6 +776,6 @@ export default function DashboardPage(): React.JSX.Element {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

@@ -3,7 +3,7 @@ import { trpcClient } from "@/utils/trpc";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Database, FolderOpen, Languages } from "lucide-react";
+import { Database, FolderOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { LanguagePreferencesSection } from "@/pages/settings-page/components/LanguagePreferencesSection";
 
@@ -211,18 +211,7 @@ export function SystemTab(): React.JSX.Element {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Languages className="h-5 w-5" />
-            Language Preferences
-          </CardTitle>
-          <CardDescription>Manage which languages appear in transcript selectors</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LanguagePreferencesSection />
-        </CardContent>
-      </Card>
+      <LanguagePreferencesSection />
     </div>
   );
 }

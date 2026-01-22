@@ -14,6 +14,7 @@ import { upsertChannelData } from "@/api/utils/ytdlp-utils/database";
 import { spawnYtDlpWithLogging, extractVideoId, runYtDlpJson } from "@/api/utils/ytdlp-utils/ytdlp";
 import { downloadImageToCache } from "@/api/utils/ytdlp-utils/cache";
 import { eq, desc, inArray, sql } from "drizzle-orm";
+import { getBackgroundJobsManager } from "@/services/background-jobs/job-manager";
 import {
   youtubeVideos,
   channels,
@@ -903,6 +904,8 @@ export const ytdlpRouter = t.router({
         lastPositionSeconds,
         thumbnailUrl: v.thumbnailUrl,
         thumbnailPath: v.thumbnailPath,
+        channelTitle: v.channelTitle,
+        durationSeconds: v.durationSeconds,
       } as const;
     }),
 
@@ -978,6 +981,14 @@ export const ytdlpRouter = t.router({
 
       logger.info("[ytdlp] Fetching channel info from URL", { url: input.url });
 
+      // Create background job for tracking
+      const jobManager = getBackgroundJobsManager();
+      const job = jobManager.createJob({
+        type: "channel_fetch",
+        title: "Loading channel info...",
+      });
+      jobManager.startJob(job.id);
+
       // For channel URLs, use --flat-playlist with limit to avoid fetching all videos
       // This gets channel metadata quickly without processing every video
       let meta: unknown;
@@ -1011,6 +1022,7 @@ export const ytdlpRouter = t.router({
 
         meta = JSON.parse(metaJson);
       } catch (error) {
+        jobManager.failJob(job.id, error instanceof Error ? error.message : String(error));
         logger.error("[ytdlp] Failed to fetch channel info", {
           url: input.url,
           error: error instanceof Error ? error.message : String(error),
@@ -1022,6 +1034,7 @@ export const ytdlpRouter = t.router({
       const channelData = extractChannelData(meta);
 
       if (!channelData || !channelData.channelId) {
+        jobManager.failJob(job.id, "Failed to extract channel data from YouTube response");
         throw new Error("Failed to extract channel data from YouTube response");
       }
 
@@ -1040,6 +1053,9 @@ export const ytdlpRouter = t.router({
         .from(channels)
         .where(eq(channels.channelId, channelData.channelId))
         .limit(1);
+
+      // Mark job as completed
+      jobManager.completeJob(job.id);
 
       return {
         success: true as const,
@@ -1154,30 +1170,45 @@ export const ytdlpRouter = t.router({
         return fallback.map(toVideoResponse);
       }
 
-      const url = `https://www.youtube.com/channel/${input.channelId}/videos?view=0&sort=dd&flow=grid`;
-      const listing = await new Promise<string>((resolve, reject) => {
-        const proc = spawnYtDlpWithLogging(
-          binPath,
-          ["-J", "--flat-playlist", url],
-          { stdio: ["ignore", "pipe", "pipe"] },
-          {
-            operation: "list_playlist_videos",
-            url,
-            channelId: input.channelId,
-            other: { flatPlaylist: true, sort: "dd" },
-          }
-        );
-        let out = "";
-        let err = "";
-        proc.stdout?.on("data", (d: Buffer | string) => (out += d.toString()));
-        proc.stderr?.on("data", (d: Buffer | string) => (err += d.toString()));
-        proc.on("error", reject);
-        proc.on("close", (code) =>
-          code === 0 ? resolve(out) : reject(new Error(err || `yt-dlp exited ${code}`))
-        );
+      // Create background job for tracking
+      const jobManager = getBackgroundJobsManager();
+      const job = jobManager.createJob({
+        type: "channel_latest",
+        title: "Loading latest videos...",
+        entityId: input.channelId,
       });
+      jobManager.startJob(job.id);
 
-      const listData = playlistResponseSchema.parse(JSON.parse(listing));
+      let listData;
+      try {
+        const url = `https://www.youtube.com/channel/${input.channelId}/videos?view=0&sort=dd&flow=grid`;
+        const listing = await new Promise<string>((resolve, reject) => {
+          const proc = spawnYtDlpWithLogging(
+            binPath,
+            ["-J", "--flat-playlist", url],
+            { stdio: ["ignore", "pipe", "pipe"] },
+            {
+              operation: "list_playlist_videos",
+              url,
+              channelId: input.channelId,
+              other: { flatPlaylist: true, sort: "dd" },
+            }
+          );
+          let out = "";
+          let err = "";
+          proc.stdout?.on("data", (d: Buffer | string) => (out += d.toString()));
+          proc.stderr?.on("data", (d: Buffer | string) => (err += d.toString()));
+          proc.on("error", reject);
+          proc.on("close", (code) =>
+            code === 0 ? resolve(out) : reject(new Error(err || `yt-dlp exited ${code}`))
+          );
+        });
+
+        listData = playlistResponseSchema.parse(JSON.parse(listing));
+      } catch (error) {
+        jobManager.failJob(job.id, error instanceof Error ? error.message : String(error));
+        throw error;
+      }
 
       // Log available fields from the first entry to understand the data structure
       if (listData.entries?.[0]) {
@@ -1306,6 +1337,9 @@ export const ytdlpRouter = t.router({
         });
       }
 
+      // Mark job as completed
+      jobManager.completeJob(job.id);
+
       return videos.map(toVideoResponse);
     }),
 
@@ -1361,30 +1395,45 @@ export const ytdlpRouter = t.router({
         return sorted.map(toVideoResponse);
       }
 
-      const url = `https://www.youtube.com/channel/${input.channelId}/videos?view=0&sort=p&flow=grid`;
-      const listing = await new Promise<string>((resolve, reject) => {
-        const proc = spawnYtDlpWithLogging(
-          binPath,
-          ["-J", "--flat-playlist", url],
-          { stdio: ["ignore", "pipe", "pipe"] },
-          {
-            operation: "fetch_channel_videos",
-            url,
-            channelId: input.channelId,
-            other: { flatPlaylist: true },
-          }
-        );
-        let out = "";
-        let err = "";
-        proc.stdout?.on("data", (d: Buffer | string) => (out += d.toString()));
-        proc.stderr?.on("data", (d: Buffer | string) => (err += d.toString()));
-        proc.on("error", reject);
-        proc.on("close", (code) =>
-          code === 0 ? resolve(out) : reject(new Error(err || `yt-dlp exited ${code}`))
-        );
+      // Create background job for tracking
+      const jobManager = getBackgroundJobsManager();
+      const job = jobManager.createJob({
+        type: "channel_popular",
+        title: "Loading popular videos...",
+        entityId: input.channelId,
       });
+      jobManager.startJob(job.id);
 
-      const listData = playlistResponseSchema.parse(JSON.parse(listing));
+      let listData;
+      try {
+        const url = `https://www.youtube.com/channel/${input.channelId}/videos?view=0&sort=p&flow=grid`;
+        const listing = await new Promise<string>((resolve, reject) => {
+          const proc = spawnYtDlpWithLogging(
+            binPath,
+            ["-J", "--flat-playlist", url],
+            { stdio: ["ignore", "pipe", "pipe"] },
+            {
+              operation: "fetch_channel_videos",
+              url,
+              channelId: input.channelId,
+              other: { flatPlaylist: true },
+            }
+          );
+          let out = "";
+          let err = "";
+          proc.stdout?.on("data", (d: Buffer | string) => (out += d.toString()));
+          proc.stderr?.on("data", (d: Buffer | string) => (err += d.toString()));
+          proc.on("error", reject);
+          proc.on("close", (code) =>
+            code === 0 ? resolve(out) : reject(new Error(err || `yt-dlp exited ${code}`))
+          );
+        });
+
+        listData = playlistResponseSchema.parse(JSON.parse(listing));
+      } catch (error) {
+        jobManager.failJob(job.id, error instanceof Error ? error.message : String(error));
+        throw error;
+      }
 
       // Log available fields from the first entry to understand the data structure
       if (listData.entries?.[0]) {
@@ -1515,6 +1564,9 @@ export const ytdlpRouter = t.router({
         });
       }
 
+      // Mark job as completed
+      jobManager.completeJob(job.id);
+
       return sorted.map(toVideoResponse);
     }),
 
@@ -1574,30 +1626,45 @@ export const ytdlpRouter = t.router({
         return fallback.map(toPlaylistResponse);
       }
 
-      // 2) Refresh from yt-dlp
-      const url = `https://www.youtube.com/channel/${input.channelId}/playlists`;
-      const json = await new Promise<string>((resolve, reject) => {
-        const proc = spawnYtDlpWithLogging(
-          binPath,
-          ["-J", "--flat-playlist", url],
-          { stdio: ["ignore", "pipe", "pipe"] },
-          {
-            operation: "fetch_channel_playlists",
-            url,
-            channelId: input.channelId,
-            other: { flatPlaylist: true },
-          }
-        );
-        let out = "";
-        let err = "";
-        proc.stdout?.on("data", (d: Buffer | string) => (out += d.toString()));
-        proc.stderr?.on("data", (d: Buffer | string) => (err += d.toString()));
-        proc.on("error", reject);
-        proc.on("close", (code) =>
-          code === 0 ? resolve(out) : reject(new Error(err || `yt-dlp exited ${code}`))
-        );
+      // Create background job for tracking
+      const jobManager = getBackgroundJobsManager();
+      const job = jobManager.createJob({
+        type: "channel_playlists",
+        title: "Loading channel playlists...",
+        entityId: input.channelId,
       });
-      const data = playlistsListResponseSchema.parse(JSON.parse(json));
+      jobManager.startJob(job.id);
+
+      let data;
+      try {
+        // 2) Refresh from yt-dlp
+        const url = `https://www.youtube.com/channel/${input.channelId}/playlists`;
+        const json = await new Promise<string>((resolve, reject) => {
+          const proc = spawnYtDlpWithLogging(
+            binPath,
+            ["-J", "--flat-playlist", url],
+            { stdio: ["ignore", "pipe", "pipe"] },
+            {
+              operation: "fetch_channel_playlists",
+              url,
+              channelId: input.channelId,
+              other: { flatPlaylist: true },
+            }
+          );
+          let out = "";
+          let err = "";
+          proc.stdout?.on("data", (d: Buffer | string) => (out += d.toString()));
+          proc.stderr?.on("data", (d: Buffer | string) => (err += d.toString()));
+          proc.on("error", reject);
+          proc.on("close", (code) =>
+            code === 0 ? resolve(out) : reject(new Error(err || `yt-dlp exited ${code}`))
+          );
+        });
+        data = playlistsListResponseSchema.parse(JSON.parse(json));
+      } catch (error) {
+        jobManager.failJob(job.id, error instanceof Error ? error.message : String(error));
+        throw error;
+      }
       const entries = (data.entries ?? []).slice(0, limit);
       const now = Date.now();
 
@@ -1732,6 +1799,9 @@ export const ytdlpRouter = t.router({
           error: String(e),
         });
       }
+
+      // Mark job as completed
+      jobManager.completeJob(job.id);
 
       return cached.map(toPlaylistResponse);
     }),

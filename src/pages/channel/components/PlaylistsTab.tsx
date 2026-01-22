@@ -111,7 +111,7 @@ export const PlaylistsTab: React.FC<PlaylistsTabProps> = ({ channelId, isActive:
                       if (pid) {
                         navigate({
                           to: "/playlist",
-                          search: { playlistId: pid },
+                          search: { playlistId: pid, type: undefined },
                         });
                       } else {
                         trpcClient.utils.openExternalUrl.mutate({ url: playlistUrl });

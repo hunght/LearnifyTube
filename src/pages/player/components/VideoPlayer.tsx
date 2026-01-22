@@ -13,6 +13,7 @@ interface VideoPlayerProps {
   onSeekIndicator?: (indicator: { direction: "forward" | "backward"; amount: number }) => void;
   onError?: () => void;
   className?: string;
+  autoPlay?: boolean;
 }
 
 export function VideoPlayer({
@@ -22,6 +23,7 @@ export function VideoPlayer({
   onSeekIndicator,
   onError,
   className,
+  autoPlay = true,
 }: VideoPlayerProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const isSeekingRef = useRef<boolean>(false);
@@ -440,7 +442,7 @@ export function VideoPlayer({
             ref={videoRef}
             key={videoSrc}
             src={videoSrc}
-            autoPlay
+            autoPlay={autoPlay}
             controls
             className={cn("max-h-[60vh] w-full rounded border bg-black", className)}
             onTimeUpdate={onTimeUpdate}

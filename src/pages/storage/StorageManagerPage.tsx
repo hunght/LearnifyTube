@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PageContainer } from "@/components/ui/page-container";
 import {
   Table,
   TableBody,
@@ -83,7 +84,6 @@ const STALE_DAYS_THRESHOLD = 30;
 
 export default function StorageManagerPage(): React.JSX.Element {
   const [search, setSearch] = useState("");
-  const [fileFilter, setFileFilter] = useState<"all" | "missing">("all");
   const [sortKey, setSortKey] = useState<"size" | "lastWatched">("size");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [activityFilter, setActivityFilter] = useState<"all" | "never" | "30d" | "90d">("all");
@@ -342,7 +342,8 @@ export default function StorageManagerPage(): React.JSX.Element {
 
   const filteredVideos = useMemo(() => {
     if (!downloadsQuery.data) return [];
-    let list = downloadsQuery.data;
+    // Only show videos that have files
+    let list = downloadsQuery.data.filter((video) => video.fileExists);
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -352,10 +353,6 @@ export default function StorageManagerPage(): React.JSX.Element {
           (video.channelTitle?.toLowerCase().includes(q) ?? false) ||
           video.videoId.toLowerCase().includes(q)
       );
-    }
-
-    if (fileFilter === "missing") {
-      list = list.filter((video) => !video.fileExists);
     }
 
     if (activityFilter !== "all") {
@@ -389,7 +386,7 @@ export default function StorageManagerPage(): React.JSX.Element {
       }
     });
     return sorted;
-  }, [downloadsQuery.data, search, fileFilter, activityFilter, sortKey, sortOrder]);
+  }, [downloadsQuery.data, search, activityFilter, sortKey, sortOrder]);
 
   const selectedIds = useMemo(
     () => Object.keys(selected).filter((videoId) => selected[videoId]),
@@ -508,12 +505,12 @@ export default function StorageManagerPage(): React.JSX.Element {
       optimizationStatusQuery.data.data.stats.totalQueued > 0);
 
   return (
-    <div className="container mx-auto space-y-6 p-6">
+    <PageContainer>
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <HardDrive className="h-6 w-6 text-primary" />
-          <h1 className="text-3xl font-bold">Storage Manager</h1>
+          <HardDrive className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
+          <h1 className="text-2xl font-bold sm:text-3xl">Storage Manager</h1>
         </div>
         <div className="flex items-center gap-2">
           {selectedIds.length > 0 && (
@@ -819,28 +816,6 @@ export default function StorageManagerPage(): React.JSX.Element {
         </div>
         <div className="flex items-center gap-4 border-l pl-4">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">Status:</span>
-            <div className="flex gap-1">
-              <Button
-                variant={fileFilter === "all" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-2.5 text-xs"
-                onClick={() => setFileFilter("all")}
-              >
-                All
-              </Button>
-              <Button
-                variant={fileFilter === "missing" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-2.5 text-xs"
-                onClick={() => setFileFilter("missing")}
-              >
-                <FileWarning className="mr-1 h-3 w-3" />
-                Missing
-              </Button>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">Watched:</span>
             <div className="flex gap-1">
               {(
@@ -892,9 +867,9 @@ export default function StorageManagerPage(): React.JSX.Element {
             </div>
           ) : filteredVideos.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
-              {search || fileFilter !== "all" || activityFilter !== "all"
+              {search || activityFilter !== "all"
                 ? "No videos match your filters."
-                : "No completed downloads yet."}
+                : "No downloaded videos with files."}
             </div>
           ) : (
             <Table>
@@ -1155,6 +1130,6 @@ export default function StorageManagerPage(): React.JSX.Element {
         isLoading={optimizeMutation.isPending}
         ffmpegAvailable={ffmpegStatusQuery.data?.available ?? true}
       />
-    </div>
+    </PageContainer>
   );
 }

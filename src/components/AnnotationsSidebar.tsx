@@ -1,11 +1,10 @@
 import React, { useRef, useMemo, useEffect, useCallback, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAtom } from "jotai";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Trash2, Clock, Plus, X, Quote, Send, Camera, Square, Film } from "lucide-react";
+import { Trash2, Clock, Plus, X, Send, Camera, Square, Film } from "lucide-react";
 import { trpcClient } from "@/utils/trpc";
 import { toast } from "sonner";
 import { transcriptSelectionAtom } from "@/context/annotations";
@@ -343,120 +342,128 @@ export function AnnotationsSidebar({
   }, [activeAnnotationId]);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold">Notes</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {annotations.length} {annotations.length === 1 ? "note" : "notes"}
-        </p>
+    <div className="flex h-full flex-col p-3">
+      {/* Header */}
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Notes</h2>
+          <p className="text-[11px] text-muted-foreground">
+            {annotations.length} {annotations.length === 1 ? "note" : "notes"}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 rounded-full bg-muted/50 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          {formatTimestamp(timestamp)}
+        </div>
       </div>
 
-      {/* Add Note Section */}
-      <Card className="mb-4 border bg-muted/20 shadow-sm">
-        <CardContent className="space-y-3 p-3">
-          {selectedText && (
-            <div className="relative rounded border bg-background p-3 text-sm italic text-muted-foreground shadow-sm">
-              <Quote className="absolute -left-2 -top-2 h-4 w-4 fill-primary/10 text-primary" />
-              <span className="block pl-1">"{selectedText}"</span>
-              <button
-                onClick={handleClearSelection}
-                className="absolute -right-2 -top-2 rounded-full border bg-background p-1 text-muted-foreground shadow transition-all hover:text-foreground hover:shadow-md"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          )}
+      {/* Composer Card */}
+      <div className="mb-3 rounded-lg border border-border/50 bg-card/50 p-3 shadow-sm">
+        {/* Selected Text Quote */}
+        {selectedText && (
+          <div className="relative mb-3 rounded-md bg-primary/5 p-2.5 pl-3">
+            <div className="absolute left-0 top-0 h-full w-1 rounded-l-md bg-primary/40" />
+            <p className="line-clamp-2 pr-6 text-xs italic text-muted-foreground">
+              "{selectedText}"
+            </p>
+            <button
+              onClick={handleClearSelection}
+              className="absolute right-1.5 top-1.5 rounded-full p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
 
-          <div className="mb-1 flex items-center justify-between px-1 text-xs font-medium text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5" />
-              {formatTimestamp(timestamp)}
-            </span>
+        {/* Screenshot Preview */}
+        {screenshotPreview && (
+          <div className="relative mb-3 overflow-hidden rounded-md">
+            {screenshotPreview.startsWith("data:video") ? (
+              <video
+                src={screenshotPreview}
+                autoPlay
+                loop
+                muted
+                className="max-h-[120px] w-full rounded-md object-cover"
+              />
+            ) : (
+              <img
+                src={screenshotPreview}
+                alt="Screenshot"
+                className="max-h-[100px] w-full rounded-md object-cover"
+              />
+            )}
+            <button
+              className="absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-black/80"
+              onClick={() => setScreenshotPreview(null)}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+
+        {/* Text Input */}
+        <Textarea
+          id="note-textarea"
+          placeholder={selectedText ? "Add your thoughts..." : "Write a note..."}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className="min-h-[60px] resize-none border-0 bg-transparent p-0 text-sm placeholder:text-muted-foreground/50 focus-visible:ring-0"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSave();
+            }
+          }}
+        />
+
+        {/* Divider */}
+        <div className="my-2.5 h-px bg-border/50" />
+
+        {/* Action Bar */}
+        <div className="flex items-center justify-between">
+          {/* Left: Emoji Tags */}
+          <div className="flex items-center gap-0.5">
+            {EMOJI_REACTIONS.map((reaction) => (
+              <button
+                key={reaction.label}
+                onClick={() => setEmoji(emoji === reaction.emoji ? null : reaction.emoji)}
+                className={`flex h-7 w-7 items-center justify-center rounded-md text-base transition-all hover:bg-muted ${
+                  emoji === reaction.emoji ? "bg-primary/10 ring-1 ring-primary/30" : ""
+                }`}
+                title={reaction.description}
+              >
+                {reaction.emoji}
+              </button>
+            ))}
           </div>
 
-          {screenshotPreview && (
-            <div className="relative mb-2 overflow-hidden rounded-md border border-border">
-              {screenshotPreview.startsWith("data:video") ? (
-                <video
-                  src={screenshotPreview}
-                  autoPlay
-                  loop
-                  muted
-                  className="max-h-[150px] w-full object-cover"
-                />
-              ) : (
-                <img
-                  src={screenshotPreview}
-                  alt="Screenshot"
-                  className="h-auto max-h-[120px] w-full object-cover"
-                />
-              )}
-              <button
-                className="absolute right-1 top-1 rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
-                onClick={() => setScreenshotPreview(null)}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          )}
-
-          <Textarea
-            id="note-textarea"
-            placeholder={selectedText ? "Add a thought..." : "Type a note at current time..."}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="min-h-[80px] resize-none border-input/50 bg-background text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-primary/30"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSave();
-              }
-            }}
-          />
-
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex gap-1.5">
-              {EMOJI_REACTIONS.map((reaction) => (
-                <button
-                  key={reaction.label}
-                  onClick={() => setEmoji(emoji === reaction.emoji ? null : reaction.emoji)}
-                  className={`rounded-md p-1.5 transition-all hover:scale-105 hover:bg-muted-foreground/10 active:scale-95 ${
-                    emoji === reaction.emoji
-                      ? "bg-primary/10 text-primary ring-1 ring-primary/30"
-                      : "text-muted-foreground"
-                  }`}
-                  title={reaction.label}
-                >
-                  <span className="text-lg leading-none drop-shadow-sm filter">
-                    {reaction.emoji}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Tools */}
+          {/* Right: Tools & Submit */}
+          <div className="flex items-center gap-1">
             <button
               onClick={captureScreenshot}
-              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title="Capture Screenshot"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Screenshot"
             >
-              <Camera className="h-4 w-4" />
+              <Camera className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={handleRecordToggle}
-              className={`rounded-md p-1.5 transition-colors ${isRecording ? "animate-pulse bg-destructive text-destructive-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
-              title={isRecording ? "Stop Recording" : "Record Video Loop"}
+              className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                isRecording
+                  ? "animate-pulse bg-red-500/10 text-red-500"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+              title={isRecording ? "Stop" : "Record Loop"}
             >
               {isRecording ? (
-                <Square className="h-4 w-4 fill-current" />
+                <Square className="h-3.5 w-3.5 fill-current" />
               ) : (
-                <Film className="h-4 w-4" />
+                <Film className="h-3.5 w-3.5" />
               )}
             </button>
 
-            <div className="mx-1 h-4 w-[1px] bg-border" />
+            <div className="mx-1 h-5 w-px bg-border/50" />
 
             <Button
               size="sm"
@@ -464,39 +471,37 @@ export function AnnotationsSidebar({
               disabled={
                 (!note.trim() && !emoji && !screenshotPreview) || createAnnotationMutation.isPending
               }
-              className="gap-2 shadow-sm transition-all active:scale-95"
+              className="h-7 gap-1.5 rounded-md px-3 text-xs font-medium"
             >
-              {createAnnotationMutation.isPending
-                ? "Saving..."
-                : isFlashcardMode
-                  ? "Add Note & Card"
-                  : "Add Note"}
-              <Send className="h-3.5 w-3.5" />
+              <Send className="h-3 w-3" />
+              {createAnnotationMutation.isPending ? "..." : "Save"}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <ScrollArea className="flex-1">
+      {/* Notes List */}
+      <ScrollArea className="-mx-3 flex-1 px-3">
         {annotationsQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading notes...</p>
+          <div className="flex items-center justify-center py-8">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
         ) : annotations.length === 0 ? (
-          <div className="px-4 py-8 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <Plus className="h-6 w-6 text-muted-foreground" />
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
+              <Plus className="h-5 w-5 text-muted-foreground/60" />
             </div>
-            <h3 className="mb-1 text-sm font-medium">No notes yet</h3>
-            <p className="text-xs text-muted-foreground">
-              Select text in the transcript to add a specific note, or just type above to catch a
-              thought.
+            <p className="text-xs font-medium text-muted-foreground">No notes yet</p>
+            <p className="mt-1 max-w-[180px] text-[11px] text-muted-foreground/60">
+              Select transcript text or type above to add notes
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {annotations.map((annotation) => {
               const isActive = annotation.id === activeAnnotationId;
               return (
-                <Card
+                <div
                   key={annotation.id}
                   ref={(el) => {
                     if (el) {
@@ -505,76 +510,65 @@ export function AnnotationsSidebar({
                       annotationRefs.current.delete(annotation.id);
                     }
                   }}
-                  className={`group border transition-all duration-200 hover:shadow-md ${
+                  className={`group relative rounded-lg border p-3 transition-all ${
                     isActive
-                      ? "border-primary/20 bg-primary/5 shadow-sm"
-                      : "bg-card hover:border-primary/20"
+                      ? "border-primary/30 bg-primary/5"
+                      : "border-transparent bg-muted/30 hover:border-border/50 hover:bg-muted/50"
                   }`}
                 >
-                  <CardContent className="space-y-2.5 p-3.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        {annotation.emoji && (
-                          <span
-                            className="text-lg leading-none drop-shadow-sm filter"
-                            title="Category"
-                          >
-                            {annotation.emoji}
-                          </span>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSeek(annotation.timestampSeconds)}
-                          className={`flex h-auto items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
-                            isActive
-                              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                              : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                          }`}
-                        >
-                          <Clock className="h-3 w-3" />
-                          {formatTimestamp(annotation.timestampSeconds)}
-                        </Button>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deleteAnnotationMutation.mutate(annotation.id)}
-                        className="h-6 w-6 text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                  {/* Delete Button */}
+                  <button
+                    onClick={() => deleteAnnotationMutation.mutate(annotation.id)}
+                    className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/40 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
 
-                    {annotation.selectedText && (
-                      <div className="relative border-l-2 border-primary/20 py-0.5 pl-3">
-                        <p className="line-clamp-3 text-xs italic leading-relaxed text-muted-foreground">
-                          "{annotation.selectedText}"
-                        </p>
-                      </div>
-                    )}
+                  {/* Header: Emoji + Timestamp */}
+                  <div className="mb-2 flex items-center gap-2">
+                    {annotation.emoji && <span className="text-sm">{annotation.emoji}</span>}
+                    <button
+                      onClick={() => handleSeek(annotation.timestampSeconds)}
+                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                      }`}
+                    >
+                      <Clock className="h-2.5 w-2.5" />
+                      {formatTimestamp(annotation.timestampSeconds)}
+                    </button>
+                  </div>
 
-                    {annotation.note && (
-                      <p className="whitespace-pre-wrap break-words text-sm font-normal leading-relaxed text-foreground/90">
-                        {annotation.note}
-                      </p>
-                    )}
-
-                    <div className="flex items-center justify-between pt-1">
-                      <p className="text-[10px] font-medium text-muted-foreground/60">
-                        {new Date(annotation.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                        {" • "}
-                        {new Date(annotation.createdAt).toLocaleTimeString(undefined, {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                  {/* Selected Text */}
+                  {annotation.selectedText && (
+                    <div className="mb-2 border-l-2 border-primary/20 pl-2.5">
+                      <p className="line-clamp-2 text-[11px] italic text-muted-foreground">
+                        "{annotation.selectedText}"
                       </p>
                     </div>
-                  </CardContent>
-                </Card>
+                  )}
+
+                  {/* Note Content */}
+                  {annotation.note && (
+                    <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-foreground/90">
+                      {annotation.note}
+                    </p>
+                  )}
+
+                  {/* Footer: Date */}
+                  <p className="mt-2 text-[10px] text-muted-foreground/50">
+                    {new Date(annotation.createdAt).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    {" · "}
+                    {new Date(annotation.createdAt).toLocaleTimeString(undefined, {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
               );
             })}
           </div>

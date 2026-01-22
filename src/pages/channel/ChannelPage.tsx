@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ExternalLink } from "@/components/ExternalLink";
+import { PageContainer } from "@/components/ui/page-container";
 import { toast } from "sonner";
 import { LatestTab, PopularTab, LibraryTab, PlaylistsTab } from "./components";
 import { RefreshCw } from "lucide-react";
@@ -90,31 +91,31 @@ export default function ChannelPage(): React.JSX.Element {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto space-y-6 p-6">
+      <PageContainer>
         <p className="text-sm text-muted-foreground">Loading channel...</p>
-      </div>
+      </PageContainer>
     );
   }
 
   if (!channelId) {
     return (
-      <div className="container mx-auto space-y-6 p-6">
+      <PageContainer>
         <Alert>
           <AlertTitle>Missing channel</AlertTitle>
           <AlertDescription>No channel ID provided.</AlertDescription>
         </Alert>
-      </div>
+      </PageContainer>
     );
   }
 
   if (!data || !data.channel) {
     return (
-      <div className="container mx-auto space-y-6 p-6">
+      <PageContainer>
         <Alert>
           <AlertTitle>Channel not found</AlertTitle>
           <AlertDescription>Could not find channel with ID: {channelId}</AlertDescription>
         </Alert>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -136,7 +137,7 @@ export default function ChannelPage(): React.JSX.Element {
       : undefined;
 
   return (
-    <div className="container mx-auto space-y-6 p-6">
+    <PageContainer>
       {/* Channel Header */}
       <Card>
         <CardContent className="pt-6">
@@ -249,6 +250,6 @@ export default function ChannelPage(): React.JSX.Element {
           </Tabs>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

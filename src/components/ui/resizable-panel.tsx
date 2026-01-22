@@ -74,8 +74,8 @@ export const ResizablePanel = React.forwardRef<HTMLDivElement, ResizablePanelPro
     return (
       <div
         ref={panelRef}
-        className={cn("relative flex flex-col", className)}
-        style={{ width: `${width}px` }}
+        className={cn("relative flex shrink-0 flex-col overflow-hidden", className)}
+        style={{ width: `${width}px`, maxWidth: `${maxWidth}px` }}
         {...props}
       >
         {/* Resize handle */}

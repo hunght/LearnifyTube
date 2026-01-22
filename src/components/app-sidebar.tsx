@@ -29,9 +29,11 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { SidebarThemeToggle } from "@/components/SidebarThemeToggle";
 import { MinimizedPlayer } from "@/components/MinimizedPlayer";
+import { Logo } from "@/components/Logo";
 
 // Check if we're in development mode
 // In Electron renderer, check window.location - if it's http(s)://, we're in dev mode
@@ -103,6 +105,8 @@ export function AppSidebar({
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const matches = useMatches();
   const currentPath = useMemo(() => matches[matches.length - 1]?.pathname ?? "/", [matches]);
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
 
   // Load user preferences from atom
   const sidebarPreferences = useAtomValue(sidebarPreferencesAtom);
@@ -138,11 +142,26 @@ export function AppSidebar({
       className={cn("border-r border-border bg-sidebar", className)}
       {...props}
     >
-      <SidebarHeader className="px-3 py-2 pt-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold text-foreground">LearnifyTube</span>
-          <SidebarThemeToggle variant="icon" />
+      <SidebarHeader className="px-2 py-2">
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            isCollapsed ? "justify-center" : "justify-between"
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <Logo size={28} />
+            {!isCollapsed && (
+              <span className="text-sm font-semibold text-foreground">LearnifyTube</span>
+            )}
+          </div>
+          {!isCollapsed && <SidebarThemeToggle />}
         </div>
+        {isCollapsed && (
+          <div className="flex justify-center pt-1">
+            <SidebarThemeToggle />
+          </div>
+        )}
       </SidebarHeader>
 
       <SidebarContent>

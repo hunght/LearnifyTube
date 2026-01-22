@@ -2,6 +2,7 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageContainer } from "@/components/ui/page-container";
 import { BarChart3, Brain, Clock, TrendingUp, Calendar, Flame } from "lucide-react";
 import { LearningActivityChart } from "./components/LearningActivityChart";
 import { VocabularyGrowthChart } from "./components/VocabularyGrowthChart";
@@ -31,15 +32,15 @@ export default function AnalyticsPage(): React.JSX.Element {
     Math.round(((dashboardStats?.watchTime.totalMinutes ?? 0) / 60) * 10) / 10;
 
   return (
-    <div className="container mx-auto space-y-6 p-6">
+    <PageContainer>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <BarChart3 className="h-6 w-6 text-primary" />
-            Learning Analytics
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 text-xl font-bold sm:text-2xl">
+            <BarChart3 className="h-5 w-5 shrink-0 text-primary sm:h-6 sm:w-6" />
+            <span className="truncate">Learning Analytics</span>
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-muted-foreground sm:text-base">
             Track your progress and optimize your learning journey
           </p>
         </div>
@@ -155,6 +156,6 @@ export default function AnalyticsPage(): React.JSX.Element {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

@@ -16,6 +16,7 @@ import defaultDb from "@/api/db";
 import { spawnYtDlpWithLogging } from "../../utils/ytdlp-utils/ytdlp";
 import { downloadImageToCache } from "../../utils/ytdlp-utils/cache";
 import { getBinaryFilePath } from "../binary";
+import { getBackgroundJobsManager } from "@/services/background-jobs/job-manager";
 
 // Zod schemas for yt-dlp JSON responses (fault-tolerant)
 const ytDlpThumbnailSchema = z
@@ -48,6 +49,9 @@ const ytDlpPlaylistDataSchema = z.object({
   entries: z.array(ytDlpPlaylistEntrySchema).optional().catch([]),
 });
 
+// UUID regex pattern - custom playlists use UUIDs, YouTube playlists don't
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const playlistsRouter = t.router({
   // Get detailed playlist information with videos
   getDetails: publicProcedure
@@ -59,6 +63,14 @@ export const playlistsRouter = t.router({
       })
     )
     .query(async ({ input, ctx }) => {
+      // Reject UUID-formatted playlist IDs - these are custom playlists, not YouTube playlists
+      if (UUID_REGEX.test(input.playlistId)) {
+        logger.warn("[playlists] Rejected UUID playlist ID - use custom playlists router", {
+          playlistId: input.playlistId,
+        });
+        return null;
+      }
+
       const db = ctx.db ?? defaultDb;
       const limit = input.limit ?? 200;
 
@@ -154,36 +166,51 @@ export const playlistsRouter = t.router({
           : null;
       }
 
+      // Create background job for tracking
+      const jobManager = getBackgroundJobsManager();
+      const job = jobManager.createJob({
+        type: "playlist_fetch",
+        title: playlistMeta?.title ? `Loading ${playlistMeta.title}...` : "Loading playlist...",
+        entityId: input.playlistId,
+      });
+      jobManager.startJob(job.id);
+
       const url = `https://www.youtube.com/playlist?list=${input.playlistId}`;
 
-      // Fetch playlist JSON
-      const json = await new Promise<string>((resolve, reject) => {
-        const proc = spawnYtDlpWithLogging(
-          binPath,
-          ["-J", "--flat-playlist", url],
-          { stdio: ["ignore", "pipe", "pipe"] },
-          {
-            operation: "get_playlist_details",
-            url,
-            playlistId: input.playlistId,
-            other: { flatPlaylist: true },
-          }
-        );
-        let out = "";
-        let err = "";
-        proc.stdout?.on("data", (d: Buffer | string) => {
-          out += d.toString();
+      let data;
+      try {
+        // Fetch playlist JSON
+        const json = await new Promise<string>((resolve, reject) => {
+          const proc = spawnYtDlpWithLogging(
+            binPath,
+            ["-J", "--flat-playlist", url],
+            { stdio: ["ignore", "pipe", "pipe"] },
+            {
+              operation: "get_playlist_details",
+              url,
+              playlistId: input.playlistId,
+              other: { flatPlaylist: true },
+            }
+          );
+          let out = "";
+          let err = "";
+          proc.stdout?.on("data", (d: Buffer | string) => {
+            out += d.toString();
+          });
+          proc.stderr?.on("data", (d: Buffer | string) => {
+            err += d.toString();
+          });
+          proc.on("error", reject);
+          proc.on("close", (code) =>
+            code === 0 ? resolve(out) : reject(new Error(err || `yt-dlp exited ${code}`))
+          );
         });
-        proc.stderr?.on("data", (d: Buffer | string) => {
-          err += d.toString();
-        });
-        proc.on("error", reject);
-        proc.on("close", (code) =>
-          code === 0 ? resolve(out) : reject(new Error(err || `yt-dlp exited ${code}`))
-        );
-      });
 
-      const data = ytDlpPlaylistDataSchema.parse(JSON.parse(json));
+        data = ytDlpPlaylistDataSchema.parse(JSON.parse(json));
+      } catch (error) {
+        jobManager.failJob(job.id, error instanceof Error ? error.message : String(error));
+        throw error;
+      }
       const entries = (data.entries ?? []).slice(0, limit);
       const now = Date.now();
 
@@ -375,6 +402,9 @@ export const playlistsRouter = t.router({
         const bIndex = orderMap.get(b.videoId) ?? 0;
         return aIndex - bIndex;
       });
+
+      // Mark job as completed
+      jobManager.completeJob(job.id);
 
       return {
         playlistId: input.playlistId,

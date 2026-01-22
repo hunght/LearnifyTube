@@ -5,6 +5,7 @@ import { trpcClient } from "@/utils/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { PageContainer } from "@/components/ui/page-container";
 import { RefreshCw, Search } from "lucide-react";
 
 export default function ChannelsPage(): React.JSX.Element {
@@ -32,9 +33,9 @@ export default function ChannelsPage(): React.JSX.Element {
   };
 
   return (
-    <div className="container mx-auto space-y-6 p-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">Channels</h1>
+    <PageContainer>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold sm:text-3xl">Channels</h1>
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -187,6 +188,6 @@ export default function ChannelsPage(): React.JSX.Element {
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageContainer>
   );
 }

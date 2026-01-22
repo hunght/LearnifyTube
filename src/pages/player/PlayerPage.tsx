@@ -1,12 +1,12 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { useSetAtom } from "jotai";
 import { useSearch, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Rewind, FastForward } from "lucide-react";
+import { Rewind, FastForward, ListPlus } from "lucide-react";
 import { toast } from "sonner";
+import { AddToPlaylistDialog } from "@/components/playlists/AddToPlaylistDialog";
 import { useWatchProgress } from "./hooks/useWatchProgress";
 import { VideoPlayer } from "./components/VideoPlayer";
 import { VideoProgressIndicator } from "./components/VideoProgressIndicator";
@@ -14,12 +14,8 @@ import { DownloadStatus } from "./components/DownloadStatus";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { VideoDescription } from "./components/VideoDescription";
 import { PlaylistNavigation } from "./components/PlaylistNavigation";
+import { VideoToolsPanel } from "./components/VideoToolsPanel";
 import { ExternalLink } from "@/components/ExternalLink";
-import {
-  rightSidebarContentAtom,
-  annotationsSidebarDataAtom,
-  rightSidebarOpenAtom,
-} from "@/context/rightSidebar";
 import {
   beginVideoPlayback,
   usePlayerStore,
@@ -57,6 +53,9 @@ export default function PlayerPage(): React.JSX.Element {
 
   // Track video duration for progress indicator
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
+
+  // Add to playlist dialog
+  const [showAddToPlaylistDialog, setShowAddToPlaylistDialog] = useState(false);
 
   // Auto-clear seek indicator after 800ms
   useEffect(() => {
@@ -202,6 +201,34 @@ export default function PlayerPage(): React.JSX.Element {
   const filePath = playback?.filePath ?? null;
   const mediaUrl = playback?.mediaUrl ?? null; // HTTP streaming URL
 
+  // Auto re-download if file is missing (filePath exists but mediaUrl is null)
+  const [autoRedownloadTriggered, setAutoRedownloadTriggered] = useState(false);
+  useEffect(() => {
+    if (
+      videoId &&
+      filePath &&
+      !mediaUrl &&
+      !playbackIsLoading &&
+      !startDownloadMutation.isPending &&
+      !autoRedownloadTriggered
+    ) {
+      setAutoRedownloadTriggered(true);
+      startDownloadMutation.mutate();
+    }
+  }, [
+    videoId,
+    filePath,
+    mediaUrl,
+    playbackIsLoading,
+    startDownloadMutation.isPending,
+    autoRedownloadTriggered,
+  ]);
+
+  // Reset auto-redownload flag when video changes
+  useEffect(() => {
+    setAutoRedownloadTriggered(false);
+  }, [videoId]);
+
   // Initialize / update store when video changes
   useEffect(() => {
     if (!videoId) return;
@@ -312,11 +339,6 @@ export default function PlayerPage(): React.JSX.Element {
   const playlistTitle = playlistData?.title;
   const playlistTotalVideos = playlistVideos.length;
 
-  // Right sidebar atoms
-  const setRightSidebarContent = useSetAtom(rightSidebarContentAtom);
-  const setRightSidebarOpen = useSetAtom(rightSidebarOpenAtom);
-  const setAnnotationsSidebarData = useSetAtom(annotationsSidebarDataAtom);
-
   const playbackStatus = playback && typeof playback.status === "string" ? playback.status : null;
 
   // Handle video load error (e.g., file was deleted)
@@ -379,55 +401,15 @@ export default function PlayerPage(): React.JSX.Element {
     });
   }, [filePath]);
 
-  // Set sidebar to show annotations when on PlayerPage
-  // Set sidebar to show annotations when entering PlayerPage
-  useEffect(() => {
-    // Only switch to annotations if we're not already viewing AI summary
-    setRightSidebarContent((prev) => (prev === "ai-summary" ? "ai-summary" : "annotations"));
-
-    // Reset to queue when leaving PlayerPage (unmounting)
-    return () => {
-      setRightSidebarContent("queue");
-      setAnnotationsSidebarData(null);
-    };
-  }, [videoId, setRightSidebarContent, setAnnotationsSidebarData]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      // Ignore if input is focused
-      if (
-        document.activeElement?.tagName === "INPUT" ||
-        document.activeElement?.tagName === "TEXTAREA" ||
-        document.activeElement?.getAttribute("contenteditable") === "true"
-      ) {
-        return;
-      }
-
-      // Alt+C: Open Quick Capture (Notes)
-      if (e.altKey && (e.key === "c" || e.key === "C")) {
-        e.preventDefault();
-        setRightSidebarContent("annotations"); // Open Notes sidebar
-        setRightSidebarOpen(true);
-        toast("Quick Capture (Notes) Opened", { icon: "📝" });
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setRightSidebarContent, setRightSidebarOpen]);
-
-  // Update sidebar data constantly as video plays
-  useEffect(() => {
-    if (videoId) {
-      setAnnotationsSidebarData({
-        videoId,
-        videoRef,
-        videoTitle: playback?.title || undefined,
-        videoDescription: playback?.description || undefined,
-        currentTime,
-      });
-    }
-  }, [videoId, playback?.title, playback?.description, currentTime, setAnnotationsSidebarData]);
+  // Check if video content is ready to show (for showing tools panel)
+  const showVideoContent = !!(
+    filePath &&
+    mediaUrl &&
+    !videoLoadError &&
+    !playbackIsLoading &&
+    videoId &&
+    playback
+  );
 
   return (
     <>
@@ -460,117 +442,159 @@ export default function PlayerPage(): React.JSX.Element {
         )}
       </div>
 
-      <div className="container relative mx-auto space-y-6 p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">
-              <ExternalLink
-                href={`https://www.youtube.com/watch?v=${videoId}`}
-                className="transition-colors hover:text-primary"
-                iconClassName="h-3.5 w-3.5 opacity-50 group-hover:opacity-100"
-              >
-                {videoTitle}
-              </ExternalLink>
-            </CardTitle>
-            {/* Video progress indicator - only show when video is loaded */}
-            {filePath && !videoLoadError && videoDuration && (
-              <VideoProgressIndicator
-                currentTime={currentTime}
-                duration={videoDuration}
-                className="mt-2"
-              />
-            )}
-          </CardHeader>
-          <CardContent>
-            {playbackIsLoading ? (
-              <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : !videoId ? (
-              <Alert>
-                <AlertTitle>Missing video</AlertTitle>
-                <AlertDescription>No video id provided.</AlertDescription>
-              </Alert>
-            ) : !playback ? (
-              <Alert>
-                <AlertTitle>Not found</AlertTitle>
-                <AlertDescription>Could not find that video.</AlertDescription>
-              </Alert>
-            ) : !filePath ? (
-              <DownloadStatus
-                videoId={videoId}
-                status={typeof playback?.status === "string" ? playback.status : undefined}
-                progress={playback?.progress ?? null}
-                onStartDownload={() => startDownloadMutation.mutate()}
-                isStarting={startDownloadMutation.isPending}
-                thumbnailPath={playback?.thumbnailPath}
-                thumbnailUrl={playback?.thumbnailUrl}
-                title={playback?.title}
-              />
-            ) : !mediaUrl ? (
-              // File path exists in DB but actual file is missing (deleted)
-              <Alert variant="destructive">
-                <AlertTitle>Video file missing</AlertTitle>
-                <AlertDescription className="space-y-3">
-                  <p>The video file has been deleted or moved. Would you like to re-download it?</p>
-                  <Button
-                    onClick={() => startDownloadMutation.mutate()}
-                    disabled={startDownloadMutation.isPending}
-                  >
-                    {startDownloadMutation.isPending ? "Starting download..." : "Re-download video"}
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            ) : videoLoadError ? (
-              <Alert variant="destructive">
-                <AlertTitle>Video file not found</AlertTitle>
-                <AlertDescription className="space-y-3">
-                  <p>The video file could not be loaded. It may have been deleted or moved.</p>
-                  <Button
-                    onClick={() => startDownloadMutation.mutate()}
-                    disabled={startDownloadMutation.isPending}
-                  >
-                    {startDownloadMutation.isPending ? "Starting download..." : "Re-download video"}
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <div className="space-y-4">
-                <VideoPlayer
-                  videoRef={videoRef}
-                  videoSrc={mediaUrl} // Use HTTP streaming URL
-                  onTimeUpdate={handleTimeUpdate}
-                  onError={handleVideoLoadError}
-                  onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
-                />
-
-                {/* Transcript - Self-contained, owns all its state */}
-                <TranscriptPanel
-                  videoId={videoId}
-                  videoRef={videoRef}
-                  currentTime={currentTime}
-                  playbackData={playback || null}
-                  onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
-                />
-
-                {playback?.description && (
-                  <VideoDescription description={playback.description} onSeek={handleSeek} />
-                )}
-                {/* Playlist Navigation - Show when playing from a playlist */}
-                {isPlaylist && (
-                  <PlaylistNavigation
-                    playlistTitle={playlistTitle}
-                    currentIndex={playlistCurrentIndex}
-                    totalVideos={playlistTotalVideos}
-                    hasNext={playlistHasNext}
-                    hasPrevious={playlistHasPrevious}
-                    onNext={goToNextVideo}
-                    onPrevious={goToPreviousVideo}
+      {/* Two-column layout: Main content + Tools sidebar */}
+      <div className="flex h-full">
+        {/* Left column: Main content (scrollable) */}
+        <div className="min-w-0 flex-1 overflow-auto">
+          <div className="mx-auto max-w-5xl space-y-6 px-4 py-4 pb-8 sm:px-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-4">
+                  <CardTitle className="text-base font-semibold">
+                    <ExternalLink
+                      href={`https://www.youtube.com/watch?v=${videoId}`}
+                      className="transition-colors hover:text-primary"
+                      iconClassName="h-3.5 w-3.5 opacity-50 group-hover:opacity-100"
+                    >
+                      {videoTitle}
+                    </ExternalLink>
+                  </CardTitle>
+                  {videoId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-1.5"
+                      onClick={() => setShowAddToPlaylistDialog(true)}
+                    >
+                      <ListPlus className="h-4 w-4" />
+                      <span className="hidden sm:inline">Add to Playlist</span>
+                    </Button>
+                  )}
+                </div>
+                {/* Video progress indicator - only show when video is loaded */}
+                {filePath && !videoLoadError && videoDuration && (
+                  <VideoProgressIndicator
+                    currentTime={currentTime}
+                    duration={videoDuration}
+                    className="mt-2"
                   />
                 )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardHeader>
+              <CardContent>
+                {playbackIsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading...</p>
+                ) : !videoId ? (
+                  <Alert>
+                    <AlertTitle>Missing video</AlertTitle>
+                    <AlertDescription>No video id provided.</AlertDescription>
+                  </Alert>
+                ) : !playback ? (
+                  <Alert>
+                    <AlertTitle>Not found</AlertTitle>
+                    <AlertDescription>Could not find that video.</AlertDescription>
+                  </Alert>
+                ) : !filePath ? (
+                  <DownloadStatus
+                    videoId={videoId}
+                    status={typeof playback?.status === "string" ? playback.status : undefined}
+                    progress={playback?.progress ?? null}
+                    onStartDownload={() => startDownloadMutation.mutate()}
+                    isStarting={startDownloadMutation.isPending}
+                    thumbnailPath={playback?.thumbnailPath}
+                    thumbnailUrl={playback?.thumbnailUrl}
+                    title={playback?.title}
+                  />
+                ) : !mediaUrl ? (
+                  // File path exists in DB but actual file is missing - auto re-downloading
+                  <DownloadStatus
+                    videoId={videoId}
+                    status={typeof playback?.status === "string" ? playback.status : "pending"}
+                    progress={playback?.progress ?? null}
+                    onStartDownload={() => startDownloadMutation.mutate()}
+                    isStarting={startDownloadMutation.isPending}
+                    thumbnailPath={playback?.thumbnailPath}
+                    thumbnailUrl={playback?.thumbnailUrl}
+                    title={playback?.title}
+                  />
+                ) : videoLoadError ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>Video file not found</AlertTitle>
+                    <AlertDescription className="space-y-3">
+                      <p>The video file could not be loaded. It may have been deleted or moved.</p>
+                      <Button
+                        onClick={() => startDownloadMutation.mutate()}
+                        disabled={startDownloadMutation.isPending}
+                      >
+                        {startDownloadMutation.isPending
+                          ? "Starting download..."
+                          : "Re-download video"}
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="space-y-4">
+                    <VideoPlayer
+                      videoRef={videoRef}
+                      videoSrc={mediaUrl} // Use HTTP streaming URL
+                      onTimeUpdate={handleTimeUpdate}
+                      onError={handleVideoLoadError}
+                      onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
+                    />
+
+                    {/* Transcript - Self-contained, owns all its state */}
+                    <TranscriptPanel
+                      videoId={videoId}
+                      videoRef={videoRef}
+                      currentTime={currentTime}
+                      playbackData={playback || null}
+                      onSeekIndicator={(indicator) => setSeekIndicator(indicator)}
+                    />
+
+                    {playback?.description && (
+                      <VideoDescription description={playback.description} onSeek={handleSeek} />
+                    )}
+                    {/* Playlist Navigation - Show when playing from a playlist */}
+                    {isPlaylist && (
+                      <PlaylistNavigation
+                        playlistTitle={playlistTitle}
+                        currentIndex={playlistCurrentIndex}
+                        totalVideos={playlistTotalVideos}
+                        hasNext={playlistHasNext}
+                        hasPrevious={playlistHasPrevious}
+                        onNext={goToNextVideo}
+                        onPrevious={goToPreviousVideo}
+                      />
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Right column: Video Tools Panel (Notes, Vocab, AI Summary, Quiz) */}
+        {showVideoContent && (
+          <VideoToolsPanel
+            videoId={videoId}
+            videoRef={videoRef}
+            videoTitle={playback?.title || undefined}
+            currentTime={currentTime}
+          />
+        )}
       </div>
+
+      {/* Add to Playlist Dialog */}
+      {videoId && (
+        <AddToPlaylistDialog
+          open={showAddToPlaylistDialog}
+          onOpenChange={setShowAddToPlaylistDialog}
+          videoId={videoId}
+          videoTitle={videoTitle}
+          channelTitle={playback?.channelTitle ?? undefined}
+          thumbnailUrl={playback?.thumbnailUrl ?? undefined}
+          durationSeconds={playback?.durationSeconds ?? undefined}
+        />
+      )}
     </>
   );
 }

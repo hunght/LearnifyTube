@@ -152,7 +152,7 @@ export function QuickAddDialog({ open, onOpenChange }: QuickAddDialogProps): Rea
     const playlistId = extractPlaylistId(url);
     if (playlistId) {
       logger.debug("QuickAdd navigating to playlist", { url, playlistId });
-      navigate({ to: "/playlist", search: { playlistId } });
+      navigate({ to: "/playlist", search: { playlistId, type: undefined } });
       onOpenChange(false);
       return;
     }

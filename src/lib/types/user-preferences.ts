@@ -1,4 +1,3 @@
-/* eslint-disable import/no-unused-modules */
 /**
  * User Preferences System for LearnifyTube
  * Allows users to customize their learning experience

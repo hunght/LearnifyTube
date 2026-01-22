@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
-import { ExternalLink as ExternalLinkIcon, Download, Play, Loader2 } from "lucide-react";
+import { Play, Loader2, Check, Video } from "lucide-react";
 import Thumbnail from "@/components/Thumbnail";
 
 interface PopularTabProps {
@@ -12,44 +12,23 @@ interface PopularTabProps {
   onDownload: (url: string, title: string) => Promise<void>;
 }
 
-const getDownloadStatusIcon = (status: string | null): React.JSX.Element | null => {
-  if (!status) return null;
-
-  switch (status) {
-    case "completed":
-      return <span className="text-green-600">✓</span>;
-    case "downloading":
-    case "queued":
-      return <Loader2 className="h-4 w-4 animate-spin text-blue-600" />;
-    case "failed":
-      return <span className="text-red-600">✗</span>;
-    case "paused":
-      return <span className="text-xs text-muted-foreground">⏸</span>;
-    default:
-      return null;
+const formatDuration = (seconds: number): string => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   }
+  return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
-const getDownloadStatusText = (status: string | null, progress: number | null): string | null => {
-  if (!status) return null;
-
-  switch (status) {
-    case "completed":
-      return "Downloaded";
-    case "downloading":
-      return `Downloading ${progress || 0}%`;
-    case "queued":
-      return "In Queue";
-    case "failed":
-      return "Failed";
-    case "paused":
-      return "Paused";
-    default:
-      return status;
-  }
+const formatViewCount = (count: number): string => {
+  if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+  return count.toString();
 };
 
-export const PopularTab: React.FC<PopularTabProps> = ({ channelId, onDownload }) => {
+export const PopularTab: React.FC<PopularTabProps> = ({ channelId, onDownload: _onDownload }) => {
   const query = useQuery({
     queryKey: ["channel-popular", channelId],
     queryFn: () =>
@@ -105,120 +84,92 @@ export const PopularTab: React.FC<PopularTabProps> = ({ channelId, onDownload })
       )}
 
       {query.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading popular…</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <div key={i} className="space-y-2">
+              <div className="aspect-video w-full animate-pulse rounded-lg bg-muted" />
+              <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
+              <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+            </div>
+          ))}
+        </div>
       ) : query.data && query.data.length > 0 ? (
-        <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {query.data.map((video) => {
-            const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+            const isDownloaded = video.downloadStatus === "completed" && video.downloadFilePath;
+            const isDownloading =
+              video.downloadStatus === "downloading" || video.downloadStatus === "queued";
 
             return (
-              <div key={video.id} className="flex items-start gap-4 rounded-lg border p-4">
-                {/* Video Thumbnail */}
-                <div className="h-24 w-40 flex-shrink-0">
+              <Link
+                key={video.id}
+                to="/player"
+                search={{ videoId: video.videoId, playlistId: undefined, playlistIndex: undefined }}
+                className="group"
+              >
+                {/* Thumbnail */}
+                <div className="relative overflow-hidden rounded-lg">
                   <Thumbnail
                     thumbnailPath={video.thumbnailPath}
                     thumbnailUrl={video.thumbnailUrl}
                     alt={video.title}
-                    className="h-24 w-40 rounded object-cover"
+                    className="aspect-video w-full object-cover transition-transform group-hover:scale-105"
+                    fallbackIcon={<Video className="h-8 w-8 text-muted-foreground" />}
                   />
-                </div>
 
-                {/* Video Info */}
-                <div className="flex-1 space-y-1">
-                  <h3 className="line-clamp-2 font-medium">{video.title}</h3>
-
-                  {video.description && (
-                    <p className="line-clamp-2 text-xs text-muted-foreground">
-                      {video.description}
-                    </p>
-                  )}
-
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    {video.viewCount && <span>{video.viewCount.toLocaleString()} views</span>}
-                    {video.publishedAt && (
-                      <span>{new Date(video.publishedAt).toLocaleDateString()}</span>
-                    )}
-                    {video.durationSeconds && (
-                      <span>
-                        {Math.floor(video.durationSeconds / 60)}:
-                        {String(video.durationSeconds % 60).padStart(2, "0")}
-                      </span>
-                    )}
+                  {/* Overlay on hover */}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/40">
+                    <div className="scale-0 rounded-full bg-primary p-3 text-primary-foreground transition-transform group-hover:scale-100">
+                      <Play className="h-5 w-5" fill="currentColor" />
+                    </div>
                   </div>
 
-                  {/* Download Status */}
-                  {video.downloadStatus && (
-                    <div className="mt-2 flex items-center gap-2">
-                      {getDownloadStatusIcon(video.downloadStatus)}
-                      <span className="text-xs font-medium">
-                        {getDownloadStatusText(video.downloadStatus, video.downloadProgress)}
-                      </span>
+                  {/* Duration badge */}
+                  {video.durationSeconds && (
+                    <div className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      {formatDuration(video.durationSeconds)}
+                    </div>
+                  )}
+
+                  {/* Download status badge */}
+                  {isDownloaded && (
+                    <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-green-600 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      <Check className="h-3 w-3" />
+                    </div>
+                  )}
+                  {isDownloading && (
+                    <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {video.downloadProgress ? `${video.downloadProgress}%` : "..."}
                     </div>
                   )}
                 </div>
 
-                {/* Actions */}
-                <div className="flex flex-col gap-2">
-                  {video.downloadStatus === "completed" && video.downloadFilePath ? (
-                    <>
-                      <Link
-                        to="/player"
-                        search={{
-                          videoId: video.videoId,
-                          playlistId: undefined,
-                          playlistIndex: undefined,
-                        }}
-                        className="inline-flex h-8 items-center justify-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90"
-                      >
-                        <Play className="h-3 w-3" />
-                        Play
-                      </Link>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          trpcClient.utils.openExternalUrl.mutate({ url: videoUrl });
-                        }}
-                      >
-                        <ExternalLinkIcon className="mr-1 h-3 w-3" />
-                        View
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onDownload(videoUrl, video.title)}
-                        disabled={
-                          video.downloadStatus === "downloading" ||
-                          video.downloadStatus === "queued"
-                        }
-                      >
-                        <Download className="mr-1 h-3 w-3" />
-                        Download
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          trpcClient.utils.openExternalUrl.mutate({ url: videoUrl });
-                        }}
-                      >
-                        <ExternalLinkIcon className="mr-1 h-3 w-3" />
-                        View
-                      </Button>
-                    </>
-                  )}
+                {/* Info */}
+                <div className="mt-2 space-y-1">
+                  <h3 className="line-clamp-2 text-sm font-medium leading-tight group-hover:text-primary">
+                    {video.title}
+                  </h3>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {video.viewCount && <span>{formatViewCount(video.viewCount)} views</span>}
+                    {video.viewCount && video.publishedAt && <span>·</span>}
+                    {video.publishedAt && (
+                      <span>{new Date(video.publishedAt).toLocaleDateString()}</span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">No popular items.</p>
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="mb-3 rounded-full bg-muted p-4">
+            <Video className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium">No popular videos</p>
+          <p className="mt-1 text-xs text-muted-foreground">Check back later for popular content</p>
+        </div>
       )}
     </>
   );
