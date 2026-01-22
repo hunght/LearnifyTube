@@ -12,7 +12,21 @@
       "Bash(curl:*)",
       "Bash(ls:*)",
       "Bash(pkill:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(git reset:*)",
+      "Bash(gh auth:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(pgrep:*)",
+      "Bash(osascript:*)",
+      "Bash(open:*)",
+      "Bash(git push:*)",
+      "Bash(npm install:*)",
+      "Bash(ffmpeg:*)",
+      "WebFetch(domain:www.itracksy.com)",
+      "Bash(tree:*)"
     ]
   }
 }

@@ -31,10 +31,21 @@ npm run db:studio     # Open Drizzle Studio for database inspection
 
 # Build & Release
 npm run make              # Package the application
-npm run release           # Bump patch version and publish release
-npm run release:no-draft  # Release without draft (publishes immediately)
+npm run release:no-draft  # Release and publish immediately (preferred)
+npm run release           # Release as draft (requires manual publish on GitHub)
 npm run release minor     # Bump minor version and release
+npm run release 1.2.3     # Release specific version
 ```
+
+## Release Process
+
+**Always use `npm run release:no-draft` for releases.** This:
+1. Runs type-check (fails if errors)
+2. Bumps patch version in package.json
+3. Commits and creates git tag
+4. Pushes to main and triggers GitHub Actions
+5. GitHub Actions builds for macOS, Windows, and Linux
+6. Publishes release immediately (no manual steps needed)
 
 ## Architecture
 

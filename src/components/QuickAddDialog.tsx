@@ -7,7 +7,16 @@ import { logger } from "@/helpers/logger";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Download, CheckCircle2, Loader2, Video, List as ListIcon, Users } from "lucide-react";
+import {
+  Download,
+  CheckCircle2,
+  Loader2,
+  Video,
+  List as ListIcon,
+  Users,
+  Clock,
+} from "lucide-react";
+import Thumbnail from "@/components/Thumbnail";
 
 type QuickAddDialogProps = {
   open: boolean;
@@ -48,6 +57,25 @@ const isChannelUrl = (url: string): boolean => {
   }
 };
 
+const isVideoUrl = (url: string): boolean => {
+  if (!isValidUrl(url)) return false;
+  // Not a channel URL and not a playlist-only URL
+  if (isChannelUrl(url)) return false;
+  try {
+    const u = new URL(url);
+    // YouTube video URLs contain watch?v= or youtu.be/
+    if (u.hostname.includes("youtube.com") && u.pathname === "/watch" && u.searchParams.has("v")) {
+      return true;
+    }
+    if (u.hostname === "youtu.be" && u.pathname.length > 1) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+};
+
 const normalizeChannelUrl = (url: string): string => {
   try {
     const u = new URL(url);
@@ -83,17 +111,65 @@ const normalizeChannelUrl = (url: string): string => {
   }
 };
 
+const formatDuration = (seconds: number): string => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  }
+  return `${minutes}:${secs.toString().padStart(2, "0")}`;
+};
+
+type VideoPreview = {
+  videoId: string;
+  title: string;
+  channelTitle: string | null;
+  channelId: string | null;
+  thumbnailUrl: string | null;
+  duration: number | null;
+};
+
 export function QuickAddDialog({ open, onOpenChange }: QuickAddDialogProps): React.JSX.Element {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
+  const [preview, setPreview] = useState<VideoPreview | null>(null);
+  const [lastFetchedUrl, setLastFetchedUrl] = useState<string | null>(null);
 
-  // Reset URL when dialog closes
+  // Reset state when dialog closes
   useEffect(() => {
     if (!open) {
       setUrl("");
+      setPreview(null);
+      setLastFetchedUrl(null);
     }
   }, [open]);
+
+  // Fetch video info for preview (also creates/updates channel info)
+  const fetchPreviewMutation = useMutation({
+    mutationFn: (videoUrl: string) => trpcClient.ytdlp.fetchVideoInfo.mutate({ url: videoUrl }),
+    onSuccess: (res, videoUrl) => {
+      if (res.success && res.info) {
+        setPreview({
+          videoId: res.info.videoId,
+          title: res.info.title,
+          channelTitle: res.info.channelTitle,
+          channelId: res.info.channelId,
+          thumbnailUrl: res.info.thumbnailUrl,
+          duration: res.info.durationSeconds,
+        });
+        setLastFetchedUrl(videoUrl);
+        // Invalidate channel queries since channel info may have been created/updated
+        queryClient.invalidateQueries({ queryKey: ["ytdlp", "channels"] });
+      } else if (!res.success) {
+        toast.error(res.message || "Failed to fetch video info");
+      }
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : "Failed to fetch video info");
+    },
+  });
 
   const startMutation = useMutation({
     mutationFn: (u: string) => trpcClient.queue.addToQueue.mutate({ urls: [u] }),
@@ -101,7 +177,6 @@ export function QuickAddDialog({ open, onOpenChange }: QuickAddDialogProps): Rea
       if (res.success) {
         queryClient.invalidateQueries({ queryKey: ["queue", "status"] });
         toast.success(`Download added to queue (${res.downloadIds.length})`);
-        onOpenChange(false);
       } else {
         toast.error(res.message ?? "Failed to start download");
       }
@@ -116,16 +191,33 @@ export function QuickAddDialog({ open, onOpenChange }: QuickAddDialogProps): Rea
       if (res.channel) {
         queryClient.invalidateQueries({ queryKey: ["ytdlp", "channels"] });
         toast.success(`Channel "${res.channel.channelTitle}" added successfully`);
-        onOpenChange(false);
       }
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to add channel"),
   });
 
-  const canStart = useMemo(
-    () => isValidUrl(url) && !startMutation.isPending && !addChannelMutation.isPending,
-    [url, startMutation.isPending, addChannelMutation.isPending]
-  );
+  // Auto-fetch preview when URL changes and is a valid video URL
+  useEffect(() => {
+    if (!isVideoUrl(url)) {
+      // Clear preview if URL is not a video
+      if (preview && !isVideoUrl(url)) {
+        setPreview(null);
+        setLastFetchedUrl(null);
+      }
+      return;
+    }
+
+    // Don't refetch if we already fetched this URL
+    if (lastFetchedUrl === url) return;
+
+    // Debounce the fetch
+    const timeoutId = setTimeout(() => {
+      logger.debug("QuickAdd auto-fetching video preview", { url });
+      fetchPreviewMutation.mutate(url);
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [url, lastFetchedUrl]);
 
   const isPlaylistUrl = useMemo(() => {
     return isValidUrl(url) && extractPlaylistId(url) !== null;
@@ -135,30 +227,61 @@ export function QuickAddDialog({ open, onOpenChange }: QuickAddDialogProps): Rea
     return isValidUrl(url) && isChannelUrl(url);
   }, [url]);
 
-  const onSubmit = (e: React.FormEvent): void => {
+  const isVideoUrlMemo = useMemo(() => isVideoUrl(url), [url]);
+
+  const canSubmit = useMemo(() => {
+    if (!isValidUrl(url)) return false;
+    // Disable only when actually adding to queue or channel
+    if (startMutation.isPending || addChannelMutation.isPending) return false;
+    return true;
+  }, [url, startMutation.isPending, addChannelMutation.isPending]);
+
+  const onSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     if (!isValidUrl(url)) {
       toast.error("Please enter a valid URL");
       return;
     }
 
+    // Handle channel URLs - add channel directly
     if (isChannelUrl(url)) {
       const normalizedUrl = normalizeChannelUrl(url);
       logger.debug("QuickAdd adding channel", { url, normalizedUrl });
+      onOpenChange(false);
       addChannelMutation.mutate(normalizedUrl);
       return;
     }
 
+    // Handle playlist URLs - navigate to playlist page
     const playlistId = extractPlaylistId(url);
     if (playlistId) {
       logger.debug("QuickAdd navigating to playlist", { url, playlistId });
-      navigate({ to: "/playlist", search: { playlistId, type: undefined } });
       onOpenChange(false);
+      navigate({ to: "/playlist", search: { playlistId, type: undefined } });
       return;
     }
 
-    logger.debug("QuickAdd start download", { url });
-    startMutation.mutate(url);
+    // Capture URL before closing dialog
+    const videoUrl = url;
+
+    // Close dialog immediately
+    onOpenChange(false);
+
+    // Add to queue immediately - UI updates right away
+    logger.debug("QuickAdd start download", { url: videoUrl });
+    startMutation.mutate(videoUrl);
+
+    // Fetch video info in background (creates/updates channel info)
+    if (!preview || lastFetchedUrl !== videoUrl) {
+      trpcClient.ytdlp.fetchVideoInfo
+        .mutate({ url: videoUrl })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["ytdlp", "channels"] });
+        })
+        .catch((err: unknown) => {
+          logger.warn("Failed to fetch video info in background", { url: videoUrl, error: err });
+        });
+    }
   };
 
   return (
@@ -170,6 +293,7 @@ export function QuickAddDialog({ open, onOpenChange }: QuickAddDialogProps): Rea
             Add Video
           </DialogTitle>
         </DialogHeader>
+
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
             <div className="relative">
@@ -190,11 +314,55 @@ export function QuickAddDialog({ open, onOpenChange }: QuickAddDialogProps): Rea
             </p>
           </div>
 
+          {/* Video Preview - auto-loaded */}
+          {isVideoUrlMemo && (
+            <div className="rounded-lg border bg-muted/30 p-3">
+              {fetchPreviewMutation.isPending && !preview ? (
+                <div className="flex items-center gap-3">
+                  <div className="h-16 w-28 shrink-0 animate-pulse rounded-md bg-muted" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
+                    <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                  </div>
+                </div>
+              ) : preview ? (
+                <div className="flex gap-3">
+                  <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-md bg-muted">
+                    <Thumbnail
+                      thumbnailUrl={preview.thumbnailUrl}
+                      alt={preview.title}
+                      className="h-full w-full object-cover"
+                    />
+                    {preview.duration && (
+                      <div className="absolute bottom-1 right-1 flex items-center gap-1 rounded bg-black/80 px-1 py-0.5 text-[10px] text-white">
+                        <Clock className="h-2.5 w-2.5" />
+                        {formatDuration(preview.duration)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <h3
+                      className="line-clamp-2 text-sm font-medium leading-tight"
+                      title={preview.title}
+                    >
+                      {preview.title}
+                    </h3>
+                    {preview.channelTitle && (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {preview.channelTitle}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!canStart} className="gap-2">
+            <Button type="submit" disabled={!canSubmit} className="gap-2">
               {startMutation.isPending || addChannelMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />

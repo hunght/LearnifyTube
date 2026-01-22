@@ -343,6 +343,9 @@ export const spawnDownload = async (
       // Ensure proper merging when separate video+audio streams are downloaded
       // Note: Since we now prefer single-file formats, merging should be rare
       "--no-mtime", // Don't set file modification time (avoids merge issues)
+      // Suppress JS runtime warning - uses default player client which doesn't require JS runtime
+      "--extractor-args",
+      "youtube:player_client=default",
     ];
 
     // Add ffmpeg location if available (enables merging of separate streams)

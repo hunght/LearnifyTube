@@ -27,12 +27,17 @@ export function spawnYtDlpWithLogging(
   }
 ): ReturnType<typeof spawn> {
   const startTime = Date.now();
-  const fullCommand = `${binPath} ${args.join(" ")}`;
+
+  // Add default extractor args for YouTube to suppress JS runtime warning
+  // See: https://github.com/yt-dlp/yt-dlp/wiki/EJS
+  const finalArgs = [...args, "--extractor-args", "youtube:player_client=default"];
+
+  const fullCommand = `${binPath} ${finalArgs.join(" ")}`;
 
   logger.info("[yt-dlp] CALL_START", {
     operation: context.operation,
     command: fullCommand,
-    args,
+    args: finalArgs,
     url: context.url,
     videoId: context.videoId,
     channelId: context.channelId,
@@ -41,7 +46,7 @@ export function spawnYtDlpWithLogging(
     timestamp: new Date().toISOString(),
   });
 
-  const proc = spawn(binPath, args, options);
+  const proc = spawn(binPath, finalArgs, options);
 
   // Track process lifecycle
   proc.on("spawn", () => {

@@ -11,6 +11,7 @@ import { PageContainer } from "@/components/ui/page-container";
 import { toast } from "sonner";
 import { LatestTab, PopularTab, LibraryTab, PlaylistsTab } from "./components";
 import { RefreshCw } from "lucide-react";
+import Thumbnail from "@/components/Thumbnail";
 
 export default function ChannelPage(): React.JSX.Element {
   const search = useSearch({ from: "/channel" });
@@ -120,21 +121,6 @@ export default function ChannelPage(): React.JSX.Element {
   }
 
   const { channel } = data;
-  const isAllowedImageSrc = (src?: string | null): boolean => {
-    if (!src) return false;
-    if (src.startsWith("local-file://")) return true;
-    try {
-      const u = new URL(src);
-      return /(^|\.)ytimg\.com$/.test(u.hostname);
-    } catch {
-      return false;
-    }
-  };
-  const thumbnailSrc = channel.thumbnailPath
-    ? `local-file://${channel.thumbnailPath}`
-    : isAllowedImageSrc(channel.thumbnailUrl)
-      ? channel.thumbnailUrl
-      : undefined;
 
   return (
     <PageContainer>
@@ -143,19 +129,13 @@ export default function ChannelPage(): React.JSX.Element {
         <CardContent className="pt-6">
           <div className="flex items-start gap-6">
             {/* Channel Avatar */}
-            {thumbnailSrc ? (
-              <img
-                src={thumbnailSrc}
-                alt={channel.channelTitle}
-                className="h-24 w-24 rounded-full object-cover"
-                onError={(e) => {
-                  // Hide broken image
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            ) : (
-              <div className="h-24 w-24 rounded-full bg-muted" />
-            )}
+            <Thumbnail
+              thumbnailPath={channel.thumbnailPath}
+              thumbnailUrl={channel.thumbnailUrl}
+              alt={channel.channelTitle}
+              className="h-24 w-24 rounded-full object-cover"
+              fallbackIcon={<div className="h-24 w-24 rounded-full bg-muted" />}
+            />
 
             {/* Channel Info */}
             <div className="flex-1 space-y-2">

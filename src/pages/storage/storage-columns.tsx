@@ -170,7 +170,6 @@ export function createStorageColumns(options: ColumnOptions): ColumnDef<StorageV
                 {video.title}
               </Link>
               <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="font-mono">{video.videoId}</span>
                 {!video.fileExists && (
                   <Badge variant="destructive" className="h-4 px-1 text-[10px]">
                     Missing
