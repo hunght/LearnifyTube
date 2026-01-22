@@ -232,11 +232,12 @@ const getPlatformDownloadUrl = (version: string): string => {
 
   switch (process.platform) {
     case "win32":
-      return links.windowsZip;
+      return links.windows;
     case "darwin":
-      return process.arch === "arm64" ? links.macosZip : links.macosIntelZip;
+      // Use DMG for macOS - provides proper drag-to-Applications installation experience
+      return process.arch === "arm64" ? links.macos : links.macosIntel;
     case "linux":
-      return links.linuxZip;
+      return links.linux;
     default:
       return links.releases;
   }
