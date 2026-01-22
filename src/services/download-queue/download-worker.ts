@@ -2,11 +2,16 @@ import { spawn } from "child_process";
 import { app } from "electron";
 import path from "path";
 import { requireQueueManager } from "./queue-manager";
+import { requireOptimizationQueueManager } from "@/services/optimization-queue/queue-manager";
+import type { TargetResolution } from "@/services/optimization-queue/types";
 import type { Database } from "@/api/db";
 import type { WorkerState } from "./types";
 import fs from "fs";
 import { logger } from "@/helpers/logger";
 import { ensureFfmpegStaticAvailable } from "@/utils/ffmpeg-static-helper";
+import { userPreferences } from "@/api/db/schema";
+import { eq } from "drizzle-orm";
+import type { DownloadQuality } from "@/lib/types/user-preferences";
 
 /**
  * Active download workers
@@ -172,6 +177,75 @@ const getYtDlpPath = (): string => {
 };
 
 /**
+ * Get download quality preference from database
+ */
+const getDownloadQuality = async (db: Database): Promise<DownloadQuality> => {
+  try {
+    const rows = await db
+      .select({ customizationSettings: userPreferences.customizationSettings })
+      .from(userPreferences)
+      .where(eq(userPreferences.id, "default"))
+      .limit(1);
+
+    if (rows.length > 0 && rows[0].customizationSettings) {
+      const settings: unknown = JSON.parse(rows[0].customizationSettings);
+      if (
+        typeof settings === "object" &&
+        settings !== null &&
+        "download" in settings &&
+        typeof settings.download === "object" &&
+        settings.download !== null &&
+        "downloadQuality" in settings.download
+      ) {
+        const quality = settings.download.downloadQuality;
+        if (quality === "360p" || quality === "480p" || quality === "720p" || quality === "1080p") {
+          return quality;
+        }
+      }
+    }
+  } catch (error) {
+    logger.warn("[download-worker] Failed to read download quality preference", { error });
+  }
+  return "480p"; // Default for learning apps
+};
+
+/**
+ * Get yt-dlp format string based on quality preference
+ */
+const getFormatString = (quality: DownloadQuality): string => {
+  // Map quality to max height
+  const heightMap: Record<DownloadQuality, number> = {
+    "360p": 360,
+    "480p": 480,
+    "720p": 720,
+    "1080p": 1080,
+  };
+  const maxHeight = heightMap[quality];
+
+  // WebM-first strategy with quality limit
+  // Priority: WebM at target quality -> WebM at lower qualities -> MP4 H.264 as fallback
+  return `best[height<=${maxHeight}][ext=webm]/bestvideo[height<=${maxHeight}][ext=webm]+bestaudio[ext=webm]/best[height<=${Math.min(maxHeight, 720)}][ext=webm]/best[height<=${Math.min(maxHeight, 480)}][ext=webm]/best[height<=${maxHeight}][ext=mp4][vcodec^=avc1]/bestvideo[height<=${maxHeight}][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=${maxHeight}]`;
+};
+
+/**
+ * Map download quality preference to optimization target resolution
+ */
+const getOptimizationTargetResolution = (quality: DownloadQuality): TargetResolution => {
+  const resolutionMap: Record<DownloadQuality, TargetResolution> = {
+    "360p": "480p", // Keep original if already small
+    "480p": "480p",
+    "720p": "720p",
+    "1080p": "720p", // Downscale 1080p to 720p for optimization
+  };
+  return resolutionMap[quality];
+};
+
+/**
+ * Auto-optimization threshold in bytes (100 MB)
+ */
+const AUTO_OPTIMIZATION_THRESHOLD = 100 * 1024 * 1024;
+
+/**
  * Get ffmpeg binary path (bundled, from ffmpeg-static, or downloaded)
  * Priority: 1. Bundled with app, 2. ffmpeg-static npm package, 3. Downloaded to userData/bin
  */
@@ -287,7 +361,7 @@ export const spawnDownload = async (
       });
     }
 
-    // Add format if specified, otherwise prefer WebM or H.264-compatible MP4
+    // Add format if specified, otherwise use quality preference from settings
     let selectedFormat: string;
     if (format) {
       selectedFormat = format;
@@ -298,26 +372,16 @@ export const spawnDownload = async (
         format: selectedFormat,
       });
     } else {
-      // STRONGLY prefer WebM (always works on all Chromium-based apps, including company MacBooks)
-      // Format string with quality restrictions to prevent huge file sizes:
-      // - Limit to 1080p max (height<=1080)
-      // - Prefer single-file formats (video+audio combined) to avoid merging issues
-      // - WebM-first strategy: try WebM in all quality levels before falling back to MP4
-      // Format priority (aggressive WebM preference):
-      // 1. Single WebM file (video+audio) - BEST compatibility
-      // 2. Separate WebM video+audio - still WebM, just needs merging
-      // 3. Lower quality WebM if high quality not available
-      // 4. Single H.264/AVC1 MP4 file - only if WebM completely unavailable
-      // 5. Separate H.264/AVC1 MP4 - absolute last resort
-      // Strategy: Try WebM at multiple quality levels before accepting MP4
-      selectedFormat =
-        "best[height<=1080][ext=webm]/bestvideo[height<=1080][ext=webm]+bestaudio[ext=webm]/best[height<=720][ext=webm]/bestvideo[height<=720][ext=webm]+bestaudio[ext=webm]/best[height<=480][ext=webm]/best[height<=1080][ext=mp4][vcodec^=avc1]/bestvideo[height<=1080][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]";
+      // Get download quality from user preferences (defaults to 480p for learning apps)
+      const quality = await getDownloadQuality(db);
+      selectedFormat = getFormatString(quality);
       args.push("-f", selectedFormat);
-      logger.info("[download-worker] Using format preference for Chromium compatibility", {
+      logger.info("[download-worker] Using quality preference from settings", {
         downloadId,
         videoId,
+        quality,
         preferredFormat: selectedFormat,
-        note: "WebM-first strategy: Tries WebM at 1080p/720p/480p before accepting MP4. MP4 only as last resort.",
+        note: `WebM-first strategy at ${quality}. Lower quality = smaller files for learning.`,
       });
     }
 
@@ -621,6 +685,37 @@ export const spawnDownload = async (
             finalPath: completedPath,
             note: "If playback fails, check format selection logs above for actual codec (H.264/AVC1 vs H.265/HEVC). H.265 will not play in Chromium.",
           });
+        }
+
+        // Auto-optimization for large files (>100MB)
+        if (
+          fileSize &&
+          fileSize > AUTO_OPTIMIZATION_THRESHOLD &&
+          videoId &&
+          !hasFormatCode // Skip if unmerged file (optimization won't help)
+        ) {
+          try {
+            const downloadQuality = await getDownloadQuality(db);
+            const targetResolution = getOptimizationTargetResolution(downloadQuality);
+
+            logger.info("[download-worker] Large file detected, queueing auto-optimization", {
+              downloadId,
+              videoId,
+              fileSizeMB: (fileSize / 1024 / 1024).toFixed(2),
+              thresholdMB: (AUTO_OPTIMIZATION_THRESHOLD / 1024 / 1024).toFixed(0),
+              targetResolution,
+            });
+
+            const optimizationManager = requireOptimizationQueueManager();
+            await optimizationManager.addToQueue(db, [videoId], targetResolution);
+          } catch (optError) {
+            // Don't fail the download if optimization queueing fails
+            logger.warn("[download-worker] Failed to queue auto-optimization", {
+              downloadId,
+              videoId,
+              error: optError instanceof Error ? optError.message : "Unknown error",
+            });
+          }
         }
       } else {
         // Failed

@@ -142,6 +142,40 @@ export function VideoPlayer({
     };
   }, [videoRef]);
 
+  // Timeout-based error detection for cases where video fails silently (e.g., 404 from media server)
+  useEffect(() => {
+    if (!videoRef || !videoSrc) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    let loadedSuccessfully = false;
+    const timeoutId = setTimeout(() => {
+      // If video hasn't loaded metadata within 5 seconds, assume it failed
+      if (!loadedSuccessfully && video.readyState < 1) {
+        logger.error("[VideoPlayer] Video load timeout - file may be missing or inaccessible", {
+          src: videoSrc,
+          readyState: video.readyState,
+          networkState: video.networkState,
+        });
+        if (onError) {
+          onError();
+        }
+      }
+    }, 5000);
+
+    const handleMetadataLoaded = (): void => {
+      loadedSuccessfully = true;
+      clearTimeout(timeoutId);
+    };
+
+    video.addEventListener("loadedmetadata", handleMetadataLoaded);
+
+    return () => {
+      clearTimeout(timeoutId);
+      video.removeEventListener("loadedmetadata", handleMetadataLoaded);
+    };
+  }, [videoRef, videoSrc, onError]);
+
   // Log video metadata when successfully loaded
   useEffect(() => {
     if (!videoRef) return;

@@ -83,6 +83,9 @@ export default function PlayerPage(): React.JSX.Element {
       return await trpcClient.ytdlp.getVideoPlayback.query({ videoId });
     },
     enabled: !!videoId,
+    // Always refetch on mount to check if file still exists
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchInterval: (q) => {
       const status = q.state.data?.status;
       if (!status || typeof status !== "string") return false;
@@ -502,6 +505,20 @@ export default function PlayerPage(): React.JSX.Element {
                 thumbnailUrl={playback?.thumbnailUrl}
                 title={playback?.title}
               />
+            ) : !mediaUrl ? (
+              // File path exists in DB but actual file is missing (deleted)
+              <Alert variant="destructive">
+                <AlertTitle>Video file missing</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>The video file has been deleted or moved. Would you like to re-download it?</p>
+                  <Button
+                    onClick={() => startDownloadMutation.mutate()}
+                    disabled={startDownloadMutation.isPending}
+                  >
+                    {startDownloadMutation.isPending ? "Starting download..." : "Re-download video"}
+                  </Button>
+                </AlertDescription>
+              </Alert>
             ) : videoLoadError ? (
               <Alert variant="destructive">
                 <AlertTitle>Video file not found</AlertTitle>

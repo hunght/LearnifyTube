@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Table,
   TableBody,
@@ -25,11 +24,14 @@ import {
   FileWarning,
   Clock,
   TrendingDown,
-  Zap,
   XCircle,
+  Play,
+  ExternalLink,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { OptimizeDialog } from "@/components/OptimizeDialog";
+import Thumbnail from "@/components/Thumbnail";
 import { Progress } from "@/components/ui/progress";
 import { ESTIMATED_COMPRESSION_RATIO } from "@/services/optimization-queue/config";
 
@@ -469,30 +471,6 @@ export default function StorageManagerPage(): React.JSX.Element {
     setOptimizeDialogOpen(true);
   };
 
-  const handleOptimizeStaleFiles = (): void => {
-    const validFiles = analytics.staleFiles.filter(
-      (v) => v.fileExists && !isVideoOptimizing(v.videoId)
-    );
-    if (validFiles.length === 0) {
-      toast.error("No stale files available to optimize");
-      return;
-    }
-    setVideosToOptimize(validFiles);
-    setOptimizeDialogOpen(true);
-  };
-
-  const handleOptimizeNeverWatched = (): void => {
-    const validFiles = analytics.neverWatched.filter(
-      (v) => v.fileExists && !isVideoOptimizing(v.videoId)
-    );
-    if (validFiles.length === 0) {
-      toast.error("No unwatched files available to optimize");
-      return;
-    }
-    setVideosToOptimize(validFiles);
-    setOptimizeDialogOpen(true);
-  };
-
   const handleOptimizeAll = (): void => {
     if (!downloadsQuery.data) return;
     const validFiles = downloadsQuery.data.filter(
@@ -675,60 +653,62 @@ export default function StorageManagerPage(): React.JSX.Element {
       )}
 
       {/* Quick Stats Summary */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Card>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Card className="overflow-hidden border-0 bg-gradient-to-br from-primary/5 via-background to-background shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-primary/10 p-2">
+              <div className="rounded-xl bg-primary/10 p-2.5">
                 <HardDrive className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{formatBytes(analytics.totalSize)}</p>
-                <p className="text-sm text-muted-foreground">{analytics.totalVideos} videos</p>
+                <p className="text-2xl font-bold tracking-tight">
+                  {formatBytes(analytics.totalSize)}
+                </p>
+                <p className="text-xs text-muted-foreground">{analytics.totalVideos} videos</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden border-0 bg-gradient-to-br from-emerald-500/5 via-background to-background shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-green-500/10 p-2">
-                <TrendingDown className="h-5 w-5 text-green-500" />
+              <div className="rounded-xl bg-emerald-500/10 p-2.5">
+                <TrendingDown className="h-5 w-5 text-emerald-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-2xl font-bold tracking-tight text-emerald-500">
                   {formatBytes(analytics.potentialSavings720p)}
                 </p>
-                <p className="text-sm text-muted-foreground">Potential savings</p>
+                <p className="text-xs text-muted-foreground">Potential savings</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden border-0 bg-gradient-to-br from-orange-500/5 via-background to-background shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-orange-500/10 p-2">
+              <div className="rounded-xl bg-orange-500/10 p-2.5">
                 <FileWarning className="h-5 w-5 text-orange-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{analytics.largeFiles.length}</p>
-                <p className="text-sm text-muted-foreground">Large files (&gt;100MB)</p>
+                <p className="text-2xl font-bold tracking-tight">{analytics.largeFiles.length}</p>
+                <p className="text-xs text-muted-foreground">Large files (&gt;100MB)</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden border-0 bg-gradient-to-br from-violet-500/5 via-background to-background shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-purple-500/10 p-2">
-                <Clock className="h-5 w-5 text-purple-500" />
+              <div className="rounded-xl bg-violet-500/10 p-2.5">
+                <Clock className="h-5 w-5 text-violet-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{analytics.staleFiles.length}</p>
-                <p className="text-sm text-muted-foreground">Not watched in 30d</p>
+                <p className="text-2xl font-bold tracking-tight">{analytics.staleFiles.length}</p>
+                <p className="text-xs text-muted-foreground">Not watched in 30d</p>
               </div>
             </div>
           </CardContent>
@@ -736,162 +716,89 @@ export default function StorageManagerPage(): React.JSX.Element {
       </div>
 
       {/* Optimization Opportunity Cards - CTAs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2">
         {/* Large Files Card */}
         {analytics.largeFiles.length > 0 && (
-          <Card className="border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-transparent">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <FileWarning className="h-5 w-5 text-orange-500" />
-                <CardTitle className="text-base">Large Files</CardTitle>
+          <Card className="overflow-hidden border-orange-500/20 bg-gradient-to-br from-orange-500/5 via-background to-background">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-lg bg-orange-500/10 p-1.5">
+                    <FileWarning className="h-4 w-4 text-orange-500" />
+                  </div>
+                  <CardTitle className="text-sm font-semibold">Large Files</CardTitle>
+                </div>
+                <Badge variant="secondary" className="bg-orange-500/10 text-orange-500">
+                  {formatBytes(analytics.largeFilesSize)}
+                </Badge>
               </div>
-              <CardDescription>
-                {analytics.largeFiles.length} files using {formatBytes(analytics.largeFilesSize)}
-              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="mb-3 space-y-1">
-                {analytics.largeFiles.slice(0, 3).map((v) => (
-                  <div key={v.videoId} className="flex items-center justify-between text-sm">
-                    <span className="truncate pr-2 text-muted-foreground">{v.title}</span>
-                    <Badge variant="secondary" className="shrink-0">
+            <CardContent className="space-y-3 pt-0">
+              <div className="space-y-1.5">
+                {analytics.largeFiles.slice(0, 2).map((v) => (
+                  <div key={v.videoId} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="truncate text-muted-foreground">{v.title}</span>
+                    <span className="shrink-0 font-mono text-muted-foreground">
                       {formatBytes(v.fileSizeBytes)}
-                    </Badge>
+                    </span>
                   </div>
                 ))}
-                {analytics.largeFiles.length > 3 && (
-                  <p className="text-xs text-muted-foreground">
-                    +{analytics.largeFiles.length - 3} more files
+                {analytics.largeFiles.length > 2 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    +{analytics.largeFiles.length - 2} more
                   </p>
                 )}
               </div>
               <Button
                 onClick={handleOptimizeLargeFiles}
-                className="w-full gap-2"
-                variant="default"
+                className="w-full gap-2 bg-orange-500 text-white hover:bg-orange-600"
+                size="sm"
                 disabled={optimizeMutation.isPending}
               >
-                <Wand2 className="h-4 w-4" />
-                Optimize All Large Files
+                <Wand2 className="h-3.5 w-3.5" />
+                Optimize Large Files
               </Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Stale Files Card */}
-        {analytics.staleFiles.length > 0 && (
-          <Card className="border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-transparent">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-purple-500" />
-                <CardTitle className="text-base">Not Watched Recently</CardTitle>
-              </div>
-              <CardDescription>
-                {analytics.staleFiles.length} files, last watched over 30 days ago
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-3 space-y-1">
-                {analytics.staleFiles.slice(0, 3).map((v) => (
-                  <div key={v.videoId} className="flex items-center justify-between text-sm">
-                    <span className="truncate pr-2 text-muted-foreground">{v.title}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {formatRelativeDate(v.lastWatchedAt)}
-                    </span>
-                  </div>
-                ))}
-                {analytics.staleFiles.length > 3 && (
-                  <p className="text-xs text-muted-foreground">
-                    +{analytics.staleFiles.length - 3} more files
-                  </p>
-                )}
-              </div>
-              <Button
-                onClick={handleOptimizeStaleFiles}
-                className="w-full gap-2"
-                variant="default"
-                disabled={optimizeMutation.isPending}
-              >
-                <Wand2 className="h-4 w-4" />
-                Optimize Stale Files
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Never Watched Card */}
-        {analytics.neverWatched.length > 0 && (
-          <Card className="border-blue-500/30 bg-gradient-to-br from-blue-500/5 to-transparent">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-blue-500" />
-                <CardTitle className="text-base">Never Watched</CardTitle>
-              </div>
-              <CardDescription>
-                {analytics.neverWatched.length} files ({formatBytes(analytics.neverWatchedSize)})
-                never played
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-3 space-y-1">
-                {analytics.neverWatched.slice(0, 3).map((v) => (
-                  <div key={v.videoId} className="flex items-center justify-between text-sm">
-                    <span className="truncate pr-2 text-muted-foreground">{v.title}</span>
-                    <Badge variant="secondary" className="shrink-0">
-                      {formatBytes(v.fileSizeBytes)}
-                    </Badge>
-                  </div>
-                ))}
-                {analytics.neverWatched.length > 3 && (
-                  <p className="text-xs text-muted-foreground">
-                    +{analytics.neverWatched.length - 3} more files
-                  </p>
-                )}
-              </div>
-              <Button
-                onClick={handleOptimizeNeverWatched}
-                className="w-full gap-2"
-                variant="default"
-                disabled={optimizeMutation.isPending}
-              >
-                <Wand2 className="h-4 w-4" />
-                Optimize Unwatched Files
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Optimize All Card - Always show if there are files */}
+        {/* Optimize All Card */}
         {analytics.totalVideos > 0 && (
-          <Card className="border-green-500/30 bg-gradient-to-br from-green-500/5 to-transparent">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <TrendingDown className="h-5 w-5 text-green-500" />
-                <CardTitle className="text-base">Optimize Everything</CardTitle>
-              </div>
-              <CardDescription>
-                Save up to {formatBytes(analytics.potentialSavings720p)} by converting to 720p
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Current size:</span>
-                  <span className="font-medium">{formatBytes(analytics.totalSize)}</span>
+          <Card className="overflow-hidden border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-background to-background">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-lg bg-emerald-500/10 p-1.5">
+                    <TrendingDown className="h-4 w-4 text-emerald-500" />
+                  </div>
+                  <CardTitle className="text-sm font-semibold">Optimize Everything</CardTitle>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">After optimization:</span>
-                  <span className="font-medium text-green-600">
+                <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-500">
+                  Save ~{formatBytes(analytics.potentialSavings720p)}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-xs">
+                <div className="space-y-0.5">
+                  <p className="text-muted-foreground">Current</p>
+                  <p className="font-semibold">{formatBytes(analytics.totalSize)}</p>
+                </div>
+                <div className="text-muted-foreground">→</div>
+                <div className="space-y-0.5 text-right">
+                  <p className="text-muted-foreground">After</p>
+                  <p className="font-semibold text-emerald-500">
                     ~{formatBytes(analytics.totalSize - analytics.potentialSavings720p)}
-                  </span>
+                  </p>
                 </div>
               </div>
               <Button
                 onClick={handleOptimizeAll}
-                className="w-full gap-2 bg-green-600 hover:bg-green-700"
+                className="w-full gap-2 bg-emerald-500 text-white hover:bg-emerald-600"
+                size="sm"
                 disabled={optimizeMutation.isPending}
               >
-                <Wand2 className="h-4 w-4" />
+                <Wand2 className="h-3.5 w-3.5" />
                 Optimize All Videos
               </Button>
             </CardContent>
@@ -900,83 +807,64 @@ export default function StorageManagerPage(): React.JSX.Element {
       </div>
 
       {/* Search and Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="relative min-w-[200px] flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-9 pl-9"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="whitespace-nowrap text-xs text-muted-foreground">File:</span>
-              <RadioGroup
-                value={fileFilter}
-                onValueChange={(value) => {
-                  if (value === "all" || value === "missing") {
-                    setFileFilter(value);
-                  }
-                }}
-                className="flex flex-row gap-3"
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card/50 p-3 backdrop-blur-sm">
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search videos..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-9 border-0 bg-muted/50 pl-9 focus-visible:ring-1"
+          />
+        </div>
+        <div className="flex items-center gap-4 border-l pl-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Status:</span>
+            <div className="flex gap-1">
+              <Button
+                variant={fileFilter === "all" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setFileFilter("all")}
               >
-                <div className="flex items-center space-x-1.5">
-                  <RadioGroupItem value="all" id="file-all" className="h-3.5 w-3.5" />
-                  <label htmlFor="file-all" className="cursor-pointer text-xs">
-                    All
-                  </label>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <RadioGroupItem value="missing" id="file-missing" className="h-3.5 w-3.5" />
-                  <label htmlFor="file-missing" className="cursor-pointer text-xs">
-                    Missing
-                  </label>
-                </div>
-              </RadioGroup>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="whitespace-nowrap text-xs text-muted-foreground">Activity:</span>
-              <RadioGroup
-                value={activityFilter}
-                onValueChange={(value) => {
-                  if (value === "all" || value === "never" || value === "30d" || value === "90d") {
-                    setActivityFilter(value);
-                  }
-                }}
-                className="flex flex-row gap-3"
+                All
+              </Button>
+              <Button
+                variant={fileFilter === "missing" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setFileFilter("missing")}
               >
-                <div className="flex items-center space-x-1.5">
-                  <RadioGroupItem value="all" id="activity-all" className="h-3.5 w-3.5" />
-                  <label htmlFor="activity-all" className="cursor-pointer text-xs">
-                    Any
-                  </label>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <RadioGroupItem value="never" id="activity-never" className="h-3.5 w-3.5" />
-                  <label htmlFor="activity-never" className="cursor-pointer text-xs">
-                    Never
-                  </label>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <RadioGroupItem value="30d" id="activity-30d" className="h-3.5 w-3.5" />
-                  <label htmlFor="activity-30d" className="cursor-pointer text-xs">
-                    30d
-                  </label>
-                </div>
-                <div className="flex items-center space-x-1.5">
-                  <RadioGroupItem value="90d" id="activity-90d" className="h-3.5 w-3.5" />
-                  <label htmlFor="activity-90d" className="cursor-pointer text-xs">
-                    90d
-                  </label>
-                </div>
-              </RadioGroup>
+                <FileWarning className="mr-1 h-3 w-3" />
+                Missing
+              </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Watched:</span>
+            <div className="flex gap-1">
+              {(
+                [
+                  { value: "all", label: "Any" },
+                  { value: "never", label: "Never" },
+                  { value: "30d", label: ">30d" },
+                  { value: "90d", label: ">90d" },
+                ] satisfies Array<{ value: "all" | "never" | "30d" | "90d"; label: string }>
+              ).map((option) => (
+                <Button
+                  key={option.value}
+                  variant={activityFilter === option.value ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-7 px-2.5 text-xs"
+                  onClick={() => setActivityFilter(option.value)}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Videos Table */}
       <Card>
@@ -1011,7 +899,7 @@ export default function StorageManagerPage(): React.JSX.Element {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="hover:bg-transparent">
                   <TableHead className="w-10">
                     <Checkbox
                       checked={
@@ -1021,27 +909,31 @@ export default function StorageManagerPage(): React.JSX.Element {
                       aria-label="Select all videos"
                     />
                   </TableHead>
-                  <TableHead>Title</TableHead>
+                  <TableHead className="min-w-[300px]">Video</TableHead>
                   <TableHead>Channel</TableHead>
                   <TableHead>Duration</TableHead>
                   <TableHead>
                     <button
                       type="button"
-                      className="flex items-center gap-1"
+                      className="flex items-center gap-1 transition-colors hover:text-foreground"
                       onClick={() => toggleSort("size")}
                     >
                       <span>Size</span>
-                      {sortKey === "size" && <span>{sortOrder === "asc" ? "↑" : "↓"}</span>}
+                      <span className="text-primary">
+                        {sortKey === "size" && (sortOrder === "asc" ? "↑" : "↓")}
+                      </span>
                     </button>
                   </TableHead>
                   <TableHead>
                     <button
                       type="button"
-                      className="flex items-center gap-1"
+                      className="flex items-center gap-1 transition-colors hover:text-foreground"
                       onClick={() => toggleSort("lastWatched")}
                     >
-                      <span>Last Watched</span>
-                      {sortKey === "lastWatched" && <span>{sortOrder === "asc" ? "↑" : "↓"}</span>}
+                      <span>Watched</span>
+                      <span className="text-primary">
+                        {sortKey === "lastWatched" && (sortOrder === "asc" ? "↑" : "↓")}
+                      </span>
                     </button>
                   </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -1052,6 +944,7 @@ export default function StorageManagerPage(): React.JSX.Element {
                   <TableRow
                     key={video.videoId}
                     data-state={selected[video.videoId] ? "selected" : undefined}
+                    className="group transition-colors hover:bg-muted/50"
                   >
                     <TableCell className="w-10">
                       <Checkbox
@@ -1061,56 +954,138 @@ export default function StorageManagerPage(): React.JSX.Element {
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{video.title}</span>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                          <span>{video.videoId}</span>
-                          {!video.fileExists && (
-                            <Badge variant="destructive" className="text-[10px]">
-                              Missing file
-                            </Badge>
-                          )}
-                          {(video.fileSizeBytes ?? 0) >= LARGE_FILE_THRESHOLD && (
-                            <Badge
-                              variant="outline"
-                              className="border-orange-500/50 text-[10px] text-orange-600"
-                            >
-                              Large
-                            </Badge>
-                          )}
+                      <div className="flex items-center gap-3">
+                        {/* Thumbnail with play overlay */}
+                        <Link
+                          to="/player"
+                          search={{
+                            videoId: video.videoId,
+                            playlistId: undefined,
+                            playlistIndex: undefined,
+                          }}
+                          className="group/thumb relative shrink-0"
+                        >
+                          <div className="relative h-12 w-20 overflow-hidden rounded-md bg-muted">
+                            <Thumbnail
+                              thumbnailPath={video.thumbnailPath}
+                              thumbnailUrl={video.thumbnailUrl}
+                              alt={video.title}
+                              className="h-full w-full object-cover transition-transform group-hover/thumb:scale-105"
+                              fallbackIcon={<Play className="h-4 w-4 text-muted-foreground" />}
+                            />
+                            {/* Play overlay on hover */}
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover/thumb:opacity-100">
+                              <div className="rounded-full bg-white/90 p-1.5">
+                                <Play className="h-3 w-3 fill-current text-black" />
+                              </div>
+                            </div>
+                            {/* Missing file overlay */}
+                            {!video.fileExists && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                                <FileWarning className="h-4 w-4 text-red-400" />
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                        {/* Title and metadata */}
+                        <div className="flex min-w-0 flex-col">
+                          <Link
+                            to="/player"
+                            search={{
+                              videoId: video.videoId,
+                              playlistId: undefined,
+                              playlistIndex: undefined,
+                            }}
+                            className="line-clamp-1 font-medium transition-colors hover:text-primary"
+                          >
+                            {video.title}
+                          </Link>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                            <span className="font-mono">{video.videoId}</span>
+                            {!video.fileExists && (
+                              <Badge variant="destructive" className="h-4 px-1 text-[10px]">
+                                Missing
+                              </Badge>
+                            )}
+                            {(video.fileSizeBytes ?? 0) >= LARGE_FILE_THRESHOLD && (
+                              <Badge
+                                variant="outline"
+                                className="h-4 border-orange-500/50 px-1 text-[10px] text-orange-500"
+                              >
+                                Large
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {video.channelTitle ?? "Unknown channel"}
+                      {video.channelTitle ?? "Unknown"}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap text-sm tabular-nums">
                       {formatDuration(video.durationSeconds)}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap text-sm tabular-nums">
                       {formatBytes(video.fileSizeBytes)}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                       {formatRelativeDate(video.lastWatchedAt)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* Play button */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                          asChild
+                          title={
+                            video.fileExists ? "Play video" : "File missing - click to re-download"
+                          }
+                        >
+                          <Link
+                            to="/player"
+                            search={{
+                              videoId: video.videoId,
+                              playlistId: undefined,
+                              playlistIndex: undefined,
+                            }}
+                          >
+                            <Play className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        {/* Open on YouTube */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                          onClick={() =>
+                            window.open(
+                              `https://www.youtube.com/watch?v=${video.videoId}`,
+                              "_blank"
+                            )
+                          }
+                          title="Open on YouTube"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                        {/* Optimize button */}
                         {isVideoOptimizing(video.videoId) ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                            <div className="w-20">
+                            <div className="w-16">
                               <Progress
                                 value={getOptimizationProgress(video.videoId) ?? 0}
-                                className="h-2"
+                                className="h-1.5"
                               />
                             </div>
-                            <span className="w-8 text-xs text-muted-foreground">
+                            <span className="w-7 text-[10px] tabular-nums text-muted-foreground">
                               {getOptimizationProgress(video.videoId) ?? 0}%
                             </span>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                               onClick={() => {
                                 const jobId = getOptimizationJobId(video.videoId);
                                 if (jobId) cancelOptimizationMutation.mutate(jobId);
@@ -1123,7 +1098,7 @@ export default function StorageManagerPage(): React.JSX.Element {
                           </div>
                         ) : (
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
                             onClick={() => handleOptimize(video)}
                             disabled={
@@ -1131,22 +1106,25 @@ export default function StorageManagerPage(): React.JSX.Element {
                               optimizeMutation.isPending ||
                               hasActiveOptimizations
                             }
-                            className="flex items-center gap-1"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500"
                             title={
-                              hasActiveOptimizations
-                                ? "Wait for current optimization to complete"
-                                : "Optimize video to reduce file size"
+                              !video.fileExists
+                                ? "File missing"
+                                : hasActiveOptimizations
+                                  ? "Wait for current optimization"
+                                  : "Optimize to reduce size"
                             }
                           >
                             <Wand2 className="h-4 w-4" />
                           </Button>
                         )}
+                        {/* Delete button */}
                         <Button
-                          variant="destructive"
+                          variant="ghost"
                           size="sm"
                           onClick={() => handleDelete(video)}
                           disabled={deleteMutation.isPending || isVideoOptimizing(video.videoId)}
-                          className="flex items-center gap-1"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                           title={
                             isVideoOptimizing(video.videoId)
                               ? "Cannot delete while optimizing"

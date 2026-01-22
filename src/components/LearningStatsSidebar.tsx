@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { QuickAddDialog } from "@/components/QuickAddDialog";
+import Thumbnail from "@/components/Thumbnail";
 import { Flame, BookOpen, Play, Plus, Video, Clock } from "lucide-react";
 
 export function LearningStatsSidebar(): React.JSX.Element {
@@ -128,17 +129,13 @@ export function LearningStatsSidebar(): React.JSX.Element {
                 className="group flex items-center gap-2 rounded-lg p-2 transition-colors hover:bg-muted"
               >
                 <div className="relative h-10 w-16 flex-shrink-0 overflow-hidden rounded">
-                  {video.thumbnailPath || video.thumbnailUrl ? (
-                    <img
-                      src={video.thumbnailPath || video.thumbnailUrl || ""}
-                      alt={video.title}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-muted">
-                      <Video className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  )}
+                  <Thumbnail
+                    thumbnailPath={video.thumbnailPath}
+                    thumbnailUrl={video.thumbnailUrl}
+                    alt={video.title}
+                    className="h-full w-full object-cover"
+                    fallbackIcon={<Video className="h-4 w-4 text-muted-foreground" />}
+                  />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30">
                     <Play className="h-4 w-4 scale-0 text-white transition-transform group-hover:scale-100" />
                   </div>

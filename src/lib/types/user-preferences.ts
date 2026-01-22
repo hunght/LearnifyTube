@@ -23,6 +23,7 @@ export type SidebarItem =
 export type UISize = "compact" | "comfortable" | "spacious";
 export type FontScale = "small" | "normal" | "large" | "x-large";
 export type AnimationSpeed = "none" | "reduced" | "normal" | "enhanced";
+export type DownloadQuality = "360p" | "480p" | "720p" | "1080p";
 
 export interface SidebarPreferences {
   visibleItems: SidebarItem[];
@@ -54,11 +55,16 @@ export interface LearningPreferences {
   autoSaveWords: boolean;
 }
 
+export interface DownloadPreferences {
+  downloadQuality: DownloadQuality;
+}
+
 export interface UserPreferences {
   sidebar: SidebarPreferences;
   appearance: AppearancePreferences;
   player: PlayerPreferences;
   learning: LearningPreferences;
+  download: DownloadPreferences;
   version: number;
   lastUpdated: number;
 }
@@ -107,11 +113,16 @@ export const DEFAULT_LEARNING_PREFERENCES: LearningPreferences = {
   autoSaveWords: true,
 };
 
+export const DEFAULT_DOWNLOAD_PREFERENCES: DownloadPreferences = {
+  downloadQuality: "480p", // Default to 480p for learning apps (small files, good enough quality)
+};
+
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   sidebar: DEFAULT_SIDEBAR_PREFERENCES,
   appearance: DEFAULT_APPEARANCE_PREFERENCES,
   player: DEFAULT_PLAYER_PREFERENCES,
   learning: DEFAULT_LEARNING_PREFERENCES,
+  download: DEFAULT_DOWNLOAD_PREFERENCES,
   version: 1,
   lastUpdated: Date.now(),
 };

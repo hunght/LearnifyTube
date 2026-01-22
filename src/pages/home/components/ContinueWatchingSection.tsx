@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Play, Clock, Video } from "lucide-react";
+import Thumbnail from "@/components/Thumbnail";
 
 type WatchedVideo = {
   videoId: string;
@@ -96,7 +97,6 @@ export function ContinueWatchingSection({
 
 function VideoCard({ video }: { video: WatchedVideo }): React.JSX.Element {
   const progress = calculateProgress(video.lastPositionSeconds, video.durationSeconds);
-  const thumbnailSrc = video.thumbnailPath || video.thumbnailUrl;
 
   return (
     <Link
@@ -105,17 +105,13 @@ function VideoCard({ video }: { video: WatchedVideo }): React.JSX.Element {
       className="group w-64 flex-shrink-0"
     >
       <div className="relative overflow-hidden rounded-lg">
-        {thumbnailSrc ? (
-          <img
-            src={thumbnailSrc}
-            alt={video.title}
-            className="aspect-video w-full object-cover transition-transform group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex aspect-video w-full items-center justify-center bg-muted">
-            <Video className="h-8 w-8 text-muted-foreground" />
-          </div>
-        )}
+        <Thumbnail
+          thumbnailPath={video.thumbnailPath}
+          thumbnailUrl={video.thumbnailUrl}
+          alt={video.title}
+          className="aspect-video w-full object-cover transition-transform group-hover:scale-105"
+          fallbackIcon={<Video className="h-8 w-8 text-muted-foreground" />}
+        />
 
         {/* Play overlay */}
         <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30">
