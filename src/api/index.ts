@@ -16,6 +16,7 @@ import { flashcardsRouter } from "@/api/routers/flashcards";
 import { optimizationRouter } from "@/api/routers/optimization";
 import { learningStatsRouter } from "@/api/routers/learning-stats";
 import { backgroundJobsRouter } from "@/api/routers/background-jobs";
+import { favoritesRouter } from "@/api/routers/favorites";
 
 // Create the root router
 export const router = t.router({
@@ -36,6 +37,7 @@ export const router = t.router({
   optimization: optimizationRouter,
   learningStats: learningStatsRouter,
   backgroundJobs: backgroundJobsRouter,
+  favorites: favoritesRouter,
 });
 
 // Export type router type signature

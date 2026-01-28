@@ -555,3 +555,25 @@ export type NewCustomPlaylist = typeof customPlaylists.$inferInsert;
 
 export type CustomPlaylistItem = typeof customPlaylistItems.$inferSelect;
 export type NewCustomPlaylistItem = typeof customPlaylistItems.$inferInsert;
+
+// Favorites table for videos, custom playlists, and channel playlists
+export const favorites = sqliteTable(
+  "favorites",
+  {
+    id: text("id").primaryKey(),
+    entityType: text("entity_type", {
+      enum: ["video", "custom_playlist", "channel_playlist"],
+    }).notNull(),
+    entityId: text("entity_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at"),
+  },
+  (table) => [
+    unique().on(table.entityType, table.entityId),
+    index("favorites_entity_idx").on(table.entityType, table.entityId),
+    index("favorites_created_at_idx").on(table.createdAt),
+  ]
+);
+
+export type Favorite = typeof favorites.$inferSelect;
+export type NewFavorite = typeof favorites.$inferInsert;

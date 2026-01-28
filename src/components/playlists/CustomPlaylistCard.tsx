@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Thumbnail from "@/components/Thumbnail";
 import { EditPlaylistDialog } from "./EditPlaylistDialog";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import { MoreVertical, Pencil, Trash2, FolderHeart } from "lucide-react";
 
 type CustomPlaylistCardProps = {
@@ -118,6 +119,13 @@ export function CustomPlaylistCard({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Favorite button */}
+        <FavoriteButton
+          entityType="custom_playlist"
+          entityId={playlist.id}
+          className="absolute right-14 top-5 z-10 h-8 w-8 bg-background/80 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
+        />
 
         <Link
           to="/playlist"

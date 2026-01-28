@@ -4,7 +4,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Rewind, FastForward, ListPlus } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Rewind, FastForward, ListPlus, MoreVertical, Download, Trash2, Music } from "lucide-react";
 import { toast } from "sonner";
 import { AddToPlaylistDialog } from "@/components/playlists/AddToPlaylistDialog";
 import { useWatchProgress } from "./hooks/useWatchProgress";
@@ -16,6 +23,7 @@ import { VideoDescription } from "./components/VideoDescription";
 import { PlaylistNavigation } from "./components/PlaylistNavigation";
 import { VideoToolsPanel } from "./components/VideoToolsPanel";
 import { ExternalLink } from "@/components/ExternalLink";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import {
   beginVideoPlayback,
   usePlayerStore,
@@ -127,6 +135,46 @@ export default function PlayerPage(): React.JSX.Element {
       return await trpcClient.preferences.ensureDownloadDirectoryAccess.mutate({
         filePath: targetFile,
       });
+    },
+  });
+
+  const deleteVideoMutation = useMutation({
+    mutationFn: async () => {
+      if (!videoId) throw new Error("Missing videoId");
+      return await trpcClient.ytdlp.deleteDownloadedVideo.mutate({ videoId });
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success("Video deleted");
+        queryClient.invalidateQueries({ queryKey: ["video-playback", videoId] });
+        queryClient.invalidateQueries({ queryKey: ["ytdlp", "downloadedVideosDetailed"] });
+      } else {
+        toast.error(result.message || "Failed to delete video");
+      }
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to delete video");
+    },
+  });
+
+  const convertToAudioMutation = useMutation({
+    mutationFn: async () => {
+      if (!videoId) throw new Error("Missing videoId");
+      return await trpcClient.optimization.startAudioConversion.mutate({
+        videoIds: [videoId],
+        deleteOriginal: true, // Replace video with audio to save storage
+      });
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success("Converting to audio (video will be replaced)");
+        queryClient.invalidateQueries({ queryKey: ["video-playback", videoId] });
+      } else {
+        toast.error(result.message || "Failed to start audio conversion");
+      }
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to start audio conversion");
     },
   });
 
@@ -450,25 +498,63 @@ export default function PlayerPage(): React.JSX.Element {
             <Card>
               <CardHeader>
                 <div className="flex items-start justify-between gap-4">
-                  <CardTitle className="text-base font-semibold">
-                    <ExternalLink
-                      href={`https://www.youtube.com/watch?v=${videoId}`}
-                      className="transition-colors hover:text-primary"
-                      iconClassName="h-3.5 w-3.5 opacity-50 group-hover:opacity-100"
-                    >
-                      {videoTitle}
-                    </ExternalLink>
-                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-semibold">
+                      <ExternalLink
+                        href={`https://www.youtube.com/watch?v=${videoId}`}
+                        className="transition-colors hover:text-primary"
+                        iconClassName="h-3.5 w-3.5 opacity-50 group-hover:opacity-100"
+                      >
+                        {videoTitle}
+                      </ExternalLink>
+                    </CardTitle>
+                    {videoId && (
+                      <FavoriteButton
+                        entityType="video"
+                        entityId={videoId}
+                        size="sm"
+                        variant="ghost"
+                      />
+                    )}
+                  </div>
                   {videoId && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0 gap-1.5"
-                      onClick={() => setShowAddToPlaylistDialog(true)}
-                    >
-                      <ListPlus className="h-4 w-4" />
-                      <span className="hidden sm:inline">Add to Playlist</span>
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setShowAddToPlaylistDialog(true)}>
+                          <ListPlus className="mr-2 h-4 w-4" />
+                          Add to Mylist
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => convertToAudioMutation.mutate()}
+                          disabled={convertToAudioMutation.isPending}
+                        >
+                          <Music className="mr-2 h-4 w-4" />
+                          Convert to Audio
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => startDownloadMutation.mutate()}
+                          disabled={startDownloadMutation.isPending}
+                        >
+                          <Download className="mr-2 h-4 w-4" />
+                          Re-download Video
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => deleteVideoMutation.mutate()}
+                          disabled={deleteVideoMutation.isPending}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Video
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
                 {/* Video progress indicator - only show when video is loaded */}
