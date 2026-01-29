@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Database, FolderOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { LanguagePreferencesSection } from "@/pages/settings-page/components/LanguagePreferencesSection";
+import { SystemDoctorCard } from "./SystemDoctorCard";
 
 export function SystemTab(): React.JSX.Element {
   const { toast } = useToast();
@@ -117,6 +118,8 @@ export function SystemTab(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
+      <SystemDoctorCard />
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

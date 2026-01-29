@@ -34,7 +34,10 @@
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
       "Bash(npx expo install:*)",
-      "Bash(gh workflow run:*)"
+      "Bash(gh workflow run:*)",
+      "Bash(\"/Users/owner/Library/Application Support/LearnifyTube/bin/yt-dlp_macos\" \"https://www.youtube.com/watch?v=weSQpaou0ic\" --extractor-args \"youtube:player_client=mweb\" -F)",
+      "Bash(\"/Users/owner/Library/Application Support/LearnifyTube/bin/yt-dlp_macos\" \"https://www.youtube.com/watch?v=weSQpaou0ic\" --extractor-args \"youtube:player_client=android\" -F)",
+      "Bash(\"/Users/owner/Library/Application Support/LearnifyTube/bin/yt-dlp_macos\" \"https://www.youtube.com/watch?v=weSQpaou0ic\" --extractor-args \"youtube:player_client=android\" -f 18 -o \"/tmp/test-video.mp4\")"
     ]
   }
 }

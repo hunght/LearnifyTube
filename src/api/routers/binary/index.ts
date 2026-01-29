@@ -227,6 +227,54 @@ export const binaryRouter = t.router({
     return info;
   }),
 
+  /**
+   * Check if yt-dlp update is available by comparing installed vs latest version
+   */
+  checkForUpdate: publicProcedure.query(
+    async (): Promise<{
+      updateAvailable: boolean;
+      installedVersion: string | null;
+      latestVersion: string | null;
+    }> => {
+      try {
+        const installedVersion = readInstalledVersion();
+        const latest = await fetchLatestRelease();
+
+        if (!installedVersion || !latest) {
+          return {
+            updateAvailable: !installedVersion && !!latest,
+            installedVersion,
+            latestVersion: latest?.version ?? null,
+          };
+        }
+
+        // Compare versions (yt-dlp uses date-based versions like "2024.01.15")
+        const installed = installedVersion.replace(/[^0-9.]/g, "");
+        const latestVer = latest.version.replace(/[^0-9.]/g, "");
+        const updateAvailable = installed !== latestVer && latestVer > installed;
+
+        logger.info("[ytdlp] Update check result", {
+          installedVersion,
+          latestVersion: latest.version,
+          updateAvailable,
+        });
+
+        return {
+          updateAvailable,
+          installedVersion,
+          latestVersion: latest.version,
+        };
+      } catch (e) {
+        logger.error("[ytdlp] checkForUpdate failed", e);
+        return {
+          updateAvailable: false,
+          installedVersion: readInstalledVersion(),
+          latestVersion: null,
+        };
+      }
+    }
+  ),
+
   downloadLatest: publicProcedure
     .input(z.object({ force: z.boolean().optional() }).optional())
     .mutation(async ({ input }): Promise<DownloadLatestResult> => {
