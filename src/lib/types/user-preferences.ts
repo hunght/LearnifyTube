@@ -10,6 +10,7 @@ export type SidebarItem =
   | "dashboard"
   | "channels"
   | "playlists"
+  | "my-playlists"
   | "subscriptions"
   | "history"
   | "my-words"
@@ -75,6 +76,7 @@ export const DEFAULT_SIDEBAR_PREFERENCES: SidebarPreferences = {
     "dashboard",
     "channels",
     "playlists",
+    "my-playlists",
     "subscriptions",
     "history",
     "my-words",

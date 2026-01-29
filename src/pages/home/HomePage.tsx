@@ -1,13 +1,14 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Plus, Play } from "lucide-react";
 import { trpcClient } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { PageContainer } from "@/components/ui/page-container";
 import { QuickAddDialog } from "@/components/QuickAddDialog";
-import { StudyStreakCard } from "./components/StudyStreakCard";
 import { QuickStatsRow } from "./components/QuickStatsRow";
-import { ContinueWatchingSection } from "./components/ContinueWatchingSection";
+import { RecentDownloadsSection } from "./components/RecentDownloadsSection";
+import { RecentPlaylistsSection } from "./components/RecentPlaylistsSection";
 
 const getGreeting = (): string => {
   const hour = new Date().getHours();
@@ -18,6 +19,7 @@ const getGreeting = (): string => {
 
 export default function HomePage(): React.JSX.Element {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const navigate = useNavigate();
 
   // Fetch dashboard stats
   const statsQuery = useQuery({
@@ -26,21 +28,21 @@ export default function HomePage(): React.JSX.Element {
     refetchOnWindowFocus: false,
   });
 
-  // Fetch streak data
-  const streakQuery = useQuery({
-    queryKey: ["learningStats", "streak"],
-    queryFn: () => trpcClient.learningStats.getStreak.query(),
+  // Fetch recently downloaded videos
+  const recentDownloadsQuery = useQuery({
+    queryKey: ["ytdlp", "downloadedVideosDetailed"],
+    queryFn: () => trpcClient.ytdlp.listDownloadedVideosDetailed.query({ limit: 10 }),
     refetchOnWindowFocus: false,
   });
 
-  // Fetch recently watched videos
-  const recentWatchedQuery = useQuery({
-    queryKey: ["watchStats", "recentWatched"],
-    queryFn: () => trpcClient.watchStats.listRecentWatched.query({ limit: 10 }),
+  // Fetch recent playlists
+  const recentPlaylistsQuery = useQuery({
+    queryKey: ["playlists", "listAll"],
+    queryFn: () => trpcClient.playlists.listAll.query({ limit: 10 }),
     refetchOnWindowFocus: false,
   });
 
-  const isLoading = statsQuery.isLoading || streakQuery.isLoading;
+  const isLoading = statsQuery.isLoading;
 
   // Calculate retention rate (graduated / total learned)
   const retentionRate =
@@ -64,20 +66,29 @@ export default function HomePage(): React.JSX.Element {
             Ready to continue your learning journey?
           </p>
         </div>
-        <Button onClick={() => setQuickAddOpen(true)} className="shrink-0 gap-2" size="lg">
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Add Video</span>
-          <span className="sm:hidden">Add</span>
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => navigate({ to: "/my-words" })}
+            variant="default"
+            className="shrink-0 gap-2 bg-orange-500 hover:bg-orange-600"
+            size="lg"
+          >
+            <Play className="h-4 w-4" />
+            <span className="hidden sm:inline">Start Study Session</span>
+            <span className="sm:hidden">Study</span>
+          </Button>
+          <Button
+            onClick={() => setQuickAddOpen(true)}
+            variant="outline"
+            className="shrink-0 gap-2"
+            size="lg"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Add Video</span>
+            <span className="sm:hidden">Add</span>
+          </Button>
+        </div>
       </div>
-
-      {/* Study Streak Card */}
-      <StudyStreakCard
-        streak={streakQuery.data?.currentStreak ?? 0}
-        dueCards={statsQuery.data?.flashcards.due ?? 0}
-        todayMinutes={statsQuery.data?.watchTime.todayMinutes ?? 0}
-        isLoading={isLoading}
-      />
 
       {/* Quick Stats Row */}
       <QuickStatsRow
@@ -88,10 +99,36 @@ export default function HomePage(): React.JSX.Element {
         isLoading={isLoading}
       />
 
-      {/* Continue Watching */}
-      <ContinueWatchingSection
-        videos={recentWatchedQuery.data ?? []}
-        isLoading={recentWatchedQuery.isLoading}
+      {/* Recent Downloads */}
+      <RecentDownloadsSection
+        videos={
+          recentDownloadsQuery.data?.map((v) => ({
+            videoId: v.videoId,
+            title: v.title,
+            thumbnailUrl: v.thumbnailUrl,
+            thumbnailPath: v.thumbnailPath,
+            channelTitle: v.channelTitle,
+            durationSeconds: v.durationSeconds,
+            lastDownloadedAt: v.lastDownloadedAt,
+          })) ?? []
+        }
+        isLoading={recentDownloadsQuery.isLoading}
+      />
+
+      {/* Recent Playlists */}
+      <RecentPlaylistsSection
+        playlists={
+          recentPlaylistsQuery.data?.map((p) => ({
+            playlistId: p.playlistId,
+            title: p.title,
+            thumbnailUrl: p.thumbnailUrl,
+            thumbnailPath: p.thumbnailPath,
+            channelTitle: p.channelTitle,
+            itemCount: p.itemCount,
+            lastViewedAt: p.lastViewedAt,
+          })) ?? []
+        }
+        isLoading={recentPlaylistsQuery.isLoading}
       />
 
       {/* Quick Add Dialog */}

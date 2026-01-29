@@ -469,7 +469,7 @@ export const playlistsRouter = t.router({
             lastFetchedAt: channelPlaylists.lastFetchedAt,
           })
           .from(channelPlaylists)
-          .orderBy(desc(channelPlaylists.lastViewedAt), desc(channelPlaylists.updatedAt))
+          .orderBy(desc(channelPlaylists.createdAt))
           .limit(limit);
 
         // Get channel info for each playlist

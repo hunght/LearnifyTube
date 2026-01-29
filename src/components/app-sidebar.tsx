@@ -10,6 +10,7 @@ import {
   HardDrive,
   ScrollText,
   Settings,
+  FolderHeart,
 } from "lucide-react";
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";
@@ -83,6 +84,7 @@ const SIDEBAR_GROUPS: Array<{
   {
     label: "LIBRARY",
     items: [
+      { id: "my-playlists", title: "My Lists", icon: FolderHeart, url: "/my-playlists" },
       { id: "channels", title: "Channels", icon: Users, url: "/channels" },
       { id: "playlists", title: "Playlists", icon: List, url: "/playlists" },
       { id: "subscriptions", title: "Subscriptions", icon: Clapperboard, url: "/subscriptions" },
@@ -130,6 +132,10 @@ export function AppSidebar({
             sidebarPreferences.visibleItems.includes("home") ||
             sidebarPreferences.visibleItems.includes("dashboard")
           );
+        }
+        // My Playlists is always visible (new item, may not be in stored preferences)
+        if (item.id === "my-playlists") {
+          return true;
         }
         return sidebarPreferences.visibleItems.includes(item.id);
       }),

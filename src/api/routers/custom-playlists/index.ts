@@ -61,10 +61,10 @@ export const customPlaylistsRouter = t.router({
           .orderBy(desc(customPlaylists.lastViewedAt), desc(customPlaylists.updatedAt))
           .limit(limit);
 
-        // For each playlist, get the first video's thumbnail
+        // For each playlist, get the first 3 videos' thumbnails for preview
         const playlistsWithThumbnails = await Promise.all(
           playlists.map(async (playlist) => {
-            const firstItem = await db
+            const previewItems = await db
               .select({
                 videoId: customPlaylistItems.videoId,
                 video: youtubeVideos,
@@ -73,14 +73,24 @@ export const customPlaylistsRouter = t.router({
               .leftJoin(youtubeVideos, eq(customPlaylistItems.videoId, youtubeVideos.videoId))
               .where(eq(customPlaylistItems.playlistId, playlist.id))
               .orderBy(customPlaylistItems.position)
-              .limit(1);
+              .limit(3);
 
-            const firstVideo = firstItem[0]?.video;
+            const previewThumbnails = previewItems
+              .filter((item) => item.video !== null)
+              .map((item) => ({
+                videoId: item.video!.videoId,
+                thumbnailUrl: item.video!.thumbnailUrl,
+                thumbnailPath: item.video!.thumbnailPath,
+                title: item.video!.title,
+              }));
+
+            const firstVideo = previewItems[0]?.video;
 
             return {
               ...playlist,
               thumbnailUrl: firstVideo?.thumbnailUrl ?? null,
               thumbnailPath: firstVideo?.thumbnailPath ?? null,
+              previewThumbnails,
             };
           })
         );

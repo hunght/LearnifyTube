@@ -444,7 +444,7 @@ export function VideoPlayer({
             src={videoSrc}
             autoPlay={autoPlay}
             controls
-            className={cn("max-h-[60vh] w-full rounded border bg-black", className)}
+            className={cn("aspect-video w-full rounded border bg-black object-contain", className)}
             onTimeUpdate={onTimeUpdate}
             onError={handleVideoError}
           />

@@ -26,7 +26,15 @@
       "Bash(npm install:*)",
       "Bash(ffmpeg:*)",
       "WebFetch(domain:www.itracksy.com)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "Bash(git init:*)",
+      "Bash(gh repo create:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(npx expo install:*)",
+      "Bash(gh workflow run:*)"
     ]
   }
 }

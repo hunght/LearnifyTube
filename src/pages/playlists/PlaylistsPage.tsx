@@ -8,95 +8,59 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageContainer } from "@/components/ui/page-container";
-import { RefreshCw, Search, Plus, Youtube, FolderHeart } from "lucide-react";
+import { RefreshCw, Search, Clock, TrendingUp } from "lucide-react";
 import Thumbnail from "@/components/Thumbnail";
-import { CustomPlaylistCard } from "@/components/playlists/CustomPlaylistCard";
-import { CreatePlaylistDialog } from "@/components/playlists/CreatePlaylistDialog";
 
-type TabType = "all" | "youtube" | "custom";
+type TabType = "latest" | "popular";
 
 export default function PlaylistsPage(): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState("");
   const [limit, setLimit] = useState(100);
-  const [activeTab, setActiveTab] = useState<TabType>("all");
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>("latest");
 
   // YouTube playlists query
-  const youtubePlaylistsQuery = useQuery({
+  const playlistsQuery = useQuery({
     queryKey: ["playlists", "all", limit],
     queryFn: () => trpcClient.playlists.listAll.query({ limit }),
     refetchOnWindowFocus: false,
   });
 
-  // Custom playlists query
-  const customPlaylistsQuery = useQuery({
-    queryKey: ["customPlaylists", "all"],
-    queryFn: () => trpcClient.customPlaylists.listAll.query(),
-    refetchOnWindowFocus: false,
-  });
-
-  const updateYoutubePlaylistViewMutation = useMutation({
+  const updatePlaylistViewMutation = useMutation({
     mutationFn: (playlistId: string) => trpcClient.playlists.updateView.mutate({ playlistId }),
   });
 
-  const updateCustomPlaylistViewMutation = useMutation({
-    mutationFn: (playlistId: string) =>
-      trpcClient.customPlaylists.updateView.mutate({ playlistId }),
-  });
+  // Filter and sort playlists based on active tab
+  const filteredPlaylists = useMemo(() => {
+    if (!playlistsQuery.data) return [];
 
-  // Filter and combine playlists based on active tab
-  const filteredYoutubePlaylists = useMemo(() => {
-    if (!youtubePlaylistsQuery.data) return [];
-    if (!searchQuery.trim()) return youtubePlaylistsQuery.data;
+    let playlists = [...playlistsQuery.data];
 
-    const query = searchQuery.toLowerCase();
-    return youtubePlaylistsQuery.data.filter(
-      (playlist) =>
-        playlist.title.toLowerCase().includes(query) ||
-        playlist.channelTitle?.toLowerCase().includes(query)
-    );
-  }, [youtubePlaylistsQuery.data, searchQuery]);
-
-  const filteredCustomPlaylists = useMemo(() => {
-    if (!customPlaylistsQuery.data) return [];
-    if (!searchQuery.trim()) return customPlaylistsQuery.data;
-
-    const query = searchQuery.toLowerCase();
-    return customPlaylistsQuery.data.filter(
-      (playlist) =>
-        playlist.name.toLowerCase().includes(query) ||
-        playlist.description?.toLowerCase().includes(query)
-    );
-  }, [customPlaylistsQuery.data, searchQuery]);
-
-  // Determine which playlists to show based on tab
-  const { youtubePlaylists, customPlaylists } = useMemo(() => {
-    switch (activeTab) {
-      case "youtube":
-        return { youtubePlaylists: filteredYoutubePlaylists, customPlaylists: [] };
-      case "custom":
-        return { youtubePlaylists: [], customPlaylists: filteredCustomPlaylists };
-      default:
-        return {
-          youtubePlaylists: filteredYoutubePlaylists,
-          customPlaylists: filteredCustomPlaylists,
-        };
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      playlists = playlists.filter(
+        (playlist) =>
+          playlist.title.toLowerCase().includes(query) ||
+          playlist.channelTitle?.toLowerCase().includes(query)
+      );
     }
-  }, [activeTab, filteredYoutubePlaylists, filteredCustomPlaylists]);
 
-  const totalCount = youtubePlaylists.length + customPlaylists.length;
+    // Sort based on tab
+    if (activeTab === "latest") {
+      playlists.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    } else {
+      playlists.sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
+    }
+
+    return playlists;
+  }, [playlistsQuery.data, searchQuery, activeTab]);
 
   const handleRefresh = (): void => {
-    youtubePlaylistsQuery.refetch();
-    customPlaylistsQuery.refetch();
+    playlistsQuery.refetch();
   };
 
-  const handleYoutubePlaylistClick = (playlistId: string): void => {
-    updateYoutubePlaylistViewMutation.mutate(playlistId);
-  };
-
-  const handleCustomPlaylistClick = (playlistId: string): void => {
-    updateCustomPlaylistViewMutation.mutate(playlistId);
+  const handlePlaylistClick = (playlistId: string): void => {
+    updatePlaylistViewMutation.mutate(playlistId);
   };
 
   const formatDuration = (seconds: number | null): string => {
@@ -108,8 +72,8 @@ export default function PlaylistsPage(): React.JSX.Element {
     return `${seconds}s`;
   };
 
-  const isLoading = youtubePlaylistsQuery.isLoading || customPlaylistsQuery.isLoading;
-  const isRefetching = youtubePlaylistsQuery.isRefetching || customPlaylistsQuery.isRefetching;
+  const isLoading = playlistsQuery.isLoading;
+  const isRefetching = playlistsQuery.isRefetching;
 
   return (
     <PageContainer>
@@ -131,14 +95,6 @@ export default function PlaylistsPage(): React.JSX.Element {
             </Button>
           )}
           <Button
-            onClick={() => setShowCreateDialog(true)}
-            size="sm"
-            className="flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Create Playlist
-          </Button>
-          <Button
             onClick={handleRefresh}
             disabled={isRefetching}
             size="sm"
@@ -155,53 +111,30 @@ export default function PlaylistsPage(): React.JSX.Element {
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base">
-              {activeTab === "all" && "All Playlists"}
-              {activeTab === "youtube" && "YouTube Playlists"}
-              {activeTab === "custom" && "My Playlists"}
-              {totalCount > 0 && ` (${totalCount})`}
+              {activeTab === "latest" ? "Latest" : "Popular"} Playlists
+              {filteredPlaylists.length > 0 && ` (${filteredPlaylists.length})`}
             </CardTitle>
             <div className="flex items-center gap-2">
               <Tabs
                 value={activeTab}
                 onValueChange={(v: string) => {
-                  if (v === "all" || v === "youtube" || v === "custom") {
+                  if (v === "latest" || v === "popular") {
                     setActiveTab(v);
                   }
                 }}
               >
                 <TabsList>
-                  <TabsTrigger value="all" className="gap-1.5">
-                    All
-                    {(youtubePlaylistsQuery.data?.length ?? 0) +
-                      (customPlaylistsQuery.data?.length ?? 0) >
-                      0 && (
-                      <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-                        {(youtubePlaylistsQuery.data?.length ?? 0) +
-                          (customPlaylistsQuery.data?.length ?? 0)}
-                      </Badge>
-                    )}
+                  <TabsTrigger value="latest" className="gap-1.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    Latest
                   </TabsTrigger>
-                  <TabsTrigger value="youtube" className="gap-1.5">
-                    <Youtube className="h-3.5 w-3.5" />
-                    YouTube
-                    {(youtubePlaylistsQuery.data?.length ?? 0) > 0 && (
-                      <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-                        {youtubePlaylistsQuery.data?.length}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="custom" className="gap-1.5">
-                    <FolderHeart className="h-3.5 w-3.5" />
-                    My Playlists
-                    {(customPlaylistsQuery.data?.length ?? 0) > 0 && (
-                      <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-                        {customPlaylistsQuery.data?.length}
-                      </Badge>
-                    )}
+                  <TabsTrigger value="popular" className="gap-1.5">
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    Popular
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
-              {youtubePlaylistsQuery.data && youtubePlaylistsQuery.data.length >= limit && (
+              {playlistsQuery.data && playlistsQuery.data.length >= limit && (
                 <Button variant="outline" size="sm" onClick={() => setLimit((prev) => prev + 50)}>
                   Load More
                 </Button>
@@ -220,19 +153,9 @@ export default function PlaylistsPage(): React.JSX.Element {
                 </div>
               ))}
             </div>
-          ) : totalCount > 0 ? (
+          ) : filteredPlaylists.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {/* Custom Playlists first */}
-              {customPlaylists.map((playlist) => (
-                <CustomPlaylistCard
-                  key={`custom-${playlist.id}`}
-                  playlist={playlist}
-                  onPlaylistClick={handleCustomPlaylistClick}
-                />
-              ))}
-
-              {/* YouTube Playlists */}
-              {youtubePlaylists.map((playlist) => {
+              {filteredPlaylists.map((playlist) => {
                 const hasWatchHistory = (playlist.viewCount ?? 0) > 0;
                 const progress =
                   playlist.itemCount && playlist.currentVideoIndex
@@ -241,10 +164,10 @@ export default function PlaylistsPage(): React.JSX.Element {
 
                 return (
                   <Link
-                    key={`youtube-${playlist.playlistId}`}
+                    key={playlist.playlistId}
                     to="/playlist"
                     search={{ playlistId: playlist.playlistId, type: undefined }}
-                    onClick={() => handleYoutubePlaylistClick(playlist.playlistId)}
+                    onClick={() => handlePlaylistClick(playlist.playlistId)}
                     className="group cursor-pointer space-y-2 rounded-lg border p-3 transition-colors hover:bg-muted/50"
                   >
                     {/* Thumbnail */}
@@ -299,16 +222,6 @@ export default function PlaylistsPage(): React.JSX.Element {
             <div className="py-8 text-center text-muted-foreground">
               No playlists found matching "{searchQuery}"
             </div>
-          ) : activeTab === "custom" ? (
-            <div className="py-8 text-center text-muted-foreground">
-              <FolderHeart className="mx-auto mb-2 h-12 w-12 text-muted-foreground/50" />
-              <p>No custom playlists yet.</p>
-              <p className="text-sm">Create one to start organizing your videos.</p>
-              <Button onClick={() => setShowCreateDialog(true)} className="mt-4 gap-2">
-                <Plus className="h-4 w-4" />
-                Create Playlist
-              </Button>
-            </div>
           ) : (
             <div className="py-8 text-center text-muted-foreground">
               No playlists yet. Playlists from channels will appear here.
@@ -318,55 +231,37 @@ export default function PlaylistsPage(): React.JSX.Element {
       </Card>
 
       {/* Statistics Card */}
-      {((youtubePlaylistsQuery.data && youtubePlaylistsQuery.data.length > 0) ||
-        (customPlaylistsQuery.data && customPlaylistsQuery.data.length > 0)) && (
+      {playlistsQuery.data && playlistsQuery.data.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Statistics</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <div className="rounded-lg border p-3">
                 <p className="text-xs text-muted-foreground">Total Playlists</p>
-                <p className="text-2xl font-bold">
-                  {(youtubePlaylistsQuery.data?.length ?? 0) +
-                    (customPlaylistsQuery.data?.length ?? 0)}
-                </p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">My Playlists</p>
-                <p className="text-2xl font-bold">{customPlaylistsQuery.data?.length ?? 0}</p>
+                <p className="text-2xl font-bold">{playlistsQuery.data.length}</p>
               </div>
               <div className="rounded-lg border p-3">
                 <p className="text-xs text-muted-foreground">Total Videos</p>
                 <p className="text-2xl font-bold">
-                  {(youtubePlaylistsQuery.data?.reduce((sum, pl) => sum + (pl.itemCount || 0), 0) ??
-                    0) +
-                    (customPlaylistsQuery.data?.reduce((sum, pl) => sum + (pl.itemCount || 0), 0) ??
-                      0)}
+                  {playlistsQuery.data.reduce((sum, pl) => sum + (pl.itemCount || 0), 0)}
                 </p>
               </div>
               <div className="rounded-lg border p-3">
                 <p className="text-xs text-muted-foreground">Watched Playlists</p>
                 <p className="text-2xl font-bold">
-                  {(youtubePlaylistsQuery.data?.filter((pl) => (pl.viewCount ?? 0) > 0).length ??
-                    0) +
-                    (customPlaylistsQuery.data?.filter((pl) => (pl.viewCount ?? 0) > 0).length ??
-                      0)}
+                  {playlistsQuery.data.filter((pl) => (pl.viewCount ?? 0) > 0).length}
                 </p>
               </div>
               <div className="rounded-lg border p-3">
                 <p className="text-xs text-muted-foreground">Total Watch Time</p>
                 <p className="text-2xl font-bold">
                   {formatDuration(
-                    (youtubePlaylistsQuery.data?.reduce(
+                    playlistsQuery.data.reduce(
                       (sum, pl) => sum + (pl.totalWatchTimeSeconds || 0),
                       0
-                    ) ?? 0) +
-                      (customPlaylistsQuery.data?.reduce(
-                        (sum, pl) => sum + (pl.totalWatchTimeSeconds || 0),
-                        0
-                      ) ?? 0)
+                    )
                   )}
                 </p>
               </div>
@@ -374,8 +269,6 @@ export default function PlaylistsPage(): React.JSX.Element {
           </CardContent>
         </Card>
       )}
-
-      <CreatePlaylistDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
     </PageContainer>
   );
 }

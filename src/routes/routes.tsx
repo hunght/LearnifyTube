@@ -8,6 +8,7 @@ import ChannelPage from "@/pages/channel/ChannelPage";
 import ChannelsPage from "@/pages/channels/ChannelsPage";
 import PlaylistPage from "@/pages/playlist/PlaylistPage";
 import PlaylistsPage from "@/pages/playlists/PlaylistsPage";
+import MyPlaylistsPage from "@/pages/my-playlists/MyPlaylistsPage";
 import SubscriptionsPage from "@/pages/subscriptions/SubscriptionsPage";
 import HistoryPage from "@/pages/history/HistoryPage";
 import MyWordsPage from "@/pages/my-words/MyWordsPage";
@@ -104,6 +105,12 @@ const PlaylistsRoute = createRoute({
   component: PlaylistsPage,
 });
 
+const MyPlaylistsRoute = createRoute({
+  getParentRoute: () => RootRoute,
+  path: "/my-playlists",
+  component: MyPlaylistsPage,
+});
+
 const SubscriptionsRoute = createRoute({
   getParentRoute: () => RootRoute,
   path: "/subscriptions",
@@ -143,6 +150,7 @@ const baseRoutes = [
   ChannelsRoute,
   PlaylistRoute,
   PlaylistsRoute,
+  MyPlaylistsRoute,
   SubscriptionsRoute,
   HistoryRoute,
   MyWordsRoute,

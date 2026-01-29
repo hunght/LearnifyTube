@@ -444,6 +444,7 @@ export const preferencesRouter = t.router({
                   "dashboard",
                   "channels",
                   "playlists",
+                  "my-playlists",
                   "subscriptions",
                   "history",
                   "my-words",
