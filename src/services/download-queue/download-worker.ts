@@ -12,12 +12,33 @@ import { ensureFfmpegStaticAvailable } from "@/utils/ffmpeg-static-helper";
 import { userPreferences } from "@/api/db/schema";
 import { eq } from "drizzle-orm";
 import type { DownloadQuality } from "@/lib/types/user-preferences";
+import {
+  type FallbackState,
+  getPlayerClient,
+  getFormatString as getFallbackFormatString,
+  FORMAT_STRATEGIES,
+} from "./fallback-strategy";
 
 /**
  * Active download workers
  * Maps download ID to worker state
  */
 const activeWorkers = new Map<string, WorkerState>();
+
+/**
+ * Determine error type based on captured stderr error message
+ */
+const determineErrorType = (stderrError: string | undefined): string => {
+  if (!stderrError) return "process_error";
+
+  if (stderrError.includes("HTTP Error 403")) return "http_403_forbidden";
+  if (stderrError.includes("HTTP Error 429")) return "http_429_rate_limited";
+  if (stderrError.includes("HTTP Error")) return "http_error";
+  if (stderrError.includes("ffmpeg")) return "ffmpeg_missing";
+  if (stderrError.includes("sign-in") || stderrError.includes("age")) return "auth_required";
+
+  return "process_error";
+};
 
 /**
  * Get yt-dlp binary filename based on platform
@@ -210,24 +231,6 @@ const getDownloadQuality = async (db: Database): Promise<DownloadQuality> => {
 };
 
 /**
- * Get yt-dlp format string based on quality preference
- */
-const getFormatString = (quality: DownloadQuality): string => {
-  // Map quality to max height
-  const heightMap: Record<DownloadQuality, number> = {
-    "360p": 360,
-    "480p": 480,
-    "720p": 720,
-    "1080p": 1080,
-  };
-  const maxHeight = heightMap[quality];
-
-  // WebM-first strategy with quality limit
-  // Priority: WebM at target quality -> WebM at lower qualities -> MP4 H.264 as fallback
-  return `best[height<=${maxHeight}][ext=webm]/bestvideo[height<=${maxHeight}][ext=webm]+bestaudio[ext=webm]/best[height<=${Math.min(maxHeight, 720)}][ext=webm]/best[height<=${Math.min(maxHeight, 480)}][ext=webm]/best[height<=${maxHeight}][ext=mp4][vcodec^=avc1]/bestvideo[height<=${maxHeight}][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=${maxHeight}]`;
-};
-
-/**
  * Map download quality preference to optimization target resolution
  */
 const getOptimizationTargetResolution = (quality: DownloadQuality): TargetResolution => {
@@ -316,7 +319,8 @@ export const spawnDownload = async (
   videoId: string | null,
   url: string,
   format: string | null,
-  outputPath: string
+  outputPath: string,
+  fallbackState?: FallbackState
 ): Promise<void> => {
   try {
     // Check if already downloading
@@ -333,6 +337,10 @@ export const spawnDownload = async (
     // Get ffmpeg path if available
     const ffmpegPath = getFfmpegPath();
 
+    // Determine player client from fallback state (defaults to 'android' at index 0)
+    const playerClientIndex = fallbackState?.playerClientIndex ?? 0;
+    const playerClient = getPlayerClient(playerClientIndex);
+
     // Build yt-dlp command arguments
     const args = [
       url,
@@ -343,9 +351,11 @@ export const spawnDownload = async (
       // Ensure proper merging when separate video+audio streams are downloaded
       // Note: Since we now prefer single-file formats, merging should be rare
       "--no-mtime", // Don't set file modification time (avoids merge issues)
-      // Suppress JS runtime warning - uses default player client which doesn't require JS runtime
+      // Use dynamic player client based on fallback state
+      // Default is 'android' to avoid SABR streaming issues
+      // See: https://github.com/yt-dlp/yt-dlp/issues/12482
       "--extractor-args",
-      "youtube:player_client=default",
+      `youtube:player_client=${playerClient}`,
     ];
 
     // Add ffmpeg location if available (enables merging of separate streams)
@@ -364,7 +374,11 @@ export const spawnDownload = async (
       });
     }
 
-    // Add format if specified, otherwise use quality preference from settings
+    // Determine format strategy from fallback state
+    const formatStrategyIndex = fallbackState?.formatStrategyIndex ?? 0;
+    const formatStrategy = FORMAT_STRATEGIES[formatStrategyIndex];
+
+    // Add format if specified, otherwise use quality preference from settings with fallback strategy
     let selectedFormat: string;
     if (format) {
       selectedFormat = format;
@@ -377,15 +391,21 @@ export const spawnDownload = async (
     } else {
       // Get download quality from user preferences (defaults to 480p for learning apps)
       const quality = await getDownloadQuality(db);
-      selectedFormat = getFormatString(quality);
+      selectedFormat = getFallbackFormatString(formatStrategy, quality);
       args.push("-f", selectedFormat);
-      logger.info("[download-worker] Using quality preference from settings", {
-        downloadId,
-        videoId,
-        quality,
-        preferredFormat: selectedFormat,
-        note: `WebM-first strategy at ${quality}. Lower quality = smaller files for learning.`,
-      });
+      logger.info(
+        "[download-worker] Using quality preference from settings with fallback strategy",
+        {
+          downloadId,
+          videoId,
+          quality,
+          formatStrategy,
+          playerClient,
+          preferredFormat: selectedFormat,
+          fallbackAttempt: fallbackState?.fallbackAttempts ?? 0,
+          note: `${formatStrategy} strategy at ${quality} with ${playerClient} client`,
+        }
+      );
     }
 
     // Log full command for debugging
@@ -396,6 +416,10 @@ export const spawnDownload = async (
       ytDlpPath,
       outputPath,
       format: selectedFormat,
+      playerClient,
+      formatStrategy,
+      fallbackAttempt: fallbackState?.fallbackAttempts ?? 0,
+      maxFallbackAttempts: fallbackState?.maxFallbackAttempts ?? 10,
       fullCommand: `${ytDlpPath} ${args.join(" ")}`,
     });
 
@@ -411,6 +435,8 @@ export const spawnDownload = async (
       lastKnownFilePath: undefined,
       outputDir: path.dirname(outputPath),
       videoId,
+      lastStderrError: undefined,
+      stderrBuffer: [],
     };
     activeWorkers.set(downloadId, worker);
 
@@ -538,13 +564,78 @@ export const spawnDownload = async (
     // Handle stderr - log errors and warnings
     process.stderr?.on("data", (data: Buffer) => {
       const errorOutput = data.toString();
+      const trimmedOutput = errorOutput.trim();
+
+      // Store stderr in buffer for debugging
+      const currentWorker = activeWorkers.get(downloadId);
+      if (currentWorker?.stderrBuffer) {
+        currentWorker.stderrBuffer.push(trimmedOutput);
+        // Keep last 20 lines
+        if (currentWorker.stderrBuffer.length > 20) {
+          currentWorker.stderrBuffer.shift();
+        }
+      }
 
       // Log all stderr output for debugging format issues
       logger.info("[download-worker] yt-dlp stderr output", {
         downloadId,
         videoId,
-        output: errorOutput.trim(),
+        output: trimmedOutput,
       });
+
+      // Capture HTTP errors (403, 429, etc.) for better error reporting
+      const httpErrorMatch = errorOutput.match(/HTTP Error (\d+):\s*(.+)/i);
+      if (httpErrorMatch) {
+        const httpCode = httpErrorMatch[1];
+        const httpMessage = httpErrorMatch[2].trim();
+
+        if (currentWorker) {
+          currentWorker.lastStderrError = `HTTP Error ${httpCode}: ${httpMessage}`;
+        }
+
+        logger.error("[download-worker] HTTP error from YouTube", {
+          downloadId,
+          videoId,
+          httpStatusCode: httpCode,
+          httpMessage,
+          fullError: trimmedOutput,
+          possibleCauses:
+            httpCode === "403"
+              ? [
+                  "Video may be geo-restricted or region-locked",
+                  "Video may require age verification/sign-in",
+                  "YouTube may be rate-limiting requests",
+                  "Selected format may no longer be available",
+                  "Video URL/token may have expired (try re-adding the video)",
+                  "YouTube may have changed their API (try updating yt-dlp)",
+                ]
+              : httpCode === "429"
+                ? [
+                    "Too many requests - YouTube rate limiting",
+                    "Wait a few minutes before retrying",
+                  ]
+                : httpCode === "404"
+                  ? ["Video not found or has been deleted", "Video ID may be incorrect"]
+                  : ["Unknown HTTP error - check YouTube status"],
+          recommendations:
+            httpCode === "403"
+              ? [
+                  "Try updating yt-dlp to latest version",
+                  "Try a different quality/format setting",
+                  "Try using a VPN if geo-restricted",
+                  "Wait and retry - may be temporary",
+                ]
+              : ["Wait and retry the download"],
+        });
+      }
+
+      // Capture generic ERROR lines
+      if (errorOutput.includes("ERROR:") && currentWorker && !currentWorker.lastStderrError) {
+        const errorMatch = errorOutput.match(/ERROR:\s*(.+)/);
+        if (errorMatch) {
+          currentWorker.lastStderrError = errorMatch[1].trim();
+        }
+      }
 
       // CRITICAL: Check for missing ffmpeg (prevents merging, results in incomplete downloads)
       if (
@@ -554,10 +645,13 @@ export const spawnDownload = async (
           errorOutput.toLowerCase().includes("ffmpeg") &&
           errorOutput.toLowerCase().includes("not"))
       ) {
+        if (currentWorker) {
+          currentWorker.lastStderrError = "ffmpeg not installed - cannot merge video+audio streams";
+        }
         logger.error("[download-worker] CRITICAL: ffmpeg is not installed - merging will fail", {
           downloadId,
           videoId,
-          message: errorOutput.trim(),
+          message: trimmedOutput,
           impact:
             "Download will only save one file (usually audio-only). Video file will be lost. Install ffmpeg or use single-file formats only.",
           recommendation:
@@ -574,7 +668,24 @@ export const spawnDownload = async (
         logger.warn("[download-worker] Format-related message in stderr", {
           downloadId,
           videoId,
-          message: errorOutput.trim(),
+          message: trimmedOutput,
+        });
+      }
+
+      // Check for sign-in required
+      if (
+        errorOutput.toLowerCase().includes("sign in") ||
+        errorOutput.toLowerCase().includes("login") ||
+        errorOutput.toLowerCase().includes("age-restricted")
+      ) {
+        if (currentWorker && !currentWorker.lastStderrError) {
+          currentWorker.lastStderrError = "Video requires sign-in or age verification";
+        }
+        logger.error("[download-worker] Video requires authentication", {
+          downloadId,
+          videoId,
+          message: trimmedOutput,
+          note: "Video may be age-restricted or require YouTube account sign-in",
         });
       }
     });
@@ -721,14 +832,24 @@ export const spawnDownload = async (
           }
         }
       } else {
-        // Failed
+        // Failed - get captured error or use generic message
+        const failedWorker = activeWorkers.get(downloadId) || worker;
+        const errorMessage = failedWorker.lastStderrError || `yt-dlp exited with code ${code}`;
+        const errorType = determineErrorType(failedWorker.lastStderrError);
+        const errorDetails = failedWorker.stderrBuffer?.slice(-5) || [];
+
         const queueManager = requireQueueManager();
-        await queueManager.markFailed(
+        await queueManager.markFailed(downloadId, errorMessage, errorType, errorDetails);
+
+        logger.error("[download-worker] Download failed", {
           downloadId,
-          `yt-dlp exited with code ${code}`,
-          "process_error"
-        );
-        logger.error("[download-worker] Download failed", { downloadId, exitCode: code });
+          videoId,
+          exitCode: code,
+          errorMessage,
+          errorType,
+          stderrHistory: errorDetails,
+          note: "Check stderrHistory for recent yt-dlp output leading to failure",
+        });
       }
     });
 

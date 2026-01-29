@@ -32,6 +32,8 @@ export interface QueuedDownload {
   fileSize: number | null;
   errorMessage: string | null;
   errorType: string | null;
+  /** Stderr output history from yt-dlp for debugging failed downloads */
+  errorDetails: string[] | null;
   isRetryable: boolean;
   retryCount: number;
   maxRetries: number;
@@ -46,6 +48,11 @@ export interface QueuedDownload {
   downloadedSize: string | null; // e.g., "45.3MiB"
   totalSize: string | null; // e.g., "100.0MiB"
   eta: string | null; // e.g., "00:15" or "01:23:45"
+  // Fallback strategy state for automatic retries
+  playerClientIndex: number; // Current position in player client chain (0 = android, 1 = ios, etc.)
+  formatStrategyIndex: number; // Current position in format strategy chain
+  fallbackAttempts: number; // Total fallback attempts made
+  maxFallbackAttempts: number; // Maximum fallback attempts allowed (default: 10)
 }
 
 /**
@@ -93,4 +100,8 @@ export interface WorkerState {
   lastKnownFilePath?: string;
   outputDir?: string;
   videoId?: string | null;
+  /** Last error message captured from stderr (HTTP errors, format errors, etc.) */
+  lastStderrError?: string;
+  /** Collected stderr output for debugging */
+  stderrBuffer?: string[];
 }

@@ -15,9 +15,10 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  Trash2,
   PlayCircle,
   Plus,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -58,11 +59,14 @@ function DownloadItem({
   onRetry: () => void;
   onPlay?: () => void;
 }): React.JSX.Element {
+  const [showDetails, setShowDetails] = useState(false);
   const isActive = download.status === "downloading";
   const isPaused = download.status === "paused";
   const isFailed = download.status === "failed";
   const isQueued = download.status === "queued";
   const isCompleted = download.status === "completed";
+  const hasErrorDetails = download.errorDetails && download.errorDetails.length > 0;
+  const hasError = isFailed || (isPaused && download.errorMessage);
 
   return (
     <div className="space-y-1.5 py-2">
@@ -93,7 +97,7 @@ function DownloadItem({
               <Pause className="h-3 w-3" />
             </Button>
           )}
-          {isPaused && (
+          {isPaused && !download.errorMessage && (
             <Button
               variant="ghost"
               size="icon"
@@ -104,7 +108,7 @@ function DownloadItem({
               <Play className="h-3 w-3" />
             </Button>
           )}
-          {isFailed && download.isRetryable && (
+          {hasError && download.isRetryable && (
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onRetry} title="Retry">
               <RefreshCw className="h-3 w-3" />
             </Button>
@@ -138,10 +142,34 @@ function DownloadItem({
       )}
 
       {/* Error message for failed downloads */}
-      {isFailed && download.errorMessage && (
-        <p className="truncate text-xs text-red-500" title={download.errorMessage}>
-          {download.errorMessage}
-        </p>
+      {hasError && download.errorMessage && (
+        <div className="space-y-1">
+          <button
+            type="button"
+            className="flex w-full items-center gap-1 text-left text-xs text-red-500 hover:text-red-600"
+            onClick={() => hasErrorDetails && setShowDetails(!showDetails)}
+            disabled={!hasErrorDetails}
+          >
+            {hasErrorDetails &&
+              (showDetails ? (
+                <ChevronUp className="h-3 w-3 shrink-0" />
+              ) : (
+                <ChevronDown className="h-3 w-3 shrink-0" />
+              ))}
+            <span className="truncate" title={download.errorMessage}>
+              {download.errorMessage}
+            </span>
+          </button>
+          {showDetails && hasErrorDetails && (
+            <div className="mt-1 max-h-32 overflow-y-auto rounded bg-muted/50 p-2">
+              {download.errorDetails!.map((detail, i) => (
+                <p key={i} className="break-words text-[10px] text-muted-foreground">
+                  {detail}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -164,7 +192,6 @@ export function DownloadQueueIndicator(): React.JSX.Element | null {
     resumeDownload,
     cancelDownload,
     retryDownload,
-    clearCompleted,
   } = useDownloadQueue();
 
   const handlePlayVideo = (videoId: string): void => {
@@ -182,8 +209,6 @@ export function DownloadQueueIndicator(): React.JSX.Element | null {
   if (allItems.length === 0) {
     return null;
   }
-
-  const hasCompletedOrFailed = completed.length > 0 || failed.length > 0;
 
   return (
     <>
@@ -225,31 +250,18 @@ export function DownloadQueueIndicator(): React.JSX.Element | null {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold">Downloads</h4>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto gap-1 px-2 py-1 text-xs"
-                  onClick={() => {
-                    setIsOpen(false);
-                    setQuickAddOpen(true);
-                  }}
-                >
-                  <Plus className="h-3 w-3" />
-                  Add
-                </Button>
-                {hasCompletedOrFailed && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-auto gap-1 px-2 py-1 text-xs"
-                    onClick={clearCompleted}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    Clear
-                  </Button>
-                )}
-              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto gap-1 px-2 py-1 text-xs"
+                onClick={() => {
+                  setIsOpen(false);
+                  setQuickAddOpen(true);
+                }}
+              >
+                <Plus className="h-3 w-3" />
+                Add
+              </Button>
             </div>
 
             <div className="max-h-80 divide-y overflow-y-auto">

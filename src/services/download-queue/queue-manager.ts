@@ -7,6 +7,13 @@ import { spawnDownload, killDownload } from "./download-worker";
 import { logger } from "@/helpers/logger";
 import { app } from "electron";
 import path from "path";
+import {
+  createInitialFallbackState,
+  shouldAutoFallback,
+  getNextFallbackState,
+  PLAYER_CLIENTS,
+  FORMAT_STRATEGIES,
+} from "./fallback-strategy";
 
 /**
  * In-memory queue item
@@ -26,6 +33,7 @@ interface QueueItem {
   quality: string | null;
   errorMessage: string | null;
   errorType: string | null;
+  errorDetails: string[] | null;
   isRetryable: boolean;
   retryCount: number;
   maxRetries: number;
@@ -37,6 +45,11 @@ interface QueueItem {
   downloadedSize: string | null;
   totalSize: string | null;
   eta: string | null;
+  // Fallback strategy state
+  playerClientIndex: number;
+  formatStrategyIndex: number;
+  fallbackAttempts: number;
+  maxFallbackAttempts: number;
 }
 
 /**
@@ -81,6 +94,7 @@ const queueItemToQueuedDownload = (item: QueueItem): QueuedDownload => ({
   fileSize: null, // Not available for in-progress items
   errorMessage: item.errorMessage,
   errorType: item.errorType,
+  errorDetails: item.errorDetails,
   isRetryable: item.isRetryable,
   retryCount: item.retryCount,
   maxRetries: item.maxRetries,
@@ -94,6 +108,11 @@ const queueItemToQueuedDownload = (item: QueueItem): QueuedDownload => ({
   downloadedSize: item.downloadedSize,
   totalSize: item.totalSize,
   eta: item.eta,
+  // Fallback strategy state
+  playerClientIndex: item.playerClientIndex,
+  formatStrategyIndex: item.formatStrategyIndex,
+  fallbackAttempts: item.fallbackAttempts,
+  maxFallbackAttempts: item.maxFallbackAttempts,
 });
 
 /**
@@ -113,6 +132,7 @@ const createQueueItemFromVideo = (
   maxRetries: number
 ): QueueItem => {
   const url = `https://www.youtube.com/watch?v=${video.videoId}`;
+  const initialFallback = createInitialFallbackState();
   return {
     id: downloadId,
     url,
@@ -128,6 +148,7 @@ const createQueueItemFromVideo = (
     quality: null,
     errorMessage: null,
     errorType: null,
+    errorDetails: null,
     isRetryable: true,
     retryCount: 0,
     maxRetries,
@@ -138,6 +159,11 @@ const createQueueItemFromVideo = (
     downloadedSize: null,
     totalSize: null,
     eta: null,
+    // Initialize fallback state
+    playerClientIndex: initialFallback.playerClientIndex,
+    formatStrategyIndex: initialFallback.formatStrategyIndex,
+    fallbackAttempts: initialFallback.fallbackAttempts,
+    maxFallbackAttempts: initialFallback.maxFallbackAttempts,
   };
 };
 
@@ -158,7 +184,12 @@ type QueueManagerInstance = {
     }
   ) => Promise<void>;
   markCompleted: (downloadId: string, filePath: string, fileSize?: number) => Promise<void>;
-  markFailed: (downloadId: string, errorMessage: string, errorType?: string) => Promise<void>;
+  markFailed: (
+    downloadId: string,
+    errorMessage: string,
+    errorType?: string,
+    errorDetails?: string[]
+  ) => Promise<void>;
   restoreInterruptedDownloads: () => Promise<void>;
   start: () => Promise<void>;
   stop: () => void;
@@ -286,18 +317,73 @@ const createQueueManager = (
 
   /**
    * Mark download as failed (called by download-worker)
+   * Implements auto-fallback: if error is eligible and fallbacks remain, re-queue with next strategy
    */
   const markFailed = async (
     downloadId: string,
     errorMessage: string,
-    errorType?: string
+    errorType?: string,
+    errorDetails?: string[]
   ): Promise<void> => {
     const item = queue.get(downloadId);
     if (!item) return;
 
-    // Update error info
+    const resolvedErrorType = errorType || "unknown";
+
+    // Check for auto-fallback eligibility
+    if (shouldAutoFallback(errorMessage, resolvedErrorType)) {
+      const currentState = {
+        playerClientIndex: item.playerClientIndex,
+        formatStrategyIndex: item.formatStrategyIndex,
+        fallbackAttempts: item.fallbackAttempts,
+        maxFallbackAttempts: item.maxFallbackAttempts,
+      };
+
+      const nextState = getNextFallbackState(currentState, errorMessage, resolvedErrorType);
+
+      if (nextState) {
+        // Advance fallback state and re-queue
+        item.playerClientIndex = nextState.playerClientIndex;
+        item.formatStrategyIndex = nextState.formatStrategyIndex;
+        item.fallbackAttempts = nextState.fallbackAttempts;
+        item.status = "queued";
+        item.errorMessage = null;
+        item.errorType = null;
+        item.errorDetails = null;
+        item.progress = 0;
+
+        logger.info("[queue-manager] Auto-fallback triggered, re-queuing with new strategy", {
+          downloadId,
+          videoId: item.videoId,
+          previousError: errorMessage,
+          previousErrorType: resolvedErrorType,
+          newPlayerClient: PLAYER_CLIENTS[nextState.playerClientIndex],
+          newFormatStrategy: FORMAT_STRATEGIES[nextState.formatStrategyIndex],
+          fallbackAttempt: nextState.fallbackAttempts,
+          maxFallbackAttempts: nextState.maxFallbackAttempts,
+        });
+
+        // Update database to reflect re-queued state
+        if (item.videoId) {
+          await db
+            .update(youtubeVideos)
+            .set({
+              downloadStatus: "queued",
+              downloadProgress: 0,
+              updatedAt: Date.now(),
+            })
+            .where(eq(youtubeVideos.videoId, item.videoId))
+            .execute();
+        }
+
+        return; // Don't mark as failed, will retry with new fallback strategy
+      }
+    }
+
+    // No more fallbacks available, mark as truly failed
     item.errorMessage = errorMessage;
-    item.errorType = errorType || "unknown";
+    item.errorType = resolvedErrorType;
+    item.errorDetails = errorDetails || null;
     item.status = "paused"; // Paused so user can retry
 
     // Sync to youtube_videos
@@ -307,7 +393,7 @@ const createQueueManager = (
         .set({
           downloadStatus: "failed",
           lastErrorMessage: errorMessage,
-          errorType: errorType || "unknown",
+          errorType: resolvedErrorType,
           isRetryable: true,
           updatedAt: Date.now(),
         })
@@ -315,9 +401,13 @@ const createQueueManager = (
         .execute();
     }
 
-    logger.error("[queue-manager] Download failed", {
+    logger.error("[queue-manager] Download failed (all fallbacks exhausted)", {
       downloadId,
+      videoId: item.videoId,
       error: errorMessage,
+      errorType: resolvedErrorType,
+      fallbackAttempts: item.fallbackAttempts,
+      maxFallbackAttempts: item.maxFallbackAttempts,
     });
   };
 
@@ -516,14 +606,31 @@ const createQueueManager = (
               .execute();
           }
 
-          // Spawn download
-          await spawnDownload(db, item.id, item.videoId, item.url, item.format, outputPath);
+          // Spawn download with fallback state
+          const fallbackState = {
+            playerClientIndex: item.playerClientIndex,
+            formatStrategyIndex: item.formatStrategyIndex,
+            fallbackAttempts: item.fallbackAttempts,
+            maxFallbackAttempts: item.maxFallbackAttempts,
+          };
+          await spawnDownload(
+            db,
+            item.id,
+            item.videoId,
+            item.url,
+            item.format,
+            outputPath,
+            fallbackState
+          );
 
           logger.info("[queue-manager] Started download", {
             id: item.id,
             videoId: item.videoId,
             title: item.title,
             url: item.url,
+            playerClient: PLAYER_CLIENTS[item.playerClientIndex],
+            formatStrategy: FORMAT_STRATEGIES[item.formatStrategyIndex],
+            fallbackAttempt: item.fallbackAttempts,
           });
         } catch (error) {
           logger.error("[queue-manager] Failed to start download", error);
@@ -662,6 +769,9 @@ const createQueueManager = (
         // Generate unique ID
         const id = `download-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+        // Initialize fallback state for new download
+        const initialFallback = createInitialFallbackState();
+
         // Create queue item in memory
         const queueItem: QueueItem = {
           id,
@@ -678,6 +788,7 @@ const createQueueManager = (
           quality: options.quality ?? null,
           errorMessage: null,
           errorType: null,
+          errorDetails: null,
           isRetryable: true,
           retryCount: 0,
           maxRetries: finalConfig.maxRetries,
@@ -689,6 +800,11 @@ const createQueueManager = (
           downloadedSize: null,
           totalSize: null,
           eta: null,
+          // Initialize fallback state
+          playerClientIndex: initialFallback.playerClientIndex,
+          formatStrategyIndex: initialFallback.formatStrategyIndex,
+          fallbackAttempts: initialFallback.fallbackAttempts,
+          maxFallbackAttempts: initialFallback.maxFallbackAttempts,
         };
 
         queue.set(id, queueItem);
@@ -870,7 +986,7 @@ const createQueueManager = (
   };
 
   /**
-   * Retry a failed download
+   * Retry a failed download (manual retry resets fallback state)
    */
   const retryDownload = async (downloadId: string): Promise<void> => {
     try {
@@ -884,15 +1000,26 @@ const createQueueManager = (
         throw new Error("Max retries exceeded");
       }
 
+      // Reset fallback state on manual retry (start fresh)
+      const freshFallback = createInitialFallbackState();
+      item.playerClientIndex = freshFallback.playerClientIndex;
+      item.formatStrategyIndex = freshFallback.formatStrategyIndex;
+      item.fallbackAttempts = freshFallback.fallbackAttempts;
+      item.maxFallbackAttempts = freshFallback.maxFallbackAttempts;
+
       // Update status to queued
       item.status = "queued";
       item.retryCount++;
       item.errorMessage = null;
       item.errorType = null;
+      item.errorDetails = null;
+      item.progress = 0;
 
-      logger.info("[queue-manager] Retrying download", {
+      logger.info("[queue-manager] Retrying download (fallback state reset)", {
         downloadId,
+        videoId: item.videoId,
         retryCount: item.retryCount,
+        note: "Manual retry resets fallback state to start fresh",
       });
     } catch (error) {
       logger.error("[queue-manager] Failed to retry download", error);
@@ -980,6 +1107,7 @@ const createQueueManager = (
           fileSize: null,
           errorMessage: null,
           errorType: null,
+          errorDetails: null,
           isRetryable: false,
           retryCount: 0,
           maxRetries: 0,
@@ -993,6 +1121,11 @@ const createQueueManager = (
           downloadedSize: null,
           totalSize: null,
           eta: null,
+          // Fallback state not relevant for completed downloads
+          playerClientIndex: 0,
+          formatStrategyIndex: 0,
+          fallbackAttempts: 0,
+          maxFallbackAttempts: 10,
         })),
         failed: failed.map((v) => ({
           id: `failed-${v.videoId}`,
@@ -1011,6 +1144,7 @@ const createQueueManager = (
           fileSize: null,
           errorMessage: v.errorMessage,
           errorType: v.errorType,
+          errorDetails: null, // Detailed errors only available for recent failures
           isRetryable: true,
           retryCount: 0,
           maxRetries: 3,
@@ -1024,6 +1158,11 @@ const createQueueManager = (
           downloadedSize: null,
           totalSize: null,
           eta: null,
+          // Fallback state exhausted for failed downloads
+          playerClientIndex: PLAYER_CLIENTS.length - 1,
+          formatStrategyIndex: FORMAT_STRATEGIES.length - 1,
+          fallbackAttempts: 10,
+          maxFallbackAttempts: 10,
         })),
         stats,
       };
