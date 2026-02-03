@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import BaseLayout from "@/layouts/BaseLayout";
 import { Outlet, createRootRoute, useMatches } from "@tanstack/react-router";
@@ -14,15 +14,14 @@ export const RootRoute = createRootRoute({
       params: location.search ? Object.fromEntries(new URLSearchParams(location.search)) : {},
     });
 
-    // Debug log navigation with params to help diagnose routing issues
+    // Navigation trace: log beforeLoad for every route transition
     try {
       const searchParams = location.search
         ? Object.fromEntries(new URLSearchParams(location.search))
         : {};
-      logger.debug("Route beforeLoad", {
+      logger.debug("[Navigation] beforeLoad", {
         path: location.pathname,
         search: searchParams,
-        source: "RootRoute.beforeLoad",
       });
     } catch (e) {
       // Ensure logging never breaks navigation
@@ -56,8 +55,9 @@ export const RootRoute = createRootRoute({
 function Root(): React.JSX.Element {
   const matches = useMatches();
   const isFullScreenRoute = matches.some((match) => match.pathname === "/raining-letters");
+  const previousPathRef = useRef<string | null>(null);
 
-  // Log resolved route with extracted params and search when route changes
+  // Navigation trace: log every route change with from -> to
   useEffect(() => {
     const leaf = matches[matches.length - 1];
     const pathname = leaf?.pathname ?? window.location.pathname;
@@ -75,11 +75,14 @@ function Root(): React.JSX.Element {
           (leaf.params as Record<string, unknown>)
         : {};
 
-    logger.debug("Route navigated", {
-      path: pathname,
-      params,
-      search,
-      source: "Root",
+    const from = previousPathRef.current;
+    previousPathRef.current = pathname;
+
+    logger.debug("[Navigation] navigated", {
+      from: from ?? "(initial)",
+      to: pathname,
+      params: Object.keys(params).length ? params : undefined,
+      search: Object.keys(search).length ? search : undefined,
     });
   }, [matches]);
 
