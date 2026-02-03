@@ -14,6 +14,7 @@ import HistoryPage from "@/pages/history/HistoryPage";
 import MyWordsPage from "@/pages/my-words/MyWordsPage";
 import AnalyticsPage from "@/pages/analytics/AnalyticsPage";
 import StorageManagerPage from "@/pages/storage/StorageManagerPage";
+import MobileSyncPage from "@/pages/mobile-sync/MobileSyncPage";
 import LogPage from "@/pages/app-debug-logs/index";
 
 // Check if we're in development mode
@@ -141,6 +142,12 @@ const StorageRoute = createRoute({
   component: StorageManagerPage,
 });
 
+const MobileSyncRoute = createRoute({
+  getParentRoute: () => RootRoute,
+  path: "/mobile-sync",
+  component: MobileSyncPage,
+});
+
 const baseRoutes = [
   HomeRoute,
   DownloadsRoute,
@@ -156,6 +163,7 @@ const baseRoutes = [
   MyWordsRoute,
   AnalyticsRoute,
   StorageRoute,
+  MobileSyncRoute,
 ];
 
 // Add log route only in development mode

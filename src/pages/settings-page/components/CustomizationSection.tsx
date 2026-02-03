@@ -3,13 +3,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcClient } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, Layout, Play, BookOpen, Settings, RotateCcw } from "lucide-react";
+import { Eye, Layout, Play, BookOpen, Settings, RotateCcw, Smartphone } from "lucide-react";
 import type { UserPreferences } from "@/lib/types/user-preferences";
 import { AppearanceTab } from "./tabs/AppearanceTab";
 import { SidebarTab } from "./tabs/SidebarTab";
 import { PlayerTab } from "./tabs/PlayerTab";
 import { LearningTab } from "./tabs/LearningTab";
 import { SystemTab } from "./tabs/SystemTab";
+import { SyncTab } from "./tabs/SyncTab";
 
 export function CustomizationSection(): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -59,7 +60,7 @@ export function CustomizationSection(): React.JSX.Element {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="appearance">
             <Eye className="mr-2 h-4 w-4" />
             Appearance
@@ -75,6 +76,10 @@ export function CustomizationSection(): React.JSX.Element {
           <TabsTrigger value="learning">
             <BookOpen className="mr-2 h-4 w-4" />
             Learning
+          </TabsTrigger>
+          <TabsTrigger value="sync">
+            <Smartphone className="mr-2 h-4 w-4" />
+            Sync
           </TabsTrigger>
           <TabsTrigger value="system">
             <Settings className="mr-2 h-4 w-4" />
@@ -96,6 +101,10 @@ export function CustomizationSection(): React.JSX.Element {
 
         <TabsContent value="learning">
           <LearningTab preferences={preferences} updatePreferences={updatePreferences} />
+        </TabsContent>
+
+        <TabsContent value="sync">
+          <SyncTab />
         </TabsContent>
 
         <TabsContent value="system">

@@ -17,6 +17,7 @@ export type SidebarItem =
   | "flashcards"
   | "analytics"
   | "storage"
+  | "mobile-sync"
   | "logs"
   | "settings";
 
@@ -59,12 +60,18 @@ export interface DownloadPreferences {
   downloadQuality: DownloadQuality;
 }
 
+export interface SyncPreferences {
+  enabled: boolean;
+  port: number;
+}
+
 export interface UserPreferences {
   sidebar: SidebarPreferences;
   appearance: AppearancePreferences;
   player: PlayerPreferences;
   learning: LearningPreferences;
   download: DownloadPreferences;
+  sync: SyncPreferences;
   version: number;
   lastUpdated: number;
 }
@@ -83,6 +90,7 @@ export const DEFAULT_SIDEBAR_PREFERENCES: SidebarPreferences = {
     "flashcards",
     "analytics",
     "storage",
+    "mobile-sync",
     "logs",
     "settings",
   ],
@@ -118,12 +126,18 @@ export const DEFAULT_DOWNLOAD_PREFERENCES: DownloadPreferences = {
   downloadQuality: "480p", // Default to 480p for learning apps (small files, good enough quality)
 };
 
+export const DEFAULT_SYNC_PREFERENCES: SyncPreferences = {
+  enabled: false,
+  port: 8384,
+};
+
 export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   sidebar: DEFAULT_SIDEBAR_PREFERENCES,
   appearance: DEFAULT_APPEARANCE_PREFERENCES,
   player: DEFAULT_PLAYER_PREFERENCES,
   learning: DEFAULT_LEARNING_PREFERENCES,
   download: DEFAULT_DOWNLOAD_PREFERENCES,
+  sync: DEFAULT_SYNC_PREFERENCES,
   version: 1,
   lastUpdated: Date.now(),
 };

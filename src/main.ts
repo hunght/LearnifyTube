@@ -348,6 +348,33 @@ app.whenReady().then(async () => {
     logger.info("[app] Initializing download queue manager");
     await initializeQueueManager(defaultDb, { autoStart: true });
     logger.info("[app] Download queue manager initialized");
+
+    // Check if mobile sync should auto-start based on user preference
+    try {
+      const prefs = await defaultDb
+        .select()
+        .from(userPreferences)
+        .where(eq(userPreferences.id, "default"))
+        .limit(1);
+
+      if (prefs.length > 0 && prefs[0].customizationSettings) {
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        const settings = JSON.parse(prefs[0].customizationSettings) as {
+          sync?: { enabled?: boolean; port?: number };
+        };
+        if (settings.sync?.enabled) {
+          logger.info("[app] Mobile sync is enabled, starting server...");
+          const { getMobileSyncServer } = await import("./main/mobileSyncServer");
+          const syncServer = getMobileSyncServer();
+          const port = settings.sync.port ?? 8384;
+          await syncServer.start(port);
+          logger.info("[app] Mobile sync server started");
+        }
+      }
+    } catch (syncError) {
+      logger.error("[app] Failed to start mobile sync server", syncError);
+      // Don't fail app startup if sync server fails
+    }
   } catch (error) {
     logger.error("[app.whenReady] Failed to initialize database:", error);
     // Don't quit on error, try to continue

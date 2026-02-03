@@ -11,6 +11,7 @@ import {
   ScrollText,
   Settings,
   FolderHeart,
+  Smartphone,
 } from "lucide-react";
 import { Link, useMatches } from "@tanstack/react-router";
 import { logger } from "@/helpers/logger";
@@ -94,6 +95,7 @@ const SIDEBAR_GROUPS: Array<{
     label: "MANAGE",
     items: [
       { id: "storage", title: "Storage", icon: HardDrive, url: "/storage" },
+      { id: "mobile-sync", title: "Mobile Sync", icon: Smartphone, url: "/mobile-sync" },
       { id: "settings", title: "Settings", icon: Settings, url: "/settings" },
       { id: "logs", title: "Logs", icon: ScrollText, url: "/app-debug-logs" },
     ],
@@ -135,6 +137,10 @@ export function AppSidebar({
         }
         // My Playlists is always visible (new item, may not be in stored preferences)
         if (item.id === "my-playlists") {
+          return true;
+        }
+        // Mobile Sync is always visible (new item, may not be in stored preferences)
+        if (item.id === "mobile-sync") {
           return true;
         }
         return sidebarPreferences.visibleItems.includes(item.id);

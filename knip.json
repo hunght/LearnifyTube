@@ -1,0 +1,59 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "src/main.ts",
+    "src/preload.ts",
+    "src/preload/notification.ts",
+    "src/App.tsx",
+    "src/renderer/notification/index.tsx"
+  ],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignore": [
+    "src/**/*.stories.tsx",
+    "src/**/*.test.{ts,tsx}",
+    "src/**/*.spec.{ts,tsx}",
+    "**/__tests__/**",
+    "**/__mocks__/**",
+    "vite.*.config.ts"
+  ],
+  "ignoreDependencies": [
+    "@electron-forge/*",
+    "@electron/*",
+    "electron",
+    "electron-squirrel-startup",
+    "@storybook/*",
+    "storybook",
+    "prettier-plugin-tailwindcss",
+    "tailwindcss-animate",
+    "@tailwindcss/typography",
+    "autoprefixer",
+    "postcss",
+    "cross-env",
+    "lefthook",
+    "@swc/cli",
+    "@swc/core",
+    "@swc/jest",
+    "ts-node",
+    "sharp",
+    "png-to-ico",
+    "electron-playwright-helpers",
+    "@playwright/test",
+    "vite",
+    "@vitejs/plugin-react"
+  ],
+  "ignoreBinaries": ["electron-rebuild"],
+  "vitest": false,
+  "vite": false,
+  "eslint": {
+    "config": ["eslint.config.js"]
+  },
+  "jest": {
+    "config": ["jest.config.ts", "jest.database.config.ts"]
+  },
+  "playwright": {
+    "config": ["playwright.config.ts"]
+  },
+  "typescript": {
+    "config": ["tsconfig.json"]
+  }
+}

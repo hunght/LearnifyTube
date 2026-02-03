@@ -424,6 +424,7 @@ export const preferencesRouter = t.router({
         player: { ...DEFAULT_USER_PREFERENCES.player, ...preferences.player },
         learning: { ...DEFAULT_USER_PREFERENCES.learning, ...preferences.learning },
         download: { ...DEFAULT_USER_PREFERENCES.download, ...preferences.download },
+        sync: { ...DEFAULT_USER_PREFERENCES.sync, ...preferences.sync },
       };
     } catch (error) {
       logger.error("[preferences] Error loading customization preferences", { error });
@@ -451,6 +452,7 @@ export const preferencesRouter = t.router({
                   "flashcards",
                   "analytics",
                   "storage",
+                  "mobile-sync",
                   "logs",
                   "settings",
                 ])
@@ -492,6 +494,12 @@ export const preferencesRouter = t.router({
             downloadQuality: z.enum(["360p", "480p", "720p", "1080p"]).optional(),
           })
           .optional(),
+        sync: z
+          .object({
+            enabled: z.boolean().optional(),
+            port: z.number().min(1024).max(65535).optional(),
+          })
+          .optional(),
       })
     )
     .mutation(async ({ input, ctx }): Promise<UserPreferences> => {
@@ -520,6 +528,7 @@ export const preferencesRouter = t.router({
           player: { ...current.player, ...input.player },
           learning: { ...current.learning, ...input.learning },
           download: { ...current.download, ...input.download },
+          sync: { ...current.sync, ...input.sync },
           lastUpdated: Date.now(),
           version: 1,
         };
