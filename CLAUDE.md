@@ -8,9 +8,12 @@ Electron + React desktop app for YouTube downloads, transcripts, and study mater
 npm run dev              # Development with hot reload
 npm run type-check       # TypeScript validation
 npm run lint:fix         # ESLint with auto-fix
-npm run test             # Jest tests
-npm run db:studio        # Drizzle Studio
-npm run release:no-draft # Preferred release (auto-publish)
+npm run test             # Jest unit tests
+npm run knip             # Find unused code/dependencies
+npm run package:auto     # Build production app and open for testing
+npm run release:no-draft # Release to GitHub (auto-publish)
+npm run db:studio        # Drizzle Studio for database inspection
+npm run db:generate      # Generate database migrations
 ```
 
 ## Architecture

@@ -42,8 +42,6 @@ let nativeModuleDependenciesToPackage: string[] = [];
 export const EXTERNAL_DEPENDENCIES = [
   // Windows installer integration - handles Squirrel installer events
   "electron-squirrel-startup",
-  // Windows-specific utilities for getting window information
-  "get-windows",
   // Runtime validation library used throughout the application
   "zod",
   // SQLite client library for database operations
@@ -52,8 +50,6 @@ export const EXTERNAL_DEPENDENCIES = [
   "@libsql/darwin-x64",
   // Database ORM for type-safe database queries
   "drizzle-orm",
-  // Zod integration for Drizzle ORM schema validation
-  "drizzle-zod",
   // Date manipulation library for time tracking features
   "date-fns",
   // tRPC server for type-safe API communication
@@ -62,6 +58,8 @@ export const EXTERNAL_DEPENDENCIES = [
   "yauzl",
   // FFmpeg binary provider (must be bundled so we can copy the binary at runtime)
   "ffmpeg-static",
+  // mDNS service discovery for mobile sync
+  "bonjour-service",
 ];
 
 // Base packager configuration

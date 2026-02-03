@@ -13,7 +13,7 @@ import {
   generatedQuizzes,
 } from "@/api/db/schema";
 import { eq, and } from "drizzle-orm";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "node:crypto";
 
 // ============================================================================
 // VibeProxy Configuration
@@ -527,7 +527,7 @@ Respond with a JSON object:
 
       // Cache the result
       await db.insert(videoSummaries).values({
-        id: uuidv4(),
+        id: randomUUID(),
         videoId,
         summaryType: type,
         content: JSON.stringify(summary),
@@ -761,7 +761,7 @@ Respond with a JSON array:
       // Save flashcards to database
       const createdCards: Array<{ id: string; front: string; back: string; context?: string }> = [];
       for (const item of vocabulary.slice(0, maxCards)) {
-        const id = uuidv4();
+        const id = randomUUID();
         await db.insert(flashcards).values({
           id,
           videoId,
@@ -891,7 +891,7 @@ Respond with a JSON object:
 
       // Cache the quiz
       await db.insert(generatedQuizzes).values({
-        id: uuidv4(),
+        id: randomUUID(),
         videoId,
         quizType: type,
         difficulty,
@@ -930,7 +930,7 @@ Respond with a JSON object:
     .mutation(async ({ input }) => {
       const { videoId, quizType, score, totalQuestions, answers } = input;
 
-      const id = uuidv4();
+      const id = randomUUID();
       await db.insert(quizResults).values({
         id,
         videoId,
