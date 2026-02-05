@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as http from "http";
 import * as os from "os";
-import { eq, and, inArray, count } from "drizzle-orm";
+import { eq, and, inArray, count, desc, sql } from "drizzle-orm";
 import { logger } from "../helpers/logger";
 import defaultDb from "../api/db";
 import {
@@ -17,6 +17,7 @@ import {
 } from "../api/db/schema";
 import { app } from "electron";
 import { getMdnsService } from "./mdnsService";
+import { getQueueManager } from "../services/download-queue/queue-manager";
 import { parseVttToSegments } from "../api/routers/transcripts";
 import { downloadImageToCache } from "../api/utils/ytdlp-utils/thumbnail";
 
@@ -89,6 +90,13 @@ interface RemotePlaylist {
   channelId: string | null;
   type: "channel" | "custom";
   downloadedCount: number;
+}
+
+interface RemoteMyList {
+  id: string;
+  name: string;
+  itemCount: number;
+  thumbnailUrl: string | null;
 }
 
 interface RemoteVideoWithStatus {
@@ -202,10 +210,16 @@ const createMobileSyncServer = (): MobileSyncServer => {
         .from(youtubeVideos)
         .where(eq(youtubeVideos.downloadStatus, "completed"));
 
+      // Only count videos where the file actually exists
+      const availableCount = videos.filter((video) => {
+        if (!video.downloadFilePath) return false;
+        return fs.existsSync(video.downloadFilePath);
+      }).length;
+
       const info: ServerInfo = {
         name: "LearnifyTube",
         version: app.getVersion(),
-        videoCount: videos.length,
+        videoCount: availableCount,
       };
       sendJson(res, info);
     } catch (error) {
@@ -225,7 +239,13 @@ const createMobileSyncServer = (): MobileSyncServer => {
       const transcripts = await defaultDb.select().from(videoTranscripts);
       const videosWithTranscripts = new Set(transcripts.map((t) => t.videoId));
 
-      const remoteVideos: RemoteVideo[] = videos.map((video) => {
+      // Filter to only videos where the file actually exists on disk
+      const availableVideos = videos.filter((video) => {
+        if (!video.downloadFilePath) return false;
+        return fs.existsSync(video.downloadFilePath);
+      });
+
+      const remoteVideos: RemoteVideo[] = availableVideos.map((video) => {
         // Always use local URL - thumbnails will be downloaded on-demand if missing
         const hasThumbnailSource = video.thumbnailPath || video.thumbnailUrl;
         return {
@@ -341,8 +361,45 @@ const createMobileSyncServer = (): MobileSyncServer => {
       const filePath = videos[0].downloadFilePath;
 
       if (!fs.existsSync(filePath)) {
-        logger.warn("[MobileSyncServer] Video file not found", { videoId, filePath });
-        sendError(res, "Video file not found", 404);
+        logger.warn("[MobileSyncServer] Video file not found, queueing re-download", {
+          videoId,
+          filePath,
+        });
+
+        // Queue re-download using yt-dlp
+        try {
+          // Update video status to pending so it won't show as available
+          await defaultDb
+            .update(youtubeVideos)
+            .set({
+              downloadStatus: "pending",
+              downloadFilePath: null,
+              downloadFileSize: null,
+            })
+            .where(eq(youtubeVideos.videoId, videoId));
+
+          const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+          const queueManager = getQueueManager(defaultDb);
+          await queueManager.addToQueue([youtubeUrl]);
+          logger.info("[MobileSyncServer] Queued video for re-download", { videoId });
+
+          // Return 202 Accepted to indicate download is queued
+          sendJson(
+            res,
+            {
+              error: "Video file missing - download queued",
+              status: "queued",
+              videoId,
+            },
+            202
+          );
+        } catch (queueError) {
+          logger.error("[MobileSyncServer] Failed to queue re-download", {
+            videoId,
+            error: queueError,
+          });
+          sendError(res, "Video file not found", 404);
+        }
         return;
       }
 
@@ -568,6 +625,74 @@ const createMobileSyncServer = (): MobileSyncServer => {
     }
   };
 
+  // GET /api/subscriptions - List recent videos (round-robin across channels)
+  const handleApiSubscriptions = async (res: http.ServerResponse): Promise<void> => {
+    try {
+      const limit = 200;
+      const offset = 0;
+
+      const rows = await defaultDb.all<{
+        videoId: string;
+        title: string;
+        channelTitle: string;
+        durationSeconds: number | null;
+        thumbnailUrl: string | null;
+        thumbnailPath: string | null;
+        downloadStatus: string | null;
+        downloadProgress: number | null;
+        downloadFileSize: number | null;
+      }>(sql`
+        WITH ranked_videos AS (
+          SELECT
+            *,
+            ROW_NUMBER() OVER (PARTITION BY channel_id ORDER BY created_at DESC) as rn
+          FROM youtube_videos
+          WHERE channel_id IS NOT NULL
+        )
+        SELECT
+          video_id as videoId,
+          title,
+          channel_title as channelTitle,
+          duration_seconds as durationSeconds,
+          thumbnail_url as thumbnailUrl,
+          thumbnail_path as thumbnailPath,
+          download_status as downloadStatus,
+          download_progress as downloadProgress,
+          download_file_size as downloadFileSize
+        FROM ranked_videos
+        ORDER BY rn ASC, created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `);
+
+      const videos: RemoteVideoWithStatus[] = rows.map((row) => {
+        const hasThumbnailSource = row.thumbnailPath || row.thumbnailUrl;
+        return {
+          id: row.videoId,
+          title: row.title,
+          channelTitle: row.channelTitle,
+          duration: row.durationSeconds ?? 0,
+          thumbnailUrl: hasThumbnailSource
+            ? `http://${getLocalIpAddress()}:${port}/api/video/${row.videoId}/thumbnail`
+            : null,
+          downloadStatus:
+            row.downloadStatus === "completed" ||
+            row.downloadStatus === "downloading" ||
+            row.downloadStatus === "queued" ||
+            row.downloadStatus === "pending"
+              ? row.downloadStatus
+              : null,
+          downloadProgress: row.downloadProgress ?? null,
+          fileSize: row.downloadFileSize ?? null,
+        };
+      });
+
+      sendJson(res, { videos });
+    } catch (error) {
+      logger.error("[MobileSyncServer] Error getting subscription videos", error);
+      sendError(res, "Failed to get subscription videos");
+    }
+  };
+
   // GET /api/channel/:id/videos - Videos for a channel with download status
   const handleChannelVideos = async (
     res: http.ServerResponse,
@@ -592,6 +717,30 @@ const createMobileSyncServer = (): MobileSyncServer => {
     } catch (error) {
       logger.error("[MobileSyncServer] Error getting channel videos", { channelId, error });
       sendError(res, "Failed to get channel videos");
+    }
+  };
+
+  // GET /api/subscription/:id/videos - Videos for a subscription channel
+  const handleSubscriptionVideos = async (
+    res: http.ServerResponse,
+    channelId: string
+  ): Promise<void> => {
+    try {
+      const videoList = await defaultDb
+        .select()
+        .from(youtubeVideos)
+        .where(eq(youtubeVideos.channelId, channelId))
+        .orderBy(desc(youtubeVideos.publishedAt), desc(youtubeVideos.createdAt));
+
+      const videos: RemoteVideoWithStatus[] = videoList.map(videoToRemoteVideoWithStatus);
+
+      sendJson(res, { videos });
+    } catch (error) {
+      logger.error("[MobileSyncServer] Error getting subscription videos", {
+        channelId,
+        error,
+      });
+      sendError(res, "Failed to get subscription videos");
     }
   };
 
@@ -764,6 +913,31 @@ const createMobileSyncServer = (): MobileSyncServer => {
     }
   };
 
+  // GET /api/mylists - List all custom lists
+  const handleApiMyLists = async (res: http.ServerResponse): Promise<void> => {
+    try {
+      const customPlaylistList = await defaultDb.select().from(customPlaylists);
+
+      const customPlaylistItemList = await defaultDb.select().from(customPlaylistItems);
+      const itemCountMap = new Map<string, number>();
+      for (const item of customPlaylistItemList) {
+        itemCountMap.set(item.playlistId, (itemCountMap.get(item.playlistId) ?? 0) + 1);
+      }
+
+      const remoteMyLists: RemoteMyList[] = customPlaylistList.map((p) => ({
+        id: p.id,
+        name: p.name,
+        itemCount: itemCountMap.get(p.id) ?? p.itemCount ?? 0,
+        thumbnailUrl: null,
+      }));
+
+      sendJson(res, { mylists: remoteMyLists });
+    } catch (error) {
+      logger.error("[MobileSyncServer] Error getting my lists", error);
+      sendError(res, "Failed to get my lists");
+    }
+  };
+
   // GET /api/playlist/:id/videos - Videos in a playlist with download status
   const handlePlaylistVideos = async (
     res: http.ServerResponse,
@@ -850,6 +1024,51 @@ const createMobileSyncServer = (): MobileSyncServer => {
     } catch (error) {
       logger.error("[MobileSyncServer] Error getting playlist videos", { playlistId, error });
       sendError(res, "Failed to get playlist videos");
+    }
+  };
+
+  // GET /api/mylist/:id/videos - Videos in a custom list with download status
+  const handleMyListVideos = async (res: http.ServerResponse, listId: string): Promise<void> => {
+    try {
+      const customPlaylist = await defaultDb
+        .select()
+        .from(customPlaylists)
+        .where(eq(customPlaylists.id, listId))
+        .limit(1);
+
+      if (customPlaylist.length === 0) {
+        sendError(res, "List not found", 404);
+        return;
+      }
+
+      const items = await defaultDb
+        .select()
+        .from(customPlaylistItems)
+        .where(eq(customPlaylistItems.playlistId, listId))
+        .orderBy(customPlaylistItems.position);
+
+      const videoIds = items.map((i) => i.videoId);
+      if (videoIds.length === 0) {
+        sendJson(res, { videos: [] });
+        return;
+      }
+
+      const videoList = await defaultDb
+        .select()
+        .from(youtubeVideos)
+        .where(inArray(youtubeVideos.videoId, videoIds));
+
+      const videoMap = new Map(videoList.map((v) => [v.videoId, v]));
+
+      const videos: RemoteVideoWithStatus[] = videoIds
+        .map((id) => videoMap.get(id))
+        .filter((v): v is typeof youtubeVideos.$inferSelect => v !== undefined)
+        .map(videoToRemoteVideoWithStatus);
+
+      sendJson(res, { videos });
+    } catch (error) {
+      logger.error("[MobileSyncServer] Error getting my list videos", { listId, error });
+      sendError(res, "Failed to get my list videos");
     }
   };
 
@@ -1196,9 +1415,21 @@ const createMobileSyncServer = (): MobileSyncServer => {
         return;
       }
 
-      // For now, we'll just check if the video exists and return its status
-      // The actual download implementation would need to hook into the desktop app's download system
+      const queueManager = getQueueManager(defaultDb);
+
+      const queueUrl = async (youtubeUrl: string): Promise<void> => {
+        try {
+          await queueManager.addToQueue([youtubeUrl], { priority: 1 });
+        } catch (error) {
+          if (error && typeof error === "object" && "skippedUrls" in error) {
+            return;
+          }
+          throw error;
+        }
+      };
+
       if (videoId) {
+        const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
         const videos = await defaultDb
           .select()
           .from(youtubeVideos)
@@ -1207,27 +1438,68 @@ const createMobileSyncServer = (): MobileSyncServer => {
 
         if (videos.length > 0) {
           const video = videos[0];
+          const hasFile = !!video.downloadFilePath && fs.existsSync(video.downloadFilePath);
+
+          if (hasFile) {
+            if (video.downloadStatus !== "completed") {
+              await defaultDb
+                .update(youtubeVideos)
+                .set({ downloadStatus: "completed", updatedAt: Date.now() })
+                .where(eq(youtubeVideos.videoId, videoId));
+            }
+            sendJson(res, {
+              success: true,
+              videoId,
+              status: "completed",
+              message: "Video already downloaded",
+            });
+            return;
+          }
+
+          if (
+            video.downloadStatus === "downloading" ||
+            video.downloadStatus === "queued" ||
+            video.downloadStatus === "pending"
+          ) {
+            sendJson(res, {
+              success: true,
+              videoId,
+              status: video.downloadStatus,
+              message: "Download already in progress",
+            });
+            return;
+          }
+
+          await queueUrl(youtubeUrl);
           sendJson(res, {
             success: true,
             videoId,
-            status: video.downloadStatus,
-            message:
-              video.downloadStatus === "completed"
-                ? "Video already downloaded"
-                : "Video exists in database",
+            status: "queued",
+            message: "Download queued",
           });
           return;
         }
+
+        await queueUrl(youtubeUrl);
+        sendJson(res, {
+          success: true,
+          videoId,
+          status: "queued",
+          message: "Download queued",
+        });
+        return;
       }
 
-      // Video doesn't exist - in a full implementation, this would trigger a download
-      sendJson(res, {
-        success: false,
-        videoId: videoId ?? null,
-        status: null,
-        message:
-          "Download request received. Note: Actual download triggering requires integration with desktop app download system.",
-      });
+      if (url) {
+        await queueUrl(url);
+        sendJson(res, {
+          success: true,
+          videoId: null,
+          status: "queued",
+          message: "Download queued",
+        });
+        return;
+      }
     } catch (error) {
       logger.error("[MobileSyncServer] Error handling download request", error);
       sendError(res, "Failed to process download request");
@@ -1304,10 +1576,23 @@ const createMobileSyncServer = (): MobileSyncServer => {
       return;
     }
 
+    // GET /api/subscriptions
+    if (url === "/api/subscriptions" || url === "/subscriptions") {
+      await handleApiSubscriptions(res);
+      return;
+    }
+
     // GET /api/channel/:id/videos
     const channelVideosMatch = url.match(/^(?:\/api)?\/channel\/([^/]+)\/videos$/);
     if (channelVideosMatch) {
       await handleChannelVideos(res, channelVideosMatch[1]);
+      return;
+    }
+
+    // GET /api/subscription/:id/videos
+    const subscriptionVideosMatch = url.match(/^(?:\/api)?\/subscription\/([^/]+)\/videos$/);
+    if (subscriptionVideosMatch) {
+      await handleSubscriptionVideos(res, subscriptionVideosMatch[1]);
       return;
     }
 
@@ -1324,10 +1609,23 @@ const createMobileSyncServer = (): MobileSyncServer => {
       return;
     }
 
+    // GET /api/mylists
+    if (url === "/api/mylists" || url === "/mylists") {
+      await handleApiMyLists(res);
+      return;
+    }
+
     // GET /api/playlist/:id/videos
     const playlistVideosMatch = url.match(/^(?:\/api)?\/playlist\/([^/]+)\/videos$/);
     if (playlistVideosMatch) {
       await handlePlaylistVideos(res, playlistVideosMatch[1]);
+      return;
+    }
+
+    // GET /api/mylist/:id/videos
+    const myListVideosMatch = url.match(/^(?:\/api)?\/mylist\/([^/]+)\/videos$/);
+    if (myListVideosMatch) {
+      await handleMyListVideos(res, myListVideosMatch[1]);
       return;
     }
 
@@ -1422,6 +1720,11 @@ const createMobileSyncServer = (): MobileSyncServer => {
             logger.info(`[MobileSyncServer] Found ${videos.length} completed videos to share`);
             getMdnsService().publish(port, videos.length);
             logger.info("[MobileSyncServer] ✓ mDNS service published");
+
+            // Start scanning for mobile devices
+            logger.info("[MobileSyncServer] Starting mDNS scanner for mobile devices...");
+            getMdnsService().startScanning();
+            logger.info("[MobileSyncServer] ✓ mDNS scanner started");
           } catch (error) {
             logger.error("[MobileSyncServer] ✗ Failed to publish mDNS service", error);
           }
@@ -1436,7 +1739,8 @@ const createMobileSyncServer = (): MobileSyncServer => {
   };
 
   const stop = async (): Promise<void> => {
-    // Unpublish mDNS service
+    // Stop mDNS scanner and unpublish service
+    getMdnsService().stopScanning();
     getMdnsService().unpublish();
 
     if (!server) {
