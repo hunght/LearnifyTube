@@ -90,17 +90,19 @@ export default function MobileSyncPage(): React.JSX.Element {
     },
   });
 
-  // Get videos list
+  // Get videos list - only include videos where file exists on disk
   const videos: VideoItem[] = useMemo(() => {
     if (!videosData || !Array.isArray(videosData)) return [];
-    return videosData.map((v) => ({
-      videoId: v.videoId,
-      title: v.title,
-      channelTitle: v.channelTitle,
-      durationSeconds: v.durationSeconds ?? 0,
-      downloadFileSize: v.fileSizeBytes ?? 0,
-      thumbnailUrl: v.thumbnailUrl ?? undefined,
-    }));
+    return videosData
+      .filter((v) => v.fileExists)
+      .map((v) => ({
+        videoId: v.videoId,
+        title: v.title,
+        channelTitle: v.channelTitle,
+        durationSeconds: v.durationSeconds ?? 0,
+        downloadFileSize: v.fileSizeBytes ?? 0,
+        thumbnailUrl: v.thumbnailUrl ?? undefined,
+      }));
   }, [videosData]);
 
   // Calculate stats
@@ -250,17 +252,22 @@ export default function MobileSyncPage(): React.JSX.Element {
                 </div>
               </div>
 
-              {/* Connected Devices */}
+              {/* Discovered & Connected Devices */}
               {syncStatus?.enabled && (
                 <div className="space-y-3">
                   <Label className="text-sm font-medium">
-                    Connected Devices ({syncStatus.connectedDevices?.length ?? 0})
+                    Mobile Devices (
+                    {(syncStatus.discoveredDevices?.length ?? 0) +
+                      (syncStatus.connectedDevices?.length ?? 0)}
+                    )
                   </Label>
-                  {(syncStatus.connectedDevices?.length ?? 0) > 0 ? (
+                  {(syncStatus.discoveredDevices?.length ?? 0) > 0 ||
+                  (syncStatus.connectedDevices?.length ?? 0) > 0 ? (
                     <div className="space-y-2">
-                      {syncStatus.connectedDevices?.map((device) => (
+                      {/* Discovered devices via mDNS */}
+                      {syncStatus.discoveredDevices?.map((device) => (
                         <div
-                          key={device.ip}
+                          key={device.name}
                           className="flex items-center justify-between rounded-lg border bg-background p-3"
                         >
                           <div className="flex items-center gap-3">
@@ -268,17 +275,44 @@ export default function MobileSyncPage(): React.JSX.Element {
                               <Smartphone className="h-4 w-4 text-green-500" />
                             </div>
                             <div>
-                              <div className="font-medium">{device.ip}</div>
+                              <div className="font-medium">{device.name}</div>
                               <div className="text-xs text-muted-foreground">
-                                {device.requestCount} requests
+                                {device.host} • {device.videoCount} videos
                               </div>
                             </div>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(device.lastSeen).toLocaleTimeString()}
-                          </div>
+                          <Badge variant="outline" className="border-green-500/30 text-green-500">
+                            Online
+                          </Badge>
                         </div>
                       ))}
+                      {/* Connected devices via HTTP (only show if not already in discovered) */}
+                      {syncStatus.connectedDevices
+                        ?.filter(
+                          (device) =>
+                            !syncStatus.discoveredDevices?.some((d) => d.host === device.ip)
+                        )
+                        .map((device) => (
+                          <div
+                            key={device.ip}
+                            className="flex items-center justify-between rounded-lg border bg-background p-3"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/10">
+                                <Smartphone className="h-4 w-4 text-blue-500" />
+                              </div>
+                              <div>
+                                <div className="font-medium">{device.ip}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {device.requestCount} requests
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(device.lastSeen).toLocaleTimeString()}
+                            </div>
+                          </div>
+                        ))}
                     </div>
                   ) : (
                     <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">

@@ -11,6 +11,7 @@ import {
   getLocalIpAddress,
   type ConnectedDevice,
 } from "@/main/mobileSyncServer";
+import { getMdnsService, type DiscoveredMobileDevice } from "@/main/mdnsService";
 
 // Return types
 export interface SyncStatus {
@@ -19,6 +20,7 @@ export interface SyncStatus {
   ip: string | null;
   port: number;
   connectedDevices: ConnectedDevice[];
+  discoveredDevices: DiscoveredMobileDevice[];
 }
 
 export interface StartStopResult {
@@ -108,6 +110,7 @@ export const syncRouter = t.router({
     const db = ctx.db ?? defaultDb;
     const prefs = await getSyncPreferences(db);
     const server = getMobileSyncServer();
+    const mdns = getMdnsService();
 
     return {
       enabled: prefs.enabled,
@@ -115,6 +118,7 @@ export const syncRouter = t.router({
       ip: getLocalIpAddress(),
       port: server.isRunning() ? server.getPort() : prefs.port,
       connectedDevices: server.isRunning() ? server.getConnectedDevices() : [],
+      discoveredDevices: server.isRunning() ? mdns.getDiscoveredDevices() : [],
     };
   }),
 

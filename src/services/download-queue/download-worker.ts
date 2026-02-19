@@ -9,9 +9,14 @@ import type { WorkerState } from "./types";
 import fs from "fs";
 import { logger } from "@/helpers/logger";
 import { ensureFfmpegStaticAvailable } from "@/utils/ffmpeg-static-helper";
+import { ensureYtDlpBinaryReady } from "@/api/routers/binary";
 import { userPreferences } from "@/api/db/schema";
 import { eq } from "drizzle-orm";
-import type { DownloadQuality } from "@/lib/types/user-preferences";
+import {
+  type DownloadQuality,
+  YT_DLP_COOKIE_BROWSERS,
+  type YtDlpCookiesBrowser,
+} from "@/lib/types/user-preferences";
 import {
   type FallbackState,
   getPlayerClient,
@@ -24,34 +29,33 @@ import {
  * Maps download ID to worker state
  */
 const activeWorkers = new Map<string, WorkerState>();
+const COOKIE_BROWSER_SET = new Set<string>(YT_DLP_COOKIE_BROWSERS);
 
 /**
  * Determine error type based on captured stderr error message
  */
 const determineErrorType = (stderrError: string | undefined): string => {
   if (!stderrError) return "process_error";
+  const lowerError = stderrError.toLowerCase();
 
-  if (stderrError.includes("HTTP Error 403")) return "http_403_forbidden";
-  if (stderrError.includes("HTTP Error 429")) return "http_429_rate_limited";
-  if (stderrError.includes("HTTP Error")) return "http_error";
-  if (stderrError.includes("ffmpeg")) return "ffmpeg_missing";
-  if (stderrError.includes("sign-in") || stderrError.includes("age")) return "auth_required";
+  if (lowerError.includes("http error 403")) return "http_403_forbidden";
+  if (lowerError.includes("http error 429")) return "http_429_rate_limited";
+  if (lowerError.includes("http error")) return "http_error";
+  if (lowerError.includes("ffmpeg")) return "ffmpeg_missing";
+  if (
+    lowerError.includes("sign in") ||
+    lowerError.includes("sign-in") ||
+    lowerError.includes("age-restricted") ||
+    lowerError.includes("age verification") ||
+    lowerError.includes("authentication") ||
+    lowerError.includes("not a bot") ||
+    lowerError.includes("cookies-from-browser") ||
+    lowerError.includes("use --cookies")
+  ) {
+    return "auth_required";
+  }
 
   return "process_error";
-};
-
-/**
- * Get yt-dlp binary filename based on platform
- */
-const getYtDlpAssetName = (platform: NodeJS.Platform): string => {
-  switch (platform) {
-    case "win32":
-      return "yt-dlp.exe";
-    case "darwin":
-      return "yt-dlp_macos";
-    default:
-      return "yt-dlp";
-  }
 };
 
 /**
@@ -190,14 +194,6 @@ const processFormatInfo = (
 };
 
 /**
- * Get yt-dlp binary path
- */
-const getYtDlpPath = (): string => {
-  const binDir = path.join(app.getPath("userData"), "bin");
-  return path.join(binDir, getYtDlpAssetName(process.platform));
-};
-
-/**
  * Get download quality preference from database
  */
 const getDownloadQuality = async (db: Database): Promise<DownloadQuality> => {
@@ -228,6 +224,40 @@ const getDownloadQuality = async (db: Database): Promise<DownloadQuality> => {
     logger.warn("[download-worker] Failed to read download quality preference", { error });
   }
   return "480p"; // Default for learning apps
+};
+
+const isYtDlpCookiesBrowser = (value: unknown): value is YtDlpCookiesBrowser => {
+  return typeof value === "string" && COOKIE_BROWSER_SET.has(value);
+};
+
+const getCookiesFromBrowserPreference = async (db: Database): Promise<YtDlpCookiesBrowser> => {
+  try {
+    const rows = await db
+      .select({ customizationSettings: userPreferences.customizationSettings })
+      .from(userPreferences)
+      .where(eq(userPreferences.id, "default"))
+      .limit(1);
+
+    if (rows.length > 0 && rows[0].customizationSettings) {
+      const settings: unknown = JSON.parse(rows[0].customizationSettings);
+      if (
+        typeof settings === "object" &&
+        settings !== null &&
+        "download" in settings &&
+        typeof settings.download === "object" &&
+        settings.download !== null &&
+        "cookiesFromBrowser" in settings.download
+      ) {
+        const browser = settings.download.cookiesFromBrowser;
+        if (isYtDlpCookiesBrowser(browser)) {
+          return browser;
+        }
+      }
+    }
+  } catch (error) {
+    logger.warn("[download-worker] Failed to read cookie browser preference", { error });
+  }
+  return "none";
 };
 
 /**
@@ -331,15 +361,44 @@ export const spawnDownload = async (
 
     // Status will be updated by queue manager before calling this function
 
-    // Get yt-dlp binary path
-    const ytDlpPath = getYtDlpPath();
+    // Ensure yt-dlp exists and is periodically refreshed before each download
+    const ytDlpReady = await ensureYtDlpBinaryReady();
+    if (!ytDlpReady.installed || !ytDlpReady.path) {
+      throw new Error(ytDlpReady.message ?? "yt-dlp binary is not available");
+    }
+    const ytDlpPath = ytDlpReady.path;
+
+    logger.info("[download-worker] yt-dlp readiness check", {
+      downloadId,
+      videoId,
+      path: ytDlpPath,
+      version: ytDlpReady.version,
+      updated: ytDlpReady.updated,
+      updateCheckSkipped: ytDlpReady.updateCheckSkipped,
+      warning: ytDlpReady.message,
+    });
 
     // Get ffmpeg path if available
     const ffmpegPath = getFfmpegPath();
 
     // Determine player client from fallback state (defaults to 'android' at index 0)
     const playerClientIndex = fallbackState?.playerClientIndex ?? 0;
-    const playerClient = getPlayerClient(playerClientIndex);
+    const cookiesFromBrowser = await getCookiesFromBrowserPreference(db);
+    const playerClient =
+      cookiesFromBrowser !== "none" && playerClientIndex === 0
+        ? "web"
+        : getPlayerClient(playerClientIndex);
+
+    if (cookiesFromBrowser !== "none" && playerClientIndex === 0) {
+      logger.info("[download-worker] Overriding player client for cookie-authenticated download", {
+        downloadId,
+        videoId,
+        requestedPlayerClient: getPlayerClient(playerClientIndex),
+        effectivePlayerClient: playerClient,
+        reason:
+          "Browser cookies are configured; web client is more reliable for authenticated requests",
+      });
+    }
 
     // Build yt-dlp command arguments
     const args = [
@@ -357,6 +416,15 @@ export const spawnDownload = async (
       "--extractor-args",
       `youtube:player_client=${playerClient}`,
     ];
+
+    if (cookiesFromBrowser !== "none") {
+      args.push("--cookies-from-browser", cookiesFromBrowser);
+      logger.info("[download-worker] Using browser cookies for YouTube authentication", {
+        downloadId,
+        videoId,
+        cookiesFromBrowser,
+      });
+    }
 
     // Add ffmpeg location if available (enables merging of separate streams)
     if (ffmpegPath) {
@@ -401,6 +469,7 @@ export const spawnDownload = async (
           quality,
           formatStrategy,
           playerClient,
+          cookiesFromBrowser,
           preferredFormat: selectedFormat,
           fallbackAttempt: fallbackState?.fallbackAttempts ?? 0,
           note: `${formatStrategy} strategy at ${quality} with ${playerClient} client`,
@@ -417,6 +486,7 @@ export const spawnDownload = async (
       outputPath,
       format: selectedFormat,
       playerClient,
+      cookiesFromBrowser,
       formatStrategy,
       fallbackAttempt: fallbackState?.fallbackAttempts ?? 0,
       maxFallbackAttempts: fallbackState?.maxFallbackAttempts ?? 10,
@@ -675,17 +745,25 @@ export const spawnDownload = async (
       // Check for sign-in required
       if (
         errorOutput.toLowerCase().includes("sign in") ||
+        errorOutput.toLowerCase().includes("not a bot") ||
         errorOutput.toLowerCase().includes("login") ||
-        errorOutput.toLowerCase().includes("age-restricted")
+        errorOutput.toLowerCase().includes("age-restricted") ||
+        errorOutput.toLowerCase().includes("cookies-from-browser")
       ) {
-        if (currentWorker && !currentWorker.lastStderrError) {
-          currentWorker.lastStderrError = "Video requires sign-in or age verification";
+        const authMessage =
+          cookiesFromBrowser === "none"
+            ? "YouTube requires sign-in verification. In Settings > System > YouTube Authentication, select a browser cookie source, then retry."
+            : `YouTube requires sign-in verification. Make sure you are logged into YouTube in ${cookiesFromBrowser}, then retry.`;
+
+        if (currentWorker) {
+          currentWorker.lastStderrError = authMessage;
         }
         logger.error("[download-worker] Video requires authentication", {
           downloadId,
           videoId,
           message: trimmedOutput,
-          note: "Video may be age-restricted or require YouTube account sign-in",
+          cookiesFromBrowser,
+          recommendation: authMessage,
         });
       }
     });

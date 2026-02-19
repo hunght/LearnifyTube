@@ -25,6 +25,19 @@ export type UISize = "compact" | "comfortable" | "spacious";
 export type FontScale = "small" | "normal" | "large" | "x-large";
 export type AnimationSpeed = "none" | "reduced" | "normal" | "enhanced";
 export type DownloadQuality = "360p" | "480p" | "720p" | "1080p";
+export const YT_DLP_COOKIE_BROWSERS = [
+  "none",
+  "safari",
+  "chrome",
+  "firefox",
+  "edge",
+  "brave",
+  "chromium",
+  "opera",
+  "vivaldi",
+  "whale",
+] as const;
+export type YtDlpCookiesBrowser = (typeof YT_DLP_COOKIE_BROWSERS)[number];
 
 export interface SidebarPreferences {
   visibleItems: SidebarItem[];
@@ -58,6 +71,7 @@ export interface LearningPreferences {
 
 export interface DownloadPreferences {
   downloadQuality: DownloadQuality;
+  cookiesFromBrowser: YtDlpCookiesBrowser;
 }
 
 export interface SyncPreferences {
@@ -124,6 +138,7 @@ export const DEFAULT_LEARNING_PREFERENCES: LearningPreferences = {
 
 export const DEFAULT_DOWNLOAD_PREFERENCES: DownloadPreferences = {
   downloadQuality: "480p", // Default to 480p for learning apps (small files, good enough quality)
+  cookiesFromBrowser: "none",
 };
 
 export const DEFAULT_SYNC_PREFERENCES: SyncPreferences = {

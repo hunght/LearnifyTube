@@ -8,9 +8,10 @@ import { logger } from "@/helpers/logger";
 import { app } from "electron";
 import path from "path";
 import {
-  createInitialFallbackState,
+  createDefaultFallbackState,
   shouldAutoFallback,
   getNextFallbackState,
+  getFallbackRetryDelayMs,
   PLAYER_CLIENTS,
   FORMAT_STRATEGIES,
 } from "./fallback-strategy";
@@ -45,6 +46,7 @@ interface QueueItem {
   downloadedSize: string | null;
   totalSize: string | null;
   eta: string | null;
+  nextRetryAt: number | null;
   // Fallback strategy state
   playerClientIndex: number;
   formatStrategyIndex: number;
@@ -108,6 +110,7 @@ const queueItemToQueuedDownload = (item: QueueItem): QueuedDownload => ({
   downloadedSize: item.downloadedSize,
   totalSize: item.totalSize,
   eta: item.eta,
+  // nextRetryAt is internal queue scheduler metadata, not exposed in API shape
   // Fallback strategy state
   playerClientIndex: item.playerClientIndex,
   formatStrategyIndex: item.formatStrategyIndex,
@@ -132,7 +135,7 @@ const createQueueItemFromVideo = (
   maxRetries: number
 ): QueueItem => {
   const url = `https://www.youtube.com/watch?v=${video.videoId}`;
-  const initialFallback = createInitialFallbackState();
+  const initialFallback = createDefaultFallbackState();
   return {
     id: downloadId,
     url,
@@ -159,6 +162,7 @@ const createQueueItemFromVideo = (
     downloadedSize: null,
     totalSize: null,
     eta: null,
+    nextRetryAt: null,
     // Initialize fallback state
     playerClientIndex: initialFallback.playerClientIndex,
     formatStrategyIndex: initialFallback.formatStrategyIndex,
@@ -329,6 +333,14 @@ const createQueueManager = (
     if (!item) return;
 
     const resolvedErrorType = errorType || "unknown";
+    const lowerErrorMessage = errorMessage.toLowerCase();
+    const userFacingErrorMessage =
+      resolvedErrorType === "auth_required" ||
+      lowerErrorMessage.includes("sign in") ||
+      lowerErrorMessage.includes("not a bot") ||
+      lowerErrorMessage.includes("cookies-from-browser")
+        ? "YouTube requires sign-in verification. In Settings > System > YouTube Authentication, select a browser cookie source, then retry."
+        : errorMessage;
 
     // Check for auto-fallback eligibility
     if (shouldAutoFallback(errorMessage, resolvedErrorType)) {
@@ -342,6 +354,12 @@ const createQueueManager = (
       const nextState = getNextFallbackState(currentState, errorMessage, resolvedErrorType);
 
       if (nextState) {
+        const retryDelayMs = getFallbackRetryDelayMs(
+          errorMessage,
+          resolvedErrorType,
+          nextState.fallbackAttempts
+        );
+
         // Advance fallback state and re-queue
         item.playerClientIndex = nextState.playerClientIndex;
         item.formatStrategyIndex = nextState.formatStrategyIndex;
@@ -351,6 +369,7 @@ const createQueueManager = (
         item.errorType = null;
         item.errorDetails = null;
         item.progress = 0;
+        item.nextRetryAt = retryDelayMs > 0 ? Date.now() + retryDelayMs : null;
 
         logger.info("[queue-manager] Auto-fallback triggered, re-queuing with new strategy", {
           downloadId,
@@ -361,6 +380,8 @@ const createQueueManager = (
           newFormatStrategy: FORMAT_STRATEGIES[nextState.formatStrategyIndex],
           fallbackAttempt: nextState.fallbackAttempts,
           maxFallbackAttempts: nextState.maxFallbackAttempts,
+          retryDelayMs,
+          scheduledAt: item.nextRetryAt,
         });
 
         // Update database to reflect re-queued state
@@ -381,10 +402,11 @@ const createQueueManager = (
     }
 
     // No more fallbacks available, mark as truly failed
-    item.errorMessage = errorMessage;
+    item.errorMessage = userFacingErrorMessage;
     item.errorType = resolvedErrorType;
     item.errorDetails = errorDetails || null;
     item.status = "paused"; // Paused so user can retry
+    item.nextRetryAt = null;
 
     // Sync to youtube_videos
     if (item.videoId) {
@@ -392,7 +414,7 @@ const createQueueManager = (
         .update(youtubeVideos)
         .set({
           downloadStatus: "failed",
-          lastErrorMessage: errorMessage,
+          lastErrorMessage: userFacingErrorMessage,
           errorType: resolvedErrorType,
           isRetryable: true,
           updatedAt: Date.now(),
@@ -404,7 +426,7 @@ const createQueueManager = (
     logger.error("[queue-manager] Download failed (all fallbacks exhausted)", {
       downloadId,
       videoId: item.videoId,
-      error: errorMessage,
+      error: userFacingErrorMessage,
       errorType: resolvedErrorType,
       fallbackAttempts: item.fallbackAttempts,
       maxFallbackAttempts: item.maxFallbackAttempts,
@@ -547,7 +569,11 @@ const createQueueManager = (
 
       // Get next queued downloads (sorted by priority desc, then queuePosition asc)
       const queuedDownloads = Array.from(queue.values())
-        .filter((item) => item.status === "queued")
+        .filter(
+          (item) =>
+            item.status === "queued" &&
+            (item.nextRetryAt === null || item.nextRetryAt <= Date.now())
+        )
         .sort((a, b) => {
           if (a.priority !== b.priority) {
             return b.priority - a.priority; // Higher priority first
@@ -592,6 +618,7 @@ const createQueueManager = (
           // Update status to downloading
           item.status = "downloading";
           item.startedAt = Date.now();
+          item.nextRetryAt = null;
 
           // Sync DB early to reflect downloading state
           if (item.videoId) {
@@ -770,7 +797,7 @@ const createQueueManager = (
         const id = `download-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
         // Initialize fallback state for new download
-        const initialFallback = createInitialFallbackState();
+        const initialFallback = createDefaultFallbackState();
 
         // Create queue item in memory
         const queueItem: QueueItem = {
@@ -800,6 +827,7 @@ const createQueueManager = (
           downloadedSize: null,
           totalSize: null,
           eta: null,
+          nextRetryAt: null,
           // Initialize fallback state
           playerClientIndex: initialFallback.playerClientIndex,
           formatStrategyIndex: initialFallback.formatStrategyIndex,
@@ -929,6 +957,7 @@ const createQueueManager = (
       // Update status to queued - will be picked up by processor
       item.status = "queued";
       item.pausedAt = null;
+      item.nextRetryAt = null;
 
       // Sync to database if video exists
       if (item.videoId) {
@@ -1001,11 +1030,12 @@ const createQueueManager = (
       }
 
       // Reset fallback state on manual retry (start fresh)
-      const freshFallback = createInitialFallbackState();
+      const freshFallback = createDefaultFallbackState();
       item.playerClientIndex = freshFallback.playerClientIndex;
       item.formatStrategyIndex = freshFallback.formatStrategyIndex;
       item.fallbackAttempts = freshFallback.fallbackAttempts;
       item.maxFallbackAttempts = freshFallback.maxFallbackAttempts;
+      item.nextRetryAt = null;
 
       // Update status to queued
       item.status = "queued";

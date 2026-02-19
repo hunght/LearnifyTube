@@ -8,7 +8,7 @@ import defaultDb, { type Database } from "@/api/db";
 import * as path from "path";
 import * as fs from "fs";
 import type { UserPreferences } from "@/lib/types/user-preferences";
-import { DEFAULT_USER_PREFERENCES } from "@/lib/types/user-preferences";
+import { DEFAULT_USER_PREFERENCES, YT_DLP_COOKIE_BROWSERS } from "@/lib/types/user-preferences";
 
 // Zod schema for preferred languages JSON
 const languagesArraySchema = z.array(z.string());
@@ -492,6 +492,7 @@ export const preferencesRouter = t.router({
         download: z
           .object({
             downloadQuality: z.enum(["360p", "480p", "720p", "1080p"]).optional(),
+            cookiesFromBrowser: z.enum(YT_DLP_COOKIE_BROWSERS).optional(),
           })
           .optional(),
         sync: z

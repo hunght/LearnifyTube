@@ -3,10 +3,33 @@ import { trpcClient } from "@/utils/trpc";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Database, FolderOpen } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Database, FolderOpen, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { LanguagePreferencesSection } from "@/pages/settings-page/components/LanguagePreferencesSection";
 import { SystemDoctorCard } from "./SystemDoctorCard";
+import type { YtDlpCookiesBrowser } from "@/lib/types/user-preferences";
+
+const COOKIE_SOURCE_OPTIONS: Array<{ value: YtDlpCookiesBrowser; label: string }> = [
+  { value: "none", label: "Disabled (No browser cookies)" },
+  { value: "safari", label: "Safari" },
+  { value: "chrome", label: "Chrome" },
+  { value: "firefox", label: "Firefox" },
+  { value: "edge", label: "Edge" },
+  { value: "brave", label: "Brave" },
+  { value: "chromium", label: "Chromium" },
+  { value: "opera", label: "Opera" },
+  { value: "vivaldi", label: "Vivaldi" },
+  { value: "whale", label: "Whale" },
+];
+const isCookieSource = (value: string): value is YtDlpCookiesBrowser =>
+  COOKIE_SOURCE_OPTIONS.some((option) => option.value === value);
 
 export function SystemTab(): React.JSX.Element {
   const { toast } = useToast();
@@ -22,6 +45,10 @@ export function SystemTab(): React.JSX.Element {
   const { data: downloadPathInfo } = useQuery({
     queryKey: ["preferences", "downloadPath"],
     queryFn: () => trpcClient.preferences.getDownloadPath.query(),
+  });
+  const { data: customizationPreferences } = useQuery({
+    queryKey: ["preferences.customization"],
+    queryFn: () => trpcClient.preferences.getCustomizationPreferences.query(),
   });
 
   const ensureLatestDownloadFolderAccess = async (): Promise<void> => {
@@ -76,6 +103,31 @@ export function SystemTab(): React.JSX.Element {
     onError: (error) => {
       toast({
         title: "Unable to request access",
+        description: String(error),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateCookieSourceMutation = useMutation({
+    mutationFn: async (cookiesFromBrowser: YtDlpCookiesBrowser) => {
+      return await trpcClient.preferences.updateCustomizationPreferences.mutate({
+        download: { cookiesFromBrowser },
+      });
+    },
+    onSuccess: async (_result, cookiesFromBrowser) => {
+      await queryClient.invalidateQueries({ queryKey: ["preferences.customization"] });
+      toast({
+        title: "YouTube Authentication Updated",
+        description:
+          cookiesFromBrowser === "none"
+            ? "Browser cookie authentication is disabled."
+            : `LearnifyTube will use ${cookiesFromBrowser} cookies for YouTube downloads.`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Update Failed",
         description: String(error),
         variant: "destructive",
       });
@@ -210,6 +262,52 @@ export function SystemTab(): React.JSX.Element {
             <div className="text-sm text-muted-foreground">
               Loading download folder information...
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            YouTube Authentication
+          </CardTitle>
+          <CardDescription>
+            Use browser cookies when YouTube asks to sign in or verify you are not a bot
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {customizationPreferences ? (
+            <>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Cookie Source</Label>
+                <Select
+                  value={customizationPreferences.download.cookiesFromBrowser}
+                  onValueChange={(value) => {
+                    if (isCookieSource(value)) {
+                      updateCookieSourceMutation.mutate(value);
+                    }
+                  }}
+                >
+                  <SelectTrigger disabled={updateCookieSourceMutation.isPending}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COOKIE_SOURCE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                If downloads fail with "Sign in to confirm you're not a bot", choose the browser
+                where you are already signed in to YouTube, then retry the download.
+              </p>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">Loading YouTube authentication...</div>
           )}
         </CardContent>
       </Card>

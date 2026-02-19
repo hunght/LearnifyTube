@@ -1,4 +1,4 @@
-import { Bonjour, Service } from "bonjour-service";
+import { Bonjour, Service, Browser } from "bonjour-service";
 import { app } from "electron";
 import * as os from "os";
 import { logger } from "../helpers/logger";
@@ -6,23 +6,46 @@ import { logger } from "../helpers/logger";
 /**
  * mDNS service for local network discovery.
  * Publishes the LearnifyTube service so mobile devices can discover it.
+ * Also scans for mobile devices publishing the same service type.
  */
 
 const SERVICE_TYPE = "learnify";
 const SERVICE_NAME = (): string => `LearnifyTube-${os.hostname()}`;
+
+export interface DiscoveredMobileDevice {
+  name: string;
+  host: string;
+  port: number;
+  videoCount: number;
+  discoveredAt: number;
+}
 
 type MdnsService = {
   publish: (port: number, videoCount: number) => void;
   unpublish: () => void;
   updateVideoCount: (count: number) => void;
   isPublished: () => boolean;
+  startScanning: () => void;
+  stopScanning: () => void;
+  getDiscoveredDevices: () => DiscoveredMobileDevice[];
+};
+
+const getTxtStringValue = (txt: unknown, key: string): string | undefined => {
+  if (!txt || typeof txt !== "object") {
+    return undefined;
+  }
+
+  const value: unknown = Reflect.get(txt, key);
+  return typeof value === "string" ? value : undefined;
 };
 
 const createMdnsService = (): MdnsService => {
   let bonjour: Bonjour | null = null;
   let publishedService: Service | null = null;
+  let browser: Browser | null = null;
   let currentPort = 0;
   let _currentVideoCount = 0;
+  const discoveredDevices = new Map<string, DiscoveredMobileDevice>();
 
   logger.info("[mDNS] Creating mDNS service instance");
 
@@ -108,11 +131,97 @@ const createMdnsService = (): MdnsService => {
     return published;
   };
 
+  const startScanning = (): void => {
+    if (browser) {
+      logger.info("[mDNS] Scanner already running");
+      return;
+    }
+
+    try {
+      if (!bonjour) {
+        bonjour = new Bonjour();
+      }
+
+      logger.info(`[mDNS] Starting scan for _${SERVICE_TYPE}._tcp services`);
+
+      browser = bonjour.find({ type: SERVICE_TYPE }, (service: Service) => {
+        const platform = getTxtStringValue(service.txt, "platform");
+        const videoCountRaw = getTxtStringValue(service.txt, "videoCount") ?? "0";
+        const parsedVideoCount = Number.parseInt(videoCountRaw, 10);
+        const videoCount = Number.isNaN(parsedVideoCount) ? 0 : parsedVideoCount;
+
+        // Skip our own service
+        if (service.name === SERVICE_NAME()) {
+          logger.debug("[mDNS] Ignoring self");
+          return;
+        }
+
+        // Only track mobile devices
+        if (platform !== "mobile") {
+          logger.debug(
+            `[mDNS] Ignoring non-mobile device: ${service.name} (platform: ${platform})`
+          );
+          return;
+        }
+
+        // Find IPv4 address
+        let host = service.host;
+        if (service.addresses && service.addresses.length > 0) {
+          const ipv4 = service.addresses.find(
+            (addr: string) => addr.includes(".") && !addr.includes(":")
+          );
+          host = ipv4 || service.addresses[0];
+        }
+
+        const device: DiscoveredMobileDevice = {
+          name: service.name,
+          host,
+          port: service.port,
+          videoCount,
+          discoveredAt: Date.now(),
+        };
+
+        logger.info("[mDNS] Mobile device discovered:", device);
+        discoveredDevices.set(service.name, device);
+      });
+
+      // Handle service removal
+      browser.on("down", (service: Service) => {
+        logger.info(`[mDNS] Device went offline: ${service.name}`);
+        discoveredDevices.delete(service.name);
+      });
+
+      logger.info("[mDNS] ✓ Scanner started");
+    } catch (error) {
+      logger.error("[mDNS] ✗ Failed to start scanner", error);
+    }
+  };
+
+  const stopScanning = (): void => {
+    if (browser) {
+      try {
+        browser.stop();
+        logger.info("[mDNS] ✓ Scanner stopped");
+      } catch (error) {
+        logger.error("[mDNS] ✗ Failed to stop scanner", error);
+      }
+      browser = null;
+    }
+    discoveredDevices.clear();
+  };
+
+  const getDiscoveredDevices = (): DiscoveredMobileDevice[] => {
+    return Array.from(discoveredDevices.values());
+  };
+
   return {
     publish,
     unpublish,
     updateVideoCount,
     isPublished,
+    startScanning,
+    stopScanning,
+    getDiscoveredDevices,
   };
 };
 

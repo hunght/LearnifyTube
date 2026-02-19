@@ -6,12 +6,13 @@ import { app, net } from "electron";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import {
   getDirectLatestDownloadUrl,
   getLatestReleaseApiUrl,
   getYtDlpAssetName,
 } from "@/api/utils/ytdlp-utils/ytdlp-utils";
+import { isYtDlpUpdateAvailable } from "@/api/utils/ytdlp-utils/version";
 import {
   getFfmpegDownloadUrl,
   getFfmpegBinaryPathInArchive,
@@ -37,6 +38,9 @@ const githubReleaseSchema = z
 const getBinDir = (): string => path.join(app.getPath("userData"), "bin");
 const getVersionFilePath = (): string => path.join(getBinDir(), "yt-dlp-version.txt");
 const getBinaryFilePath = (): string => path.join(getBinDir(), getYtDlpAssetName(process.platform));
+const getUpdateCheckMetaPath = (): string => path.join(getBinDir(), "yt-dlp-update-check.json");
+
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 // FFmpeg helper functions
 const getFfmpegVersionFilePath = (): string => path.join(getBinDir(), "ffmpeg-version.txt");
@@ -64,13 +68,34 @@ const setExecutableIfNeeded = (filePath: string): void => {
   }
 };
 
+const readVersionFromBinary = (binPath: string): string | null => {
+  try {
+    if (!fs.existsSync(binPath)) return null;
+    const out = execFileSync(binPath, ["--version"], {
+      encoding: "utf8",
+      timeout: 5000,
+      windowsHide: true,
+    }).trim();
+    return out || null;
+  } catch (e) {
+    logger.warn("[ytdlp] Failed to read version from binary", { binPath, error: String(e) });
+    return null;
+  }
+};
+
 const readInstalledVersion = (): string | null => {
   try {
-    const p = getVersionFilePath();
-    if (fs.existsSync(p)) {
-      return fs.readFileSync(p, "utf8").trim() || null;
+    const versionFile = getVersionFilePath();
+    if (fs.existsSync(versionFile)) {
+      const stored = fs.readFileSync(versionFile, "utf8").trim();
+      if (stored) return stored;
     }
-    return null;
+
+    const detected = readVersionFromBinary(getBinaryFilePath());
+    if (detected) {
+      writeInstalledVersion(detected);
+    }
+    return detected;
   } catch (e) {
     logger.error("[ytdlp] Failed to read version file", e);
     return null;
@@ -82,6 +107,41 @@ const writeInstalledVersion = (version: string): void => {
     fs.writeFileSync(getVersionFilePath(), version, "utf8");
   } catch (e) {
     logger.error("[ytdlp] Failed to write version file", e);
+  }
+};
+
+const readLastUpdateCheckAt = (): number | null => {
+  try {
+    const filePath = getUpdateCheckMetaPath();
+    if (!fs.existsSync(filePath)) return null;
+
+    const raw = fs.readFileSync(filePath, "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "lastCheckedAt" in parsed &&
+      typeof parsed.lastCheckedAt === "number" &&
+      Number.isFinite(parsed.lastCheckedAt)
+    ) {
+      return parsed.lastCheckedAt;
+    }
+    return null;
+  } catch (e) {
+    logger.warn("[ytdlp] Failed to read update-check metadata", { error: String(e) });
+    return null;
+  }
+};
+
+const writeLastUpdateCheckAt = (timestamp: number): void => {
+  try {
+    fs.writeFileSync(
+      getUpdateCheckMetaPath(),
+      JSON.stringify({ lastCheckedAt: timestamp }, null, 2),
+      "utf8"
+    );
+  } catch (e) {
+    logger.warn("[ytdlp] Failed to persist update-check metadata", { error: String(e) });
   }
 };
 
@@ -183,6 +243,252 @@ async function fetchLatestRelease(): Promise<{ version: string; assetUrl: string
   }
 }
 
+const installYtDlpFromRelease = async (
+  latest: { version: string; assetUrl: string },
+  binPath: string
+): Promise<DownloadLatestResult> => {
+  const tmpPath = path.join(os.tmpdir(), `yt-dlp-${Date.now()}`);
+
+  logger.info("[ytdlp] Download starting", { url: latest.assetUrl });
+
+  const result = await new Promise<{
+    ok: boolean;
+    error?: string;
+  }>((resolve) => {
+    let request: ReturnType<typeof net.request> | undefined;
+    try {
+      request = net.request({ method: "GET", url: latest.assetUrl });
+    } catch (err) {
+      logger.error("[ytdlp] net.request failed", err);
+      return resolve({ ok: false, error: String(err) });
+    }
+
+    request.on("response", (response) => {
+      const status = response.statusCode ?? 0;
+      if (status >= 300 && status < 400) {
+        const locationHeader = response.headers["location"] || response.headers["Location"];
+        const location = Array.isArray(locationHeader) ? locationHeader[0] : locationHeader;
+        if (location) {
+          logger.info("[ytdlp] Redirecting", { to: location });
+          response.on("data", () => {});
+          response.on("end", () => {
+            // Follow one redirect by reissuing request
+            const follow = net.request({ method: "GET", url: location });
+            follow.on("response", (res2) => {
+              if ((res2.statusCode ?? 0) >= 400) {
+                logger.error("[ytdlp] Download failed after redirect", {
+                  status: res2.statusCode,
+                });
+                res2.on("data", () => {});
+                res2.on("end", () => resolve({ ok: false, error: `HTTP ${res2.statusCode}` }));
+                return;
+              }
+              const ws = fs.createWriteStream(tmpPath);
+              res2.on("data", (chunk) => ws.write(chunk));
+              res2.on("end", () => {
+                ws.end();
+                resolve({ ok: true });
+              });
+              res2.on("error", (e) => {
+                ws.destroy();
+                resolve({ ok: false, error: String(e) });
+              });
+            });
+            follow.on("error", (e) => resolve({ ok: false, error: String(e) }));
+            follow.end();
+          });
+          return;
+        }
+      }
+
+      if (status >= 400) {
+        logger.error("[ytdlp] Download failed", { status });
+        response.on("data", () => {});
+        response.on("end", () => resolve({ ok: false, error: `HTTP ${status}` }));
+        return;
+      }
+
+      const ws = fs.createWriteStream(tmpPath);
+      response.on("data", (chunk) => ws.write(chunk));
+      response.on("end", () => {
+        ws.end();
+        resolve({ ok: true });
+      });
+      response.on("error", (e) => {
+        ws.destroy();
+        resolve({ ok: false, error: String(e) });
+      });
+    });
+
+    request.on("error", (e) => resolve({ ok: false, error: String(e) }));
+    request.end();
+  });
+
+  if (!result.ok) {
+    logger.error("[ytdlp] Download failed", { error: result.error });
+    return { success: false as const, message: result.error ?? "Download failed" };
+  }
+
+  try {
+    // Move tmp to bin path
+    fs.copyFileSync(tmpPath, binPath);
+    fs.unlinkSync(tmpPath);
+    setExecutableIfNeeded(binPath);
+    writeInstalledVersion(latest.version);
+    writeLastUpdateCheckAt(Date.now());
+    logger.info("[ytdlp] Installed", { binPath, version: latest.version });
+    return {
+      success: true as const,
+      path: binPath,
+      version: latest.version,
+      alreadyInstalled: false as const,
+    };
+  } catch (e) {
+    logger.error("[ytdlp] Failed to finalize installation", e);
+    return { success: false as const, message: `Install error: ${String(e)}` };
+  }
+};
+
+type EnsureYtDlpOptions = {
+  forceCheckForUpdate?: boolean;
+  forceInstall?: boolean;
+};
+
+type EnsureYtDlpResult = {
+  installed: boolean;
+  path: string | null;
+  version: string | null;
+  updated: boolean;
+  updateCheckSkipped: boolean;
+  message?: string;
+};
+
+let ensureYtDlpInFlight: Promise<EnsureYtDlpResult> | null = null;
+
+export const ensureYtDlpBinaryReady = async (
+  options: EnsureYtDlpOptions = {}
+): Promise<EnsureYtDlpResult> => {
+  if (ensureYtDlpInFlight) {
+    return ensureYtDlpInFlight;
+  }
+
+  ensureYtDlpInFlight = (async (): Promise<EnsureYtDlpResult> => {
+    ensureBinDir();
+    const binPath = getBinaryFilePath();
+    const hasBinary = fs.existsSync(binPath);
+
+    if (!hasBinary || options.forceInstall) {
+      const latest = await fetchLatestRelease();
+      if (!latest) {
+        return {
+          installed: false,
+          path: null,
+          version: null,
+          updated: false,
+          updateCheckSkipped: false,
+          message: "Failed to resolve latest yt-dlp",
+        };
+      }
+
+      const install = await installYtDlpFromRelease(latest, binPath);
+      if (!install.success) {
+        return {
+          installed: false,
+          path: null,
+          version: null,
+          updated: false,
+          updateCheckSkipped: false,
+          message: install.message,
+        };
+      }
+
+      return {
+        installed: true,
+        path: install.path,
+        version: install.version,
+        updated: !install.alreadyInstalled,
+        updateCheckSkipped: false,
+      };
+    }
+
+    const storedVersion = readInstalledVersion();
+    const detectedVersion = readVersionFromBinary(binPath);
+    const installedVersion = detectedVersion ?? storedVersion;
+    if (detectedVersion && detectedVersion !== storedVersion) {
+      writeInstalledVersion(detectedVersion);
+    }
+
+    const lastCheckedAt = readLastUpdateCheckAt();
+    const now = Date.now();
+    const updateCheckDue =
+      options.forceCheckForUpdate ||
+      lastCheckedAt === null ||
+      now - lastCheckedAt >= UPDATE_CHECK_INTERVAL_MS;
+
+    if (!updateCheckDue) {
+      return {
+        installed: true,
+        path: binPath,
+        version: installedVersion,
+        updated: false,
+        updateCheckSkipped: true,
+      };
+    }
+
+    const latest = await fetchLatestRelease();
+    writeLastUpdateCheckAt(now);
+    if (!latest || !installedVersion) {
+      return {
+        installed: true,
+        path: binPath,
+        version: installedVersion,
+        updated: false,
+        updateCheckSkipped: false,
+      };
+    }
+
+    const updateAvailable = isYtDlpUpdateAvailable(installedVersion, latest.version);
+    if (!updateAvailable) {
+      return {
+        installed: true,
+        path: binPath,
+        version: installedVersion,
+        updated: false,
+        updateCheckSkipped: false,
+      };
+    }
+
+    const install = await installYtDlpFromRelease(latest, binPath);
+    if (!install.success) {
+      logger.warn("[ytdlp] Update attempt failed; continuing with existing binary", {
+        error: install.message,
+      });
+      return {
+        installed: true,
+        path: binPath,
+        version: installedVersion,
+        updated: false,
+        updateCheckSkipped: false,
+        message: install.message,
+      };
+    }
+
+    return {
+      installed: true,
+      path: install.path,
+      version: install.version,
+      updated: true,
+      updateCheckSkipped: false,
+    };
+  })();
+
+  try {
+    return await ensureYtDlpInFlight;
+  } finally {
+    ensureYtDlpInFlight = null;
+  }
+};
+
 // Return types for binary router endpoints
 type GetInstallInfoResult = {
   installed: boolean;
@@ -237,7 +543,10 @@ export const binaryRouter = t.router({
       latestVersion: string | null;
     }> => {
       try {
-        const installedVersion = readInstalledVersion();
+        const binPath = getBinaryFilePath();
+        const installedVersion = fs.existsSync(binPath)
+          ? (readVersionFromBinary(binPath) ?? readInstalledVersion())
+          : null;
         const latest = await fetchLatestRelease();
 
         if (!installedVersion || !latest) {
@@ -248,10 +557,7 @@ export const binaryRouter = t.router({
           };
         }
 
-        // Compare versions (yt-dlp uses date-based versions like "2024.01.15")
-        const installed = installedVersion.replace(/[^0-9.]/g, "");
-        const latestVer = latest.version.replace(/[^0-9.]/g, "");
-        const updateAvailable = installed !== latestVer && latestVer > installed;
+        const updateAvailable = isYtDlpUpdateAvailable(installedVersion, latest.version);
 
         logger.info("[ytdlp] Update check result", {
           installedVersion,
@@ -280,121 +586,31 @@ export const binaryRouter = t.router({
     .mutation(async ({ input }): Promise<DownloadLatestResult> => {
       ensureBinDir();
       const binPath = getBinaryFilePath();
-      if (fs.existsSync(binPath) && !input?.force) {
-        const version = readInstalledVersion();
-        logger.info("[ytdlp] Binary already installed", { binPath, version });
-        return {
-          success: true as const,
-          path: binPath,
-          version: version ?? "unknown",
-          alreadyInstalled: true as const,
-        };
-      }
-
-      const latest = await fetchLatestRelease();
-      if (!latest) {
-        return { success: false as const, message: "Failed to resolve latest yt-dlp" };
-      }
-
-      const tmpPath = path.join(os.tmpdir(), `yt-dlp-${Date.now()}`);
-
-      logger.info("[ytdlp] Download starting", { url: latest.assetUrl });
-
-      const result = await new Promise<{
-        ok: boolean;
-        error?: string;
-      }>((resolve) => {
-        let request: ReturnType<typeof net.request> | undefined;
-        try {
-          request = net.request({ method: "GET", url: latest.assetUrl });
-        } catch (err) {
-          logger.error("[ytdlp] net.request failed", err);
-          return resolve({ ok: false, error: String(err) });
-        }
-
-        request.on("response", (response) => {
-          const status = response.statusCode ?? 0;
-          if (status >= 300 && status < 400) {
-            const locationHeader = response.headers["location"] || response.headers["Location"];
-            const location = Array.isArray(locationHeader) ? locationHeader[0] : locationHeader;
-            if (location) {
-              logger.info("[ytdlp] Redirecting", { to: location });
-              response.on("data", () => {});
-              response.on("end", () => {
-                // Follow one redirect by reissuing request
-                const follow = net.request({ method: "GET", url: location });
-                follow.on("response", (res2) => {
-                  if ((res2.statusCode ?? 0) >= 400) {
-                    logger.error("[ytdlp] Download failed after redirect", {
-                      status: res2.statusCode,
-                    });
-                    res2.on("data", () => {});
-                    res2.on("end", () => resolve({ ok: false, error: `HTTP ${res2.statusCode}` }));
-                    return;
-                  }
-                  const ws = fs.createWriteStream(tmpPath);
-                  res2.on("data", (chunk) => ws.write(chunk));
-                  res2.on("end", () => {
-                    ws.end();
-                    resolve({ ok: true });
-                  });
-                  res2.on("error", (e) => {
-                    ws.destroy();
-                    resolve({ ok: false, error: String(e) });
-                  });
-                });
-                follow.on("error", (e) => resolve({ ok: false, error: String(e) }));
-                follow.end();
-              });
-              return;
-            }
-          }
-
-          if (status >= 400) {
-            logger.error("[ytdlp] Download failed", { status });
-            response.on("data", () => {});
-            response.on("end", () => resolve({ ok: false, error: `HTTP ${status}` }));
-            return;
-          }
-
-          const ws = fs.createWriteStream(tmpPath);
-          response.on("data", (chunk) => ws.write(chunk));
-          response.on("end", () => {
-            ws.end();
-            resolve({ ok: true });
-          });
-          response.on("error", (e) => {
-            ws.destroy();
-            resolve({ ok: false, error: String(e) });
-          });
-        });
-
-        request.on("error", (e) => resolve({ ok: false, error: String(e) }));
-        request.end();
+      const hadBinaryBefore = fs.existsSync(binPath);
+      const ready = await ensureYtDlpBinaryReady({
+        forceCheckForUpdate: input?.force === true,
       });
 
-      if (!result.ok) {
-        logger.error("[ytdlp] Download failed", { error: result.error });
-        return { success: false as const, message: result.error ?? "Download failed" };
+      if (!ready.installed || !ready.path) {
+        return {
+          success: false as const,
+          message: ready.message ?? "Failed to install yt-dlp",
+        };
       }
 
-      try {
-        // Move tmp to bin path
-        fs.copyFileSync(tmpPath, binPath);
-        fs.unlinkSync(tmpPath);
-        setExecutableIfNeeded(binPath);
-        writeInstalledVersion(latest.version);
-        logger.info("[ytdlp] Installed", { binPath, version: latest.version });
-        return {
-          success: true as const,
-          path: binPath,
-          version: latest.version,
-          alreadyInstalled: false as const,
-        };
-      } catch (e) {
-        logger.error("[ytdlp] Failed to finalize installation", e);
-        return { success: false as const, message: `Install error: ${String(e)}` };
-      }
+      logger.info("[ytdlp] ensureYtDlpBinaryReady result", {
+        hadBinaryBefore,
+        version: ready.version,
+        updated: ready.updated,
+        updateCheckSkipped: ready.updateCheckSkipped,
+      });
+
+      return {
+        success: true as const,
+        path: ready.path,
+        version: ready.version ?? "unknown",
+        alreadyInstalled: hadBinaryBefore && !ready.updated,
+      };
     }),
 
   // FFmpeg procedures

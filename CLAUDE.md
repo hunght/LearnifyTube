@@ -51,3 +51,21 @@ Renderer uses `local-file://` protocol, not `file://` - main process streams byt
 ## Database Migrations
 
 Located in `drizzle/`. Auto-backup before migration (keeps 5). Recovery wipes corrupted DB if retries fail.
+
+## Database Debugging
+
+SQLite database can be queried directly for debugging:
+
+```bash
+# Database location (development)
+~/Library/Application Support/LearnifyTube/learnify.db
+
+# Query with sqlite3
+sqlite3 ~/Library/Application\ Support/LearnifyTube/learnify.db
+
+# Example queries
+SELECT video_id, title, download_status FROM youtube_videos WHERE download_status = 'failed';
+SELECT * FROM youtube_videos ORDER BY updated_at DESC LIMIT 10;
+```
+
+Or use `npm run db:studio` for Drizzle Studio GUI.

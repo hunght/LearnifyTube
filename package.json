@@ -5,6 +5,7 @@
   "description": "LearnifyTube - A powerful YouTube downloader application with a beautiful modern interface for downloading videos, playlists, and managing your downloads efficiently.",
   "main": ".vite/build/main.js",
   "scripts": {
+    "start": "./scripts/restart.sh --start",
     "dev": "electron-forge start",
     "clean": "rm -rf .vite dist out",
     "type-check": "tsc --noEmit",

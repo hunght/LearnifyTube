@@ -96,8 +96,22 @@ const determineFallbackAction = (errorMessage: string, errorType: string): Fallb
   const lowerMessage = errorMessage.toLowerCase();
   const lowerType = errorType.toLowerCase();
 
+  // Don't retry non-recoverable content states.
+  if (
+    lowerMessage.includes("video unavailable") ||
+    lowerMessage.includes("private video") ||
+    lowerMessage.includes("this video is unavailable") ||
+    lowerMessage.includes("copyright") ||
+    lowerMessage.includes("requested video is unavailable")
+  ) {
+    return "no_fallback";
+  }
+
   // No fallback for auth-required errors
   if (
+    lowerType === "spawn_error" ||
+    lowerMessage.includes("yt-dlp binary is not available") ||
+    lowerMessage.includes("yt-dlp binary not installed") ||
     lowerMessage.includes("sign-in") ||
     lowerMessage.includes("sign in") ||
     lowerMessage.includes("login") ||
@@ -105,6 +119,22 @@ const determineFallbackAction = (errorMessage: string, errorType: string): Fallb
     lowerType === "auth_required"
   ) {
     return "no_fallback";
+  }
+
+  // If ffmpeg is missing, prefer switching format strategy to avoid merge requirements.
+  if (lowerType === "ffmpeg_missing" || lowerMessage.includes("ffmpeg")) {
+    return "next_format";
+  }
+
+  // Transient network failures should retry same config after delay.
+  if (
+    lowerMessage.includes("timed out") ||
+    lowerMessage.includes("connection reset") ||
+    lowerMessage.includes("temporary failure in name resolution") ||
+    lowerMessage.includes("name or service not known") ||
+    lowerMessage.includes("nodename nor servname")
+  ) {
+    return "delay_retry";
   }
 
   // Player client issues - try next client
@@ -198,7 +228,7 @@ export const getNextFallbackState = (
         return null;
       }
     }
-  } else if (action === "next_format" || action === "delay_retry") {
+  } else if (action === "next_format") {
     // Try next format strategy with same client
     nextFormatIndex = current.formatStrategyIndex + 1;
 
@@ -213,6 +243,10 @@ export const getNextFallbackState = (
         return null;
       }
     }
+  } else if (action === "delay_retry") {
+    // Retry same client/format after delay (managed by queue-manager scheduling).
+    nextClientIndex = current.playerClientIndex;
+    nextFormatIndex = current.formatStrategyIndex;
   }
 
   const nextState: FallbackState = {
@@ -244,6 +278,42 @@ export const createInitialFallbackState = (maxAttempts = 10): FallbackState => (
   fallbackAttempts: 0,
   maxFallbackAttempts: maxAttempts,
 });
+
+export const createDefaultFallbackState = (): FallbackState => {
+  const exhaustiveCombinations = PLAYER_CLIENTS.length * FORMAT_STRATEGIES.length;
+  return createInitialFallbackState(exhaustiveCombinations);
+};
+
+export const getFallbackRetryDelayMs = (
+  errorMessage: string,
+  errorType: string,
+  fallbackAttempt: number
+): number => {
+  const lowerMessage = errorMessage.toLowerCase();
+  const lowerType = errorType.toLowerCase();
+  const baseDelay = 3_000;
+  const cappedAttempt = Math.min(Math.max(fallbackAttempt, 1), 6);
+
+  if (
+    lowerType === "http_429_rate_limited" ||
+    lowerMessage.includes("http error 429") ||
+    lowerMessage.includes("too many requests")
+  ) {
+    return Math.min(baseDelay * 2 ** cappedAttempt, 120_000);
+  }
+
+  if (
+    lowerMessage.includes("timed out") ||
+    lowerMessage.includes("connection reset") ||
+    lowerMessage.includes("temporary failure in name resolution") ||
+    lowerMessage.includes("name or service not known") ||
+    lowerMessage.includes("nodename nor servname")
+  ) {
+    return Math.min(baseDelay * cappedAttempt, 30_000);
+  }
+
+  return 0;
+};
 
 /**
  * Get human-readable fallback status string for UI display

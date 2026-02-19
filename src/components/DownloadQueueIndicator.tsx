@@ -44,6 +44,22 @@ function DownloadStatusIcon({ status }: { status: QueuedDownload["status"] }): R
   }
 }
 
+const getDisplayErrorMessage = (download: QueuedDownload): string => {
+  const rawMessage = download.errorMessage ?? "";
+  const lowerMessage = rawMessage.toLowerCase();
+
+  if (
+    download.errorType === "auth_required" ||
+    lowerMessage.includes("sign in") ||
+    lowerMessage.includes("not a bot") ||
+    lowerMessage.includes("cookies-from-browser")
+  ) {
+    return "YouTube requires sign-in verification. Open Settings > System > YouTube Authentication, choose a browser cookie source, then retry.";
+  }
+
+  return rawMessage;
+};
+
 function DownloadItem({
   download,
   onPause,
@@ -67,6 +83,7 @@ function DownloadItem({
   const isCompleted = download.status === "completed";
   const hasErrorDetails = download.errorDetails && download.errorDetails.length > 0;
   const hasError = isFailed || (isPaused && download.errorMessage);
+  const displayErrorMessage = getDisplayErrorMessage(download);
 
   return (
     <div className="space-y-1.5 py-2">
@@ -156,8 +173,8 @@ function DownloadItem({
               ) : (
                 <ChevronDown className="h-3 w-3 shrink-0" />
               ))}
-            <span className="truncate" title={download.errorMessage}>
-              {download.errorMessage}
+            <span className="truncate" title={displayErrorMessage}>
+              {displayErrorMessage}
             </span>
           </button>
           {showDetails && hasErrorDetails && (
